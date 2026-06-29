@@ -221,6 +221,61 @@ the gallery itself, per-app branches, one-click PR creation. We don't need that 
 binding practices above are exactly what make it safe to build on later. The principle stays dbt's:
 **never maintain the graph — derive it from the refs; git is the record, not a separate store.**
 
+## Scaling: serving and curation are two independent tiers
+
+The deployment-modes table above (personal / team / hosted) flattens a thing that's actually **2-D**.
+The real architecture has **two tiers that scale on different axes:**
+
+- **The serving tier** scales with *users*. It can be as cheap as **static / CDN** (Pyodide-exported
+  apps, infinite scale, near-zero cost, and — the part that matters — **no backend to attack**). The
+  only public-facing backend is a thin **feedback-ingest** endpoint that drops items on a queue.
+- **The curation tier** is a **bounded pool of agents** (private infra) draining that queue
+  *asynchronously*. It scales with *how much improvement you want to buy* — **not** with traffic.
+
+Between them: the **feedback ledger is the work queue**, and **git-as-memory is the deploy pipeline**
+(agents commit to the sandbox/dev branch → prioritized changes merge to main → CI redeploys the serving
+tier, static export or server). Read path and write path, cleanly decoupled.
+
+**The pool is an optimizer, not a help desk.** It doesn't FIFO-drain every ticket — it **triages the
+backlog** (dedup similar requests, weight by frequency/recency/authority) and spends its fixed capacity
+on the **highest-value** changes; it can even search *proactively* (autoresearch-style, with feedback as
+the objective signal). So the same loop that fixes one axis label is, at scale, a bounded improvement
+engine pointed at a public app's UX.
+
+**Why this is the whole point — cost decouples from traffic.** A viral demo does **not** explode your
+agent bill: traffic scales the *cheap* tier (CDN/stateless servers) and lengthens the *queue*; the
+expensive thing — agents — stays a **flat curation budget** (N agents, M improvements/day). You size the
+pool to *"how fast do I want this to get better,"* not *"how many users do I have."* The naive
+"one agent per request" design conflates those two; decoupling them is the win. So the deployment knobs
+are independent: **serving tier (static ↔ scaled servers) × curation tier (off ↔ bounded pool).**
+
+*(The Pyodide static-export **mechanism** is deferred — it's app-specific, leans on a converter recipe,
+not one-click. But the architecture above is the target; static serving + a private bounded pool means
+a public app can quietly improve over time without ever exposing an agent.)*
+
+### Identity, reputation, and access (IAM) — the curation tier's input
+
+"Pick the highest-value change" needs a **trust signal**, and that signal is *who* gave the feedback.
+So once you go multi-user, feedback must be **tied to an authenticated identity**, and identities carry
+**weight** — by role/authority and by track record. Three layers:
+
+- **Authentication: delegate it** (the BYO philosophy again — bring your IdP: OAuth/SSO/GitHub/Google,
+  or a token allowlist for self-hosted). curiator should not build a login system.
+- **Authorization: curiator's** — roles gate *who can do what* (owner/maintainer can approve+merge and
+  set priorities; contributor can suggest; public can only file feedback).
+- **Reputation: derived, not maintained** (dbt again) — a per-user weight **computed from the
+  git-as-memory record**: how many of their suggestions became commits, and of those, how many were
+  **kept vs reverted** (a kept-rate / value score), plus static priors (role, and *domain match* — your
+  feedback on the app whose data you own weighs more). The curation pool's prioritization is then
+  `weight(user) × signal(frequency, recency, stars)` — a **trust-weighted objective**, which is just a
+  better-aimed version of the autoresearch loss.
+
+**Scale-gated, like the other modes:** the **self-hosted single-tenant v0 needs none of this** (it's
+you, your box — identity is implicit), which is a feature, not a gap. IAM + reputation land exactly when
+the curation tier goes multi-user/public — same boundary as the `api` adapter and the static-export
+target. Build it then; the git-as-memory record is what makes reputation *computable* rather than
+hand-curated when you do.
+
 ## Extraction checklist (our hack → shippable v0)
 
 - [ ] Decouple from this math repo + from Dash specifically (mount = generic proxy, not in-process).
