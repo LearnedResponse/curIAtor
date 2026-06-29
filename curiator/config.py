@@ -37,4 +37,12 @@ def load_config() -> dict:
     runner = cfg.get("runner") or {}
     runner.setdefault("mode", "pinned")          # pinned | checkout
     cfg["runner"] = runner
+    # Git-as-memory policy (docs/DESIGN.md → "Git as the memory"). Additive + backward-compatible:
+    # absent/`commit:false` ⇒ today's leave-uncommitted behavior. `commit:true` ⇒ one commit per run.
+    git = cfg.get("git") or {}
+    git.setdefault("commit", False)              # false = leave uncommitted | true = git-as-memory
+    git.setdefault("branch", "curiator/auto")    # sandbox/env branch (empty/null ⇒ current HEAD)
+    git.setdefault("signoff", True)              # add Signed-off-by (DCO) via `git commit -s`
+    git.setdefault("include_ledger", True)       # bundle the feedback ledger in the same commit
+    cfg["git"] = git
     return cfg

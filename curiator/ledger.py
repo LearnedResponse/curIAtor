@@ -44,6 +44,16 @@ def set_status(cfg: dict, key: str, ids: list[str], status: str) -> None:
     _save(cfg, data)
 
 
+def amend_note(cfg: dict, key: str, note_id: str, suffix: str) -> None:
+    """Append text to an existing note's comment — e.g. stamping the commit SHA onto the ⚙ reply after a
+    git-as-memory commit (a commit can't contain its own hash, so the SHA lands as a post-commit note)."""
+    data = load(cfg)
+    for e in data.get(key, []):
+        if e.get("id") == note_id:
+            e["comment"] = (e.get("comment", "") or "") + suffix
+    _save(cfg, data)
+
+
 def add_system_note(cfg: dict, key: str, text: str, reply_to: list[str] | None = None,
                     status: str = "update", ts: str | None = None) -> str:
     """Append an agent/⚙ note. Caller should pass a timestamp (ledger stays clock-free)."""

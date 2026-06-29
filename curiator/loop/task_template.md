@@ -40,7 +40,11 @@ you don't restart anything yourself. Use the exact `<app>` and `<feedback_id>` f
 
 ## Hard rules (do not skip)
 
-- **Never `git commit` / `git add`.** Edits stay in the working tree for human review.
+- **Never run git yourself** (`commit`, `add`, `push`, `checkout`, `revert`, …). The **runner** owns git.
+  When git-as-memory is on, your `curiator reply` becomes ONE atomic commit — your source edit *and* the
+  ledger update together, on the sandbox branch, with the SHA stamped back onto your reply (one item →
+  one commit; never batch). When it's off, edits just stay in the working tree. Either way you only ever
+  **edit the one target source → smoke-test → reply**. Undo is a human's `curiator revert`, never your reset.
 - **Edit only the one source file named below.** One feedback item per invocation — don't go hunting
   for other things to fix.
 - **Smoke-test before `done`.** A failed build ⟹ revert and reply `awaiting_approval` explaining,

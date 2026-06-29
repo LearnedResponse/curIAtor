@@ -3,8 +3,10 @@
     curiator up         # serve the gallery (the shell) at the configured port
     curiator watch      # arm the feedback → fix loop (headless agent)
     curiator serve      # up + watch together, one process (the container entrypoint)
-    curiator reply      # (used by the agent) post a ⚙ note to the ledger and set status
+    curiator reply      # (used by the agent) post a ⚙ note + set status (+ commit the run if git.commit)
     curiator reload     # drop a running shell's cached build of an app (make an edit live)
+    curiator revert     # (git-as-memory) undo a curator commit; the record + thread stay intact
+    curiator reflect    # (git-as-memory) summarize curator git history into LESSONS.md
     curiator reset-demo # rewind the demo: re-break aviato, clear the ledger
     curiator demo-up    # reset-demo, then serve — one command, record-ready
     curiator demo       # print the demo walkthrough
@@ -107,11 +109,25 @@ def cmd_reply(args) -> int:
     """Agent reply path: `curiator reply <app> <feedback_id> "<text>" --status done`."""
     cfg = load_config()
     ts = datetime.now(timezone.utc).isoformat()
-    ledger.add_system_note(cfg, args.app, args.text, reply_to=[args.feedback_id],
-                           status="update", ts=ts)
+    nid = ledger.add_system_note(cfg, args.app, args.text, reply_to=[args.feedback_id],
+                                 status="update", ts=ts)
     if args.status:
         ledger.set_status(cfg, args.app, [args.feedback_id], args.status)
     print(f"curiator: replied on {args.app}/{args.feedback_id} (status={args.status or 'unchanged'})")
+    # Git as the memory: when enabled, this run becomes ONE atomic commit (source edit + ledger). The
+    # SHA is stamped back onto this ⚙ note so the conversation points at the history.
+    if (cfg.get("git", {}) or {}).get("commit"):
+        from . import gitmem
+        try:
+            res = gitmem.commit_run(cfg, args.app, args.feedback_id,
+                                    status=args.status or "update", note_text=args.text)
+        except Exception as exc:  # noqa: BLE001 — a git hiccup must never break the reply / loop
+            res = {"committed": False, "reason": str(exc)}
+        if res.get("committed"):
+            ledger.amend_note(cfg, args.app, nid, f"\n\ncommitted `{res['sha']}` on `{res.get('branch','')}`")
+            print(f"curiator: committed {res['sha']} on {res.get('branch','')}")
+        else:
+            print(f"curiator: not committed ({res.get('reason')})")
     # On `done`, the agent has just edited the app — make the fix live in a running shell.
     if args.status == "done":
         msg = _reload_in_shell(cfg, args.app)
@@ -146,6 +162,32 @@ def _reset_demo(cfg: dict) -> None:
                 f.unlink()
     for t in fb.glob("task_*.md"):
         t.unlink()
+
+
+def cmd_revert(args) -> int:
+    """Undo a curator commit without erasing the record: revert the source + append a ⚙ note, as its own
+    `curator(<app>): revert` commit. `target` is a feedback id or a commit SHA."""
+    cfg = load_config()
+    from . import gitmem
+    res = gitmem.revert_feedback(cfg, args.target, reason=args.reason or "manual revert")
+    if not res.get("ok"):
+        print(f"curiator: revert failed — {res.get('reason')}")
+        return 1
+    scope = "source + ledger" if res.get("reverted_source") else "ledger note only (was plan/ack — no source)"
+    print(f"curiator: reverted {res['reverted']} → {res['sha']} ({scope}); thread on {res.get('app')} intact")
+    if res.get("reverted_source"):
+        msg = _reload_in_shell(cfg, res["app"])
+        print(f"curiator: {msg}" if msg else "curiator: shell not reachable — reload skipped.")
+    return 0
+
+
+def cmd_reflect(args) -> int:
+    """Summarize the curator's git history (curator(*) commits + reverts) into LESSONS.md."""
+    cfg = load_config()
+    from . import gitmem
+    p = gitmem.write_lessons(cfg)
+    print(f"curiator: wrote {p} — loaded into each agent run's task bundle.")
+    return 0
 
 
 def cmd_reset_demo(args) -> int:
@@ -214,6 +256,12 @@ def main(argv=None) -> int:
     r.set_defaults(func=cmd_reply)
     rl = sub.add_parser("reload", help="drop a running shell's cached build of an app (make an edit live)")
     rl.add_argument("app"); rl.set_defaults(func=cmd_reload)
+    rv = sub.add_parser("revert", help="(git-as-memory) undo a curator commit; record + thread stay intact")
+    rv.add_argument("target", help="a feedback id or a commit SHA")
+    rv.add_argument("--reason", default=None, help="why (recorded in the ⚙ note + revert commit)")
+    rv.set_defaults(func=cmd_revert)
+    sub.add_parser("reflect", help="(git-as-memory) summarize curator history into LESSONS.md"
+                   ).set_defaults(func=cmd_reflect)
     args = p.parse_args(argv)
     return args.func(args)
 

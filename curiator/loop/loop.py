@@ -16,9 +16,7 @@ Run:  curiator watch     (or: python -m curiator.loop.loop)
 """
 from __future__ import annotations
 
-import json
 import time
-from pathlib import Path
 
 from . import adapters
 from .. import ledger      # tiny ledger read/write (status, replies) — see curiator/ledger.py
@@ -37,7 +35,10 @@ def _new_items(led: dict) -> list[tuple[str, dict]]:
 
 
 def run_once(cfg: dict) -> int:
-    """One pass: handle every new feedback item. Returns how many were dispatched."""
+    """One pass: handle every new feedback item, one at a time. Returns how many were dispatched.
+
+    Dispatch is SERIAL (and gitmem holds a commit lock): with git-as-memory on, each agent run becomes
+    one atomic commit via `curiator reply`, so items must never race the shared ledger / git index."""
     led = ledger.load(cfg)
     items = _new_items(led)
     adapter = adapters.get(cfg)

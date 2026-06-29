@@ -48,6 +48,15 @@ feedback:
   dir: feedback                 # JSON ledger + shots/ live here
   screenshots: true
 
+# Git as the memory (docs/DESIGN.md → "Git as the memory"). Every agent run → one atomic commit
+# (source edit + ledger update together); the git log is the queryable, revertible record.
+git:
+  commit: false                 # false (default) = leave uncommitted | true = git-as-memory (per-run commits)
+  branch: curiator/auto         # the sandbox/env branch commits land on (empty/null = current HEAD)
+  signoff: true                 # add Signed-off-by (DCO)
+  include_ledger: true          # commit feedback/app_feedback.json in the same commit
+  # This repo (the runner's own checkout) keeps commit:false — a standalone collection runs commit:true.
+
 shell:
   port: 8300        # 8200 is commonly taken; 8300 avoids the usual collisions
 

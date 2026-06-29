@@ -11,7 +11,7 @@ reads; loop/task_template.md is the standing protocol (triage / smoke-test / rep
 """
 from __future__ import annotations
 
-import json
+import re
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -52,6 +52,16 @@ def _source_for(cfg: dict, key: str) -> str | None:
             src = a.get("source")
             return str(Path(cfg["repo_root"]) / src) if src else None
     return None
+
+
+def _lessons_for(cfg: dict, app: str) -> str:
+    """The `## <app>` section of LESSONS.md (written by `curiator reflect`), or "" — cross-item memory
+    the cold one-shot loads so it starts informed by what stuck / got reverted for this app."""
+    p = Path(cfg["repo_root"]) / "LESSONS.md"
+    if not p.exists():
+        return ""
+    m = re.search(rf"(?ms)^## {re.escape(app)}\s*$(.*?)(?=^## |\Z)", p.read_text())
+    return m.group(1).strip() if m else ""
 
 
 def _shot_path(cfg: dict, entry: dict) -> str | None:
@@ -99,7 +109,7 @@ def _runner_bundle(cfg: dict, entry: dict, eid: str, shot_path: str | None) -> t
             "1. Locate the relevant source (shell = `curiator/shell/app_shell.py`, loop = `curiator/loop/`,",
             "   CLI = `curiator/cli.py`, config = `curiator/config.py`).",
             "2. Edit it, then smoke-test what you touched (import it / run a quick check).",
-            f"3. Reply (leave the diff UNCOMMITTED for a human to PR):",
+            "3. Reply (leave the diff UNCOMMITTED for a human to PR):",
             f"   `curiator reply {GENERAL_KEY} {eid} \"<what you changed + why>\" --status done`",
             "",
             "Edit ONLY within the runner checkout. **Do NOT git commit** — a human reviews + PRs the diff.",
@@ -134,8 +144,11 @@ def _app_bundle(cfg: dict, key: str, entry: dict, eid: str, shot_path: str | Non
         f"- comment: {entry.get('comment')!r}",
         f"- screenshot (Read this PNG): `{shot_path}`" if shot_path else "- screenshot: (none)",
         f"- feedback id (reply_to this): `{eid}`",
-        "\n## Ready-to-run (fill in the message text)",
     ]
+    lessons = _lessons_for(cfg, key)
+    if lessons:
+        body.append(f"\n## Prior lessons for `{key}` (curator git history — what stuck / got reverted)\n{lessons}")
+    body.append("\n## Ready-to-run (fill in the message text)")
     if source:
         body.append(
             "- smoke-test the edit: "
@@ -146,7 +159,7 @@ def _app_bundle(cfg: dict, key: str, entry: dict, eid: str, shot_path: str | Non
     body += [
         f"- reply after a fix:  `curiator reply {key} {eid} \"<what changed + why>\" --status done`",
         f"- reply with a plan:  `curiator reply {key} {eid} \"<plan + recommendation>\" --status awaiting_approval`",
-        "\nEdit ONLY the source above, smoke-test before `done`, and DO NOT commit.",
+        "\nEdit ONLY the source above, smoke-test before `done`; the runner handles git — don't run git yourself.",
     ]
     return "\n".join(body), source
 
