@@ -1,6 +1,6 @@
-"""app_shell.py — single-origin viewer SHELL + catalog + feedback. Port 8200.
+"""app_shell.py — CurIAtor — single-origin gallery shell + catalog + feedback. Port 8200.
 
-The consolidated front door for the whole viewer library. ONE Flask server
+The consolidated front door for your whole app gallery. ONE Flask server
 (via a lazy DispatcherMiddleware) mounts every Dash app at a PATH, so everything
 is same-origin. Layout: CATALOG (left) · app in an iframe (center) · FEEDBACK
 (right).
@@ -51,6 +51,7 @@ PORT = 8200  # default; overridden by gallery.yaml shell.port just below (after 
 
 import registry as REG  # gallery.yaml-backed registry (CurIAtor drop-in for all_apps_index)
 PORT = REG.SHELL_CFG.get("port", PORT)  # honor gallery.yaml: shell.port
+TITLE = REG.SHELL_CFG.get("title", "curIAtor")  # gallery title — browser tab + the brand header
 
 # The ledger + shots live at the repo-root feedback/ dir — the SAME tracked
 # feedback/app_feedback.json that ledger.py (the loop + `curiator reply`) reads/writes. The shell is
@@ -61,6 +62,18 @@ FEEDBACK_JSON = FEEDBACK_DIR / "app_feedback.json"
 SHOTS = FEEDBACK_DIR / "shots"
 SHOTS.mkdir(parents=True, exist_ok=True)
 BLUE, GREEN, AMBER, GREY, PURPLE = "#2980b9", "#1f9d55", "#cc7a00", "#777", "#8e44ad"
+
+
+def _wordmark(size=15, suffix=None):
+    """The curIAtor wordmark — the purple **IA** carries the brand. Flask serves the shell (unlike GitHub
+    markdown), so we CAN color the letters: it reads as cur·IA·tor, never the 'curlAtor' I/l collision."""
+    parts = [html.Span("◆ ", style={"color": PURPLE}),
+             html.Span("cur"), html.Span("IA", style={"color": PURPLE}), html.Span("tor")]
+    if suffix:
+        parts.append(html.Span(f" {suffix}", style={"fontWeight": 400, "color": GREY,
+                                                          "fontSize": f"{max(size - 4, 10)}px"}))
+    return html.Span(parts, style={"fontWeight": 800, "fontSize": f"{size}px",
+                                   "fontFamily": "system-ui, sans-serif", "letterSpacing": ".2px"})
 
 
 # ============================== registry =====================================
@@ -94,9 +107,9 @@ BY_KEY = {r["key"]: r for r in REGISTRY}
 TAG_META = list(getattr(REG, "TAG_META", []))
 TAG_COLOR = dict(TAG_META)
 
-# library/shell-wide feedback target (not tied to any single app)
+# gallery & runner-wide feedback target (not tied to any single app)
 GENERAL_KEY = "__general__"
-BY_KEY[GENERAL_KEY] = {"key": GENERAL_KEY, "port": None, "title": "General — library & shell",
+BY_KEY[GENERAL_KEY] = {"key": GENERAL_KEY, "port": None, "title": "General — the gallery & runner",
                        "tags": ["meta"], "kind": "general"}
 
 
@@ -219,7 +232,7 @@ def render_history():
         "<div style='font-family:system-ui,sans-serif;padding:1.6em 2em;color:#333;max-width:760px'>",
         "<h2 style='color:#8e44ad;margin:0 0 2px'>General feedback &amp; history</h2>",
         "<p style='color:#555;margin:0 0 6px;font-size:13px'>Use the panel on the right for "
-        "<b>library/shell-wide</b> notes (this thread is “General”). Below: every feedback thread across "
+        "<b>gallery & runner-wide</b> notes (this thread is “General”). Below: every feedback thread across "
         f"the library.</p><p style='color:#777;font-size:12px;margin:0 0 14px'>{n_threads} threads · "
         f"{n_open} open · {len(REGISTRY)} apps.</p>",
     ]
@@ -385,7 +398,7 @@ def catalog_rows(search, sortby, tags_sel, reverse):
     gbadge = [html.Span(f"●{gopen}", style={"color": "white", "background": "#c0392b", "fontSize": "9px",
               "borderRadius": "8px", "padding": "0 5px", "marginLeft": "6px"})] if gopen else []
     general = html.Div([html.Span("◆ General", style={"fontWeight": 700, "fontSize": "12px", "color": PURPLE}),
-                        html.Span(" — library & shell feedback", style={"fontSize": "10.5px", "color": GREY})]
+                        html.Span(" — gallery & runner feedback", style={"fontSize": "10.5px", "color": GREY})]
                        + gbadge,
                        id={"type": "approw", "key": GENERAL_KEY}, n_clicks=0,
                        style={"padding": "8px 9px", "borderBottom": "2px solid #ddd", "cursor": "pointer",
@@ -476,7 +489,7 @@ def app_src(key):
 
 
 def build_shell() -> Dash:
-    shell = Dash(__name__, assets_folder="assets", title="Viewer Shell",
+    shell = Dash(__name__, assets_folder="assets", title=TITLE,
                  suppress_callback_exceptions=True,
                  meta_tags=[{"name": "viewport", "content": "width=device-width, initial-scale=1"}])
 
@@ -516,7 +529,7 @@ def build_shell() -> Dash:
     ], style={"padding": "8px 9px", "borderBottom": "1px solid #ddd"})
 
     catalog = html.Div([
-        html.Div("◆ Viewer Library", style={"fontWeight": 700, "fontSize": "13px", "padding": "9px 9px 4px"}),
+        html.Div(_wordmark(16, suffix="gallery"), style={"padding": "10px 9px 5px"}),
         controls,
         html.Div(id="cat-list", style={"overflowY": "auto", "flex": "1"}),
     ], id="catalog-div", className="shell-catalog",
@@ -561,8 +574,7 @@ def build_shell() -> Dash:
     # mobile-only top bar (hidden on desktop via CSS) — toggles the catalog / feedback drawers
     mobilebar = html.Div([
         html.Button("☰ Library", id="m-cat", n_clicks=0, className="shell-mbtn"),
-        html.Div("◆ Viewer Shell", style={"fontWeight": 700, "fontSize": "13px", "flex": "1",
-                 "textAlign": "center"}),
+        html.Div(_wordmark(14), style={"flex": "1", "textAlign": "center"}),
         html.Button("💬 Feedback", id="m-fb", n_clicks=0, className="shell-mbtn"),
     ], className="shell-mobilebar")
     scrim = html.Div(id="scrim", className="shell-scrim")
