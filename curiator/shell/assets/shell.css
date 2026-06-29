@@ -1,0 +1,51 @@
+/* Responsive shell: desktop keeps the 3-column layout; narrow screens (phone, via
+   Tailscale) turn the catalog + feedback into slide-in drawers, app full-width. */
+
+.shell-mobilebar { display: none; }
+
+@media (max-width: 860px) {
+  .shell-mobilebar {
+    display: flex !important;
+    align-items: center;
+    gap: 10px;
+    padding: 9px 12px;
+    border-bottom: 1px solid #ddd;
+    background: #fafafa;
+    position: sticky;
+    top: 0;
+    z-index: 60;
+  }
+  .shell-mbtn {
+    font-size: 13px;
+    padding: 6px 12px;
+    border: 1px solid #ccc;
+    border-radius: 7px;
+    background: white;
+    cursor: pointer;
+  }
+  /* the catalog + feedback become off-canvas drawers */
+  .shell-catalog, .shell-feedback {
+    position: fixed !important;
+    top: 0;
+    bottom: 0;
+    z-index: 70;
+    width: 86% !important;
+    max-width: 360px;
+    height: 100vh !important;
+    box-shadow: 0 0 24px rgba(0, 0, 0, 0.30);
+    transition: transform 0.25s ease;
+  }
+  .shell-catalog { left: 0; transform: translateX(-106%); }
+  .shell-catalog.open { transform: translateX(0); }
+  .shell-feedback { right: 0; transform: translateX(106%); }
+  .shell-feedback.open { transform: translateX(0); }
+  /* a tap-catcher behind an open drawer */
+  .shell-scrim {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.25);
+    z-index: 65;
+  }
+  .shell-scrim.open { display: block; }
+}

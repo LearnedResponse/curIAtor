@@ -1,0 +1,36 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "curiator"
+version = "0.0.1"
+description = "An AI-maintained app gallery for Dash — comment + screenshot a live app, and a coding agent fixes it."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "Adam Guetz" }]
+keywords = ["dash", "plotly", "gallery", "ai-agent", "claude", "feedback", "dashboards"]
+dependencies = [
+  "dash>=2.14",
+  "plotly>=5.18",
+  "flask>=3.0",
+  "pyyaml>=6.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0"]
+
+[project.urls]
+Homepage = "https://github.com/LearnedResponse/curiator"
+Source = "https://github.com/LearnedResponse/curiator"
+
+[project.scripts]
+curiator = "curiator.cli:main"
+
+[tool.setuptools]
+packages = ["curiator", "curiator.shell", "curiator.loop", "curiator.loop.adapters"]
+
+[tool.setuptools.package-data]
+"curiator.shell" = ["assets/*"]
+"curiator.loop" = ["task_template.md"]

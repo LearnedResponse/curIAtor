@@ -1,0 +1,48 @@
+# CurIAtor — gallery config (the registry the shell + loop read).
+# Add an entry per app; the curator edits each app's `source` when you give feedback on it.
+# Full schema + rationale: docs/DESIGN.md.
+
+apps:
+  - name: aviato                 # the headline demo app — deliberately broken; the curator's first patient
+    title: Aviato (revenue)
+    mount: { kind: dash-inproc, module: aviato }   # dash-inproc = import & mount in-process; or kind: proxy {cmd, port}
+    source: examples/dash/aviato.py                # what the curator edits
+    tags: [demo, broken]
+    color: "#e07b2a"
+
+  - name: sales_overview
+    title: Sales overview
+    mount: { kind: dash-inproc, module: sales_overview }
+    source: examples/dash/sales_overview.py
+    tags: [demo, sales]
+    color: "#1f6fc0"
+
+  - name: cohort_explorer
+    title: Cohort explorer
+    mount: { kind: dash-inproc, module: cohort_explorer }
+    source: examples/dash/cohort_explorer.py
+    tags: [demo, analytics]
+    color: "#177755"
+
+# how the curator runs (see docs/DESIGN.md → "Agent adapter / deployment modes")
+agent:
+  adapter: headless-cc          # headless-cc (default, your Claude sub) | api (teams) | command (BYO)
+  autonomy: auto-small          # auto-small (fix small things) | propose-only (plan first)
+  cmd: "claude -p {task_file}"  # used only by adapter: command
+  context:
+    bundle: null                # required for adapter: api (cold start) — a CONTEXT.md/LESSONS.md
+    knowledge_store: null       # optional live index (e.g. graphify) to keep the bundle fresh
+
+feedback:
+  dir: feedback                 # JSON ledger + shots/ live here
+  screenshots: true
+
+shell:
+  port: 8200
+
+# tag → chip color (optional)
+tags:
+  demo: "#888"
+  broken: "#e07b2a"
+  sales: "#1f6fc0"
+  analytics: "#177755"

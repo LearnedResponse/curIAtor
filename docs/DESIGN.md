@@ -1,0 +1,138 @@
+# CurIAtor — AI-maintained app gallery (OSS design sketch)
+
+> **Name LOCKED 2026-06-28: `CurIAtor`** (curator + IA; also *creator + curator*) · repo `LearnedResponse/curiator` · `pip install curiator` · skill `/curiator`. Extraction plan: `AI_GALLERY_OSS_EXTRACTION_SCOPE.md`.
+
+> ⚠️ **Orthogonal to the math program.** This is a design note for extracting the viewer
+> shell + feedback + loop we built this session into a standalone open-source project. It has
+> nothing to do with the positive-geometry research; it's parked here because the code it
+> describes lives in this directory. Captured 2026-06-26 · updated 2026-06-28 (agent-adapter / deployment modes; graphify as complementary knowledge store).
+
+## The idea (one line)
+
+A self-hosted gallery for a team's interactive web apps, with **in-context feedback that an AI
+coding agent acts on** — comment (+ screenshot) on the live app, the agent fixes the deployed
+thing and replies. *AI-maintained app collections.*
+
+## Why OSS, not a company
+
+The two hardest "product" problems both **dissolve** in the self-hosted single-tenant framing:
+- **Isolation / multi-tenancy** — non-issue: you run it on your own box, your own trusted apps.
+- **Trust in the auto-edit loop** — it's *your* code, *your* agent, *your* blast radius.
+Those are only scary when a SaaS must do it for strangers, safely. OSS sidesteps both. It's also
+naturally **BYO-everything**: bring your apps, your coding agent (Claude Code / aider / Cursor CLI
+/ a script), your API key. The project is the *harness that wires a live-app feedback collection
+to whatever agent you already have* — thin to maintain, thin to adopt.
+
+## Architecture (generalized from what we built)
+
+1. **Shell / mount.** Serve every app at one origin under `/app/<name>`. Our shortcut is a lazy
+   Dash `DispatcherMiddleware` + the `DASH_REQUESTS_PATHNAME_PREFIX` env trick (edit-free); the
+   *generic* version is a reverse-proxy (or iframe) to an arbitrary port/command — framework-agnostic.
+2. **Catalog.** A registry → a sortable/filterable list (by tag · rating · recency · open-feedback).
+3. **Feedback in the SHELL CHROME, not the app.** The key framework-agnostic insight: the
+   ★/comment/**same-origin screenshot** panel wraps *around* the app in the iframe, so you never
+   touch an app's source to collect feedback on it. Works for Dash / Streamlit / Gradio / React /
+   a notebook / anything. Persist to a JSON ledger (+ screenshots).
+4. **Watcher → agent adapter.** A file-watcher fires when new feedback lands and invokes a
+   **configured agent command** with a task template: read the feedback (text + screenshot + which
+   app + its source dir) → propose-or-fix → smoke-test → reply in-panel → leave a diff. The only
+   app-specific step is the *edit*, which is the agent's job against the source — so the harness
+   stays generic.
+
+## Config / registry schema (sketch)
+
+```yaml
+apps:
+  - name: snc-explainer
+    mount: { kind: command, cmd: "python snc_explainer.py", port: 8111 }   # or kind: proxy/url
+    source: ./snc_explainer.py        # what the agent edits
+    tags: [genus, explainer]
+agent:
+  adapter: headless-cc                 # headless-cc | api | command (BYO) — see "Agent adapter / deployment modes"
+  cmd: "claude -p {task_file}"         # for adapter: command — receives the task template + context paths
+  autonomy: auto-small                 # auto-small | propose-only — default keyed to adapter (below)
+  context:
+    bundle: ./CONTEXT.md               # required for api (cold start); optional for headless-cc
+    knowledge_store: graphify          # optional: a live index (e.g. graphify) → keeps the bundle FRESH
+feedback: { dir: ./feedback, screenshots: true }
+```
+
+## Agent-adapter contract
+
+On each new-feedback fire, the harness hands the agent: the app `name`, its `source` path(s), the
+feedback `comment` + `stars` + `screenshot` path, and a **task template** encoding the guardrails
+we used (`feedback_loop_task.md`): triage → auto-do clearly-scoped low-risk fixes (+ smoke-test +
+restart) / propose plans for substantive ones (`awaiting_approval`) / ack positives; post a reply
+via the ledger; **leave changes uncommitted**; never auto-commit. The agent returns; the harness
+re-arms the watcher.
+
+## Agent adapter / deployment modes
+
+How the loop *powers* the agent is the main deployment axis — and it's not the binary it looks
+like. There are **three** points, and the one we prototyped (a live attended Claude Code session
+re-invoked by `feedback_watch.sh`) is the **worst to ship**: it's tied to a live session's
+lifecycle (the watcher-reaping fragility this very build hit — `exec`-detach got the tracked task
+reaped on idle), it's single-user, and it's harness-specific. Ship the other two.
+
+| adapter | billing | context (memory / CLAUDE.md / skills) | robustness | fits |
+|---|---|---|---|---|
+| ~~live attended CC session~~ | subscription | full | **fragile** (session can die; single-user) | prototype only — don't ship |
+| **`headless-cc`** (`claude -p`) | subscription | full — loads CLAUDE.md + memories + skills (one-shot, *in the project dir*) | robust one-shot | **solo / small self-hosted** |
+| **`api`** (Anthropic API / Agent SDK) | per-token | **cold** — none unless injected | robust, scales, multi-user | **large shared team / hosted** |
+
+**The middle dominates the live session.** `claude -p` headless keeps the subscription economics
+*and* the auto-loaded project context, with none of the live-session fragility — so it's the
+**default** adapter and the frictionless "free with your Max sub" adoption story.
+
+**Scale picks the adapter AND the autonomy default together:**
+- **Solo / small, self-hosted** → `headless-cc` + `auto-small` (your box, your trusted apps, your blast radius).
+- **Large shared team** → `api` + `propose-only` + **PR-for-review** — routing a team's feedback
+  through one personal Max sub is both rate-limited and ToS-shaky, so a team wants its own API
+  billing, per-request permissions, and human-reviewed diffs instead of auto-edit.
+
+**The context-bundle convention (the `api` cold-start tax) — where graphify composes in.** A cold
+API agent has no memories, so the `api` adapter must be handed a context bundle per fix: the target
+app's source + a curated `CONTEXT.md` / `LESSONS.md` + the task template. A **static** bundle goes
+stale fast (the same snapshot-rot the rest of this design avoids), so for teams the bundle should be
+backed by a **live project knowledge store** — e.g. **graphify as a complementary skill**: the agent
+queries the graph for the relevant slice of repo/docs *at fix-time* instead of reading a frozen file.
+The two projects compose cleanly and don't overlap:
+- **gallery shell** = collects the *feedback* + runs the *loop* + makes the *edit*;
+- **graphify (or any indexer)** = supplies the *fresh project context* the cold agent needs;
+- the `headless-cc` path gets context for free (it's already in the repo); the `api`/team path leans
+  on the knowledge store so the agent isn't fixing blind.
+
+This is also where graphify's own "reflect → `LESSONS.md`" pattern lands: the loop's accumulated
+"this fix worked / that one was a dead end" feeds back into the store, so the agent stops repeating
+mistakes across runs — the team-scale substitute for the per-session memory the headless path enjoys.
+
+## Extraction checklist (our hack → shippable v0)
+
+- [ ] Decouple from this math repo + from Dash specifically (mount = generic proxy, not in-process).
+- [ ] Make the loop **agent-pluggable** (config block, not the hardcoded `feedback_watch.sh` → Claude).
+      Ship **two reference adapters**: `headless-cc` (`claude -p`, default) and `api`/Agent-SDK; document
+      the **context-bundle convention** (+ optional knowledge-store backing, e.g. graphify) for the cold `api` path.
+- [ ] Registry schema + loader; one **non-Dash** example app (Streamlit/Gradio) to prove generality.
+- [ ] Keep: the same-origin capture (html2canvas), the JSON ledger, the status state-machine
+      (`new → awaiting_approval → done`), the General/history view, the mobile collapse-to-one-column JS.
+- [ ] README + the task-template + the autonomy-dial docs.
+- Effort: a weekend or two to a credible v0 — the pieces already exist and *work* (proven end-to-end
+  in this session: comment-with-screenshot → agent reads it → fixes the app → replies, ~6 cycles).
+
+## Landscape / differentiation
+
+Galleries (Streamlit Cloud, HF Spaces, Posit Connect, Hex, Retool) have **no AI-maintenance loop**.
+Coding agents (aider, Claude Code, v0, Lovable, Bolt) are **build-time**, not wired to a live-app
+feedback collection. The novelty is the **wiring + convention**, not any single piece — exactly the
+shape of a good small infra project. Honest wedge: narrow it (one framework + one audience, e.g.
+"AI-maintained data-team dashboards") and nail the feedback→fix loop with great safety, rather than
+going horizontal.
+
+## Honest gaps / risks
+
+- The harness is generic; the **agent's ability to turn "this is cramped" + a screenshot into the
+  right edit** is the real capability bet (BYO-agent punts this to the user's agent, fairly).
+- Restart/redeploy orchestration per app (we hand-restart processes) needs a clean supervisor.
+- Versioning / rollback / PR-review of agent changes is the obvious next layer for any real use.
+- Source artifacts (this session's working bits): `app_shell.py`, `shell_assets/`, `assets/mobile_responsive.js`,
+  `feedback/`, `feedback_watch.sh`, `feedback_loop_task.md`.

@@ -1,0 +1,4 @@
+dash>=2.14
+plotly>=5.18
+flask>=3.0
+pyyaml>=6.0
