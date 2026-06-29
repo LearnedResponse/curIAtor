@@ -1,6 +1,11 @@
 <div align="center">
 
-# 🖼️ CurIAtor
+<h1 align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/logo-dark.svg">
+    <img src="docs/logo.svg" alt="curIAtor" height="56">
+  </picture>
+</h1>
 
 ### Your Dash apps have a curator now.
 
@@ -9,6 +14,10 @@ right in the browser, and an **AI coding agent reads the note, fixes the app, an
 The feedback loop your dashboards never had.
 
 `pip install curiator`
+
+[![CI](https://github.com/LearnedResponse/curiator/actions/workflows/ci.yml/badge.svg)](https://github.com/LearnedResponse/curiator/actions/workflows/ci.yml)
+&nbsp;[![License: Apache-2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
+&nbsp;![Python](https://img.shields.io/badge/python-3.10%E2%80%933.12-blue)
 
 [Quickstart](#quickstart) · [How it works](#how-it-works) · [Where the AI runs](#the-agent-and-where-it-runs) · [Why not just…?](#why-not-just-)
 
@@ -31,25 +40,25 @@ are a little broken, and there's **no channel for "hey, this axis is unlabeled"*
 in a Slack thread and a context-switch. Feedback dies; the apps rot.
 
 Coding agents can fix this stuff in seconds now — but they're wired to your *editor*, not to the
-**live app someone is looking at.** CurIAtor wires those two ends together.
+**live app someone is looking at.** curIAtor wires those two ends together.
 
 ## How it works
 
 ```
-   ┌─────────────────────────────────────────────────────────────┐
+   ┌───────────────────────────────────────────────────────────────┐
    │  one origin · /app/<name>                                     │
-   │  ┌────────────┐   ┌────────────────────┐   ┌───────────────┐ │
-   │  │  catalog   │   │  the live app       │   │  ★ feedback   │ │
-   │  │  (sidebar) │   │  (in an iframe)      │   │  + 📷 + 💬     │ │
-   │  └────────────┘   └────────────────────┘   └──────┬────────┘ │
-   └───────────────────────────────────────────────────┼──────────┘
-                                                        │ new feedback
-                                                        ▼
-                                    watcher ──▶ agent (claude -p / API)
-                                                        │ reads note + screenshot + source
-                                                        │ edits → smoke-tests → reloads
-                                                        ▼
-                                              ⚙ replies in the panel
+   │  ┌────────────┐   ┌──────────────────┐   ┌────────────────┐   │
+   │  │  catalog   │   │   the live app   │   │    feedback    │   │
+   │  │ (sidebar)  │   │  (in an iframe)  │   │ rate·shot·note │   │
+   │  └────────────┘   └──────────────────┘   └───────┬────────┘   │
+   └──────────────────────────────────────────────────┼────────────┘
+                                                      │ new feedback
+                                                      ▼
+                                          watcher ──> agent (claude -p / API)
+                                                      │ reads note + screenshot + source
+                                                      │ edits → smoke-tests → reloads
+                                                      ▼
+                                                * replies in the panel
 ```
 
 1. **One gallery, one origin.** Every app mounts at `/app/<name>` behind a single server. (That
@@ -95,7 +104,7 @@ container (one sandbox per collection), see [`docs/USING_CURIATOR.md`](docs/USIN
 
 ## The agent, and where it runs
 
-CurIAtor is **bring-your-own-agent** — it's the harness that wires live-app feedback to whatever
+curIAtor is **bring-your-own-agent** — it's the harness that wires live-app feedback to whatever
 coding agent you already have. Pick the adapter that fits your setup:
 
 | adapter | billing | project context | scales to a team? | best for |
@@ -103,6 +112,11 @@ coding agent you already have. Pick the adapter that fits your setup:
 | **`headless-cc`** *(default)* | your Claude subscription | full — loads `CLAUDE.md` + memories + skills | no (one machine) | **solo / small, self-hosted** |
 | **`api`** | per-token (Anthropic API / Agent SDK) | inject a `CONTEXT.md` / knowledge store | **yes** | **shared teams / hosted** |
 | **`command`** | whatever you wire | yours | depends | aider / Codex / a script |
+
+> **Model- and provider-agnostic.** curIAtor is the harness, not the brain — you bring the agent CLI,
+> and it holds the model/provider choice. Run Claude Code on Anthropic, Bedrock, Vertex, or an
+> Anthropic-compatible gateway; or `command`-adapter into Codex / aider / any CLI pointed at
+> OpenAI-compatible or local models (Ollama, vLLM, LM Studio, LiteLLM). Nothing in curIAtor to change.
 
 …and the **autonomy dial** decides how much it does on its own:
 
@@ -112,7 +126,7 @@ coding agent you already have. Pick the adapter that fits your setup:
   adapter, a PR you review). The right default for a shared team.
 
 > **Teams:** pair the `api` adapter with a project knowledge store (e.g. [Graphify](https://github.com/shamsi/graphify))
-> so the cold agent fixes with *fresh* repo context instead of a stale snapshot. CurIAtor collects the
+> so the cold agent fixes with *fresh* repo context instead of a stale snapshot. curIAtor collects the
 > feedback and runs the loop; the knowledge store supplies the context. They compose; they don't overlap.
 
 ## Why not just…?
@@ -123,7 +137,7 @@ coding agent you already have. Pick the adapter that fits your setup:
   your editor. None of them is wired to a **live-app feedback collection** your whole team can drop
   notes into.
 
-CurIAtor is the **wiring + the convention** between the two. That's the whole idea — thin to adopt,
+curIAtor is the **wiring + the convention** between the two. That's the whole idea — thin to adopt,
 thin to maintain.
 
 ## Status
@@ -135,7 +149,7 @@ single-tenant: your box, your apps, your agent, your blast radius.
 
 ## The name
 
-**CurIAtor** = **curator + IA** (*inteligencia artificial*) — and, if you say it out loud,
+**curIAtor** = **curator + IA** (*inteligencia artificial*) — and, if you say it out loud,
 **creator + curator**, which is exactly what it is: the IA both **creates** the fix and **curates**
 the collection.
 

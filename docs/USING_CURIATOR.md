@@ -123,3 +123,22 @@ agent:
 ```
 
 See the [README](../README.md#the-agent-and-where-it-runs) for the full adapter / autonomy matrix.
+
+## 7. Providers & local models
+
+CurIAtor doesn't manage models or API keys — **your agent CLI does**. The provider lives in that CLI's
+own config, so any setup it supports works here unchanged. (Env-var names below are illustrative — they
+drift, so follow each tool's own docs, linked, rather than treating these as gospel.)
+
+- **Claude Code** (`headless-cc`): Anthropic, Amazon Bedrock, Google Vertex, or any Anthropic-compatible
+  gateway (incl. a local model behind a [LiteLLM](https://docs.litellm.ai) proxy) — selected via Claude
+  Code's own env vars (e.g. `CLAUDE_CODE_USE_BEDROCK`, `CLAUDE_CODE_USE_VERTEX`, `ANTHROPIC_BASE_URL`).
+  See the [Claude Code docs](https://docs.claude.com/en/docs/claude-code).
+- **Codex / aider / other CLIs** (`command` adapter): set `agent.cmd` and configure the provider in that
+  tool — [Codex](https://github.com/openai/codex) supports OpenAI-compatible endpoints (incl. local:
+  [Ollama](https://ollama.com), LM Studio, vLLM); [aider](https://aider.chat) is provider-agnostic via
+  [LiteLLM](https://docs.litellm.ai). See each tool's docs.
+- **Future `api` adapter** (M4 — no CLI in the loop): target an OpenAI- or Anthropic-compatible gateway
+  (LiteLLM / a vendor proxy) to stay provider-agnostic.
+
+**Rule of thumb: CurIAtor is the harness; you bring the brain.**
