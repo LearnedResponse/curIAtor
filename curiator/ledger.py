@@ -67,13 +67,13 @@ def add_system_note(cfg: dict, key: str, text: str, reply_to: list[str] | None =
     return nid
 
 
-def save_entry(cfg: dict, key: str, *, stars=None, comment="", screenshot=None, ts=None) -> str:
-    """Append a user feedback entry (used by the shell UI; here for completeness/tests)."""
+def save_entry(cfg: dict, key: str, *, stars=None, comment="", screenshot=None, ts=None, user=None) -> str:
+    """Append a user feedback entry. `user` = {id, email, name} provenance (see curiator/auth.py)."""
     data = load(cfg)
     eid = uuid.uuid4().hex[:8]
     data.setdefault(key, []).append({
         "id": eid, "author": "user", "kind": "comment", "comment": comment,
-        "stars": stars, "status": "new", "screenshot": screenshot, "ts": ts,
+        "stars": stars, "status": "new", "screenshot": screenshot, "ts": ts, "user": user,
     })
     _save(cfg, data)
     return eid

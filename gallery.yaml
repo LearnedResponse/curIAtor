@@ -48,6 +48,20 @@ feedback:
   dir: feedback                 # JSON ledger + shots/ live here
   screenshots: true
 
+# Who gave each piece of feedback. curiator RESOLVES + RECORDS identity; it never runs its own login.
+# Additive: omit this block (or mode: none) for today's anonymous single-tenant behavior.
+auth:
+  mode: none                    # none | header | oidc
+  default_user: adam@local      # used by mode: none (provenance even solo)
+  # header mode — an edge proxy (oauth2-proxy / ingress) did the OIDC dance and sets trusted headers:
+  # user_header:   X-Auth-Request-User
+  # email_header:  X-Auth-Request-Email
+  # groups_header: X-Auth-Request-Groups
+  # oidc mode — curiator runs the flow directly (self-hosted, no proxy):
+  # issuer: https://keycloak.example/realms/curiator
+  # client_id: curiator
+  # client_secret_env: CURIATOR_OIDC_SECRET   # secret via env, NEVER in this file
+
 # Git as the memory (docs/DESIGN.md → "Git as the memory"). Every agent run → one atomic commit
 # (source edit + ledger update together); the git log is the queryable, revertible record.
 git:

@@ -106,3 +106,20 @@ def test_ledger_only_commit_for_no_source_change(cfg, collection):
                            cwd=collection, capture_output=True, text=True).stdout.split()
     assert files == ["feedback/app_feedback.json"]         # ledger only, no source
     assert "ack / no source change" in _log(collection, "-1", "--format=%B")
+
+
+def test_feedback_from_trailer_carries_provenance(cfg, collection):
+    src = collection / "apps" / "sample.py"
+    src.write_text(src.read_text().replace('"sample"', '"sample (fixed)"'))
+    fid = ledger.save_entry(cfg, "sample", stars=2, comment="fix the layout",
+                            user={"id": "u", "email": "dev@corp.com", "name": "Dev"}, ts="t0")
+    ledger.add_system_note(cfg, "sample", "Fixed.", reply_to=[fid], ts="t1")
+    ledger.set_status(cfg, "sample", [fid], "done")
+    res = gitmem.commit_run(cfg, "sample", fid, status="done", note_text="Fixed.")
+    assert res["committed"]
+    assert "Feedback-From: dev@corp.com" in _log(collection, "-1", "--format=%B")
+
+
+def test_no_feedback_from_trailer_when_anonymous(cfg, collection):
+    fid, _, _ = _do_fix(cfg, collection)                   # _do_fix saves with no user
+    assert "Feedback-From:" not in _log(collection, "-1", "--format=%B")

@@ -42,6 +42,8 @@ CONFIG = _load_yaml()
 AGENT = CONFIG.get("agent", {}) or {}
 FEEDBACK_CFG = CONFIG.get("feedback", {}) or {}
 SHELL_CFG = CONFIG.get("shell", {}) or {}
+AUTH_CFG = CONFIG.get("auth", {}) or {}        # identity / provenance (none | header | oidc)
+AUTH_CFG.setdefault("mode", "none")
 
 # the directories that hold app source — added to sys.path so in-process import works.
 APP_SOURCE_DIRS: list[Path] = []

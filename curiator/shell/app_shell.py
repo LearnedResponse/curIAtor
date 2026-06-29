@@ -50,6 +50,7 @@ sys.path.insert(0, str(HERE))
 PORT = 8200  # default; overridden by gallery.yaml shell.port just below (after the registry import)
 
 import registry as REG  # gallery.yaml-backed registry (CurIAtor drop-in for all_apps_index)
+from curiator import auth  # identity / provenance resolution (none | header | oidc)
 PORT = REG.SHELL_CFG.get("port", PORT)  # honor gallery.yaml: shell.port
 TITLE = REG.SHELL_CFG.get("title", "curIAtor")  # gallery title — browser tab + the brand header
 
@@ -127,11 +128,20 @@ def _write(data):
     FEEDBACK_JSON.write_text(json.dumps(data, indent=2) + "\n")
 
 
-def save_entry(key, stars, comment, shot_dataurl):
+def _current_user():
+    """The verified identity for this request (default_user / proxy header / OIDC session), or None."""
+    try:
+        return auth.current_user(REG.AUTH_CFG)
+    except Exception:                                    # no request context, etc. — provenance is best-effort
+        return None
+
+
+def save_entry(key, stars, comment, shot_dataurl, user=None):
     data = load_feedback()
     e = {"id": uuid.uuid4().hex[:8], "ts": datetime.now().isoformat(timespec="seconds"),
          "author": "user", "kind": "comment", "stars": stars, "comment": (comment or "").strip(),
-         "screenshot": None, "status": "new", "proposed_plan": None}
+         "screenshot": None, "status": "new", "proposed_plan": None,
+         "user": auth.stamp(user if user is not None else _current_user())}
     if shot_dataurl and shot_dataurl.startswith("data:image"):
         fname = f"{key}_{e['id']}.png"
         (SHOTS / fname).write_bytes(base64.b64decode(shot_dataurl.split(",", 1)[1]))
@@ -286,12 +296,15 @@ def render_history():
                 shot = (f"<br><img src='/feedback-shot/{Path(e['screenshot']).name}' "
                         f"style='max-width:320px;border:1px solid #ddd;border-radius:4px;margin-top:4px'>"
                         if e.get("screenshot") else "")
+                who = (e.get("user") or {}).get("name")
+                whoh = (f" <span style='color:#8e44ad;font-size:10px;font-weight:600'>· {_esc(who)}</span>"
+                        if who else "")
                 out.append(f"<div style='margin:4px 0;border-left:2px solid {stc};padding:5px 9px;"
                            f"background:#fafafa;border-radius:3px'>"
                            f"<span style='color:#cc7a00'>{stars}</span> "
                            f"<span style='background:{stc};color:white;font-size:9.5px;border-radius:8px;"
                            f"padding:1px 6px'>{st}</span> "
-                           f"<span style='color:#999;font-size:10px'>{ts}</span>"
+                           f"<span style='color:#999;font-size:10px'>{ts}</span>{whoh}"
                            f"<div style='font-size:12.5px;color:#333;white-space:pre-wrap;margin-top:2px'>"
                            f"{_esc(e.get('comment', ''))}{shot}</div></div>")
     out.append("</div>")
@@ -330,6 +343,10 @@ def feedback_list(key):
                 html.Span(st, style={"fontSize": "9.5px", "color": "white", "background": st_col,
                           "padding": "1px 6px", "borderRadius": "8px"}),
                 html.Span(f"  {e['ts']}", style={"color": GREY, "fontSize": "10px"})]
+        who = (e.get("user") or {}).get("name")
+        if who:
+            head.append(html.Span(f"  · {who}", title=(e.get("user") or {}).get("email", ""),
+                                  style={"color": PURPLE, "fontSize": "10px", "fontWeight": 600}))
         kids = [html.Div(head)]
         if e.get("comment"):
             kids.append(html.Div(e["comment"], style={"fontSize": "12px", "color": "#333", "marginTop": "2px"}))
@@ -493,6 +510,16 @@ def build_shell() -> Dash:
                  suppress_callback_exceptions=True,
                  meta_tags=[{"name": "viewport", "content": "width=device-width, initial-scale=1"}])
 
+    # Flask session (OIDC login state) + the self-hosted OIDC routes when auth.mode == oidc.
+    shell.server.secret_key = os.environ.get("CURIATOR_SECRET_KEY") or os.urandom(24)
+    if auth.login_required(REG.AUTH_CFG):
+        auth.register_oidc(REG.AUTH_CFG, shell.server)
+
+    @shell.server.route("/whoami")
+    def _whoami():               # the resolved identity for this request (handy for header-mode + debugging)
+        from flask import jsonify
+        return jsonify(auth.current_user(REG.AUTH_CFG) or {"authenticated": False})
+
     @shell.server.route("/feedback-shot/<path:fname>")
     def _shot(fname):
         return send_from_directory(SHOTS, fname)
@@ -540,6 +567,9 @@ def build_shell() -> Dash:
                         "width": "100%"})
 
     sidebar = html.Div([
+        html.Div(id="auth-bar", style={"fontSize": "10.5px", "color": GREY, "textAlign": "right",
+                                       "minHeight": "14px", "marginBottom": "2px"}),
+        dcc.Store(id="auth-init", data=1),
         html.H4("Feedback", style={"margin": "0 0 2px", "fontSize": "14px"}),
         html.Div(id="fb-appname", style={"fontSize": "11.5px", "color": GREY, "marginBottom": "8px"}),
         dcc.RadioItems(id="fb-stars", inline=True,
@@ -642,14 +672,31 @@ def build_shell() -> Dash:
         hide = {"display": "none"}
         if not key:
             return "Select an app first.", errstyle, no_update, no_update, no_update, no_update, no_update, no_update
+        u = _current_user()
+        if auth.login_required(REG.AUTH_CFG) and not u:    # oidc: feedback requires a verified identity
+            return ("Sign in to leave feedback.", errstyle, no_update, no_update, no_update,
+                    no_update, no_update, no_update)
         if not stars and not (comment or "").strip() and not shot:
             return "Add a rating, comment, or screenshot.", errstyle, no_update, no_update, no_update, \
                 no_update, no_update, no_update
         shot = shot if (isinstance(shot, str) and shot.startswith("data:image")) else None
-        e = save_entry(key, stars, comment, shot)
-        msg = f"✓ saved ({e['id']})" + ("  +screenshot" if e["screenshot"] else "")
+        e = save_entry(key, stars, comment, shot, user=u)
+        who = (e.get("user") or {}).get("name")
+        msg = f"✓ saved ({e['id']})" + (f" · {who}" if who else "") + ("  +screenshot" if e["screenshot"] else "")
         return msg, okstyle, feedback_list(key), "", None, None, hide, \
             catalog_rows(search, sortby, tags_sel, bool(rev))
+
+    # ---- identity bar: who you're signed in as (or a sign-in link in oidc mode) ----
+    @shell.callback(Output("auth-bar", "children"), Input("auth-init", "data"))
+    def _auth_bar(_):
+        u = _current_user()
+        if u:
+            kids = [html.Span("● ", style={"color": GREEN}),
+                    html.Span(u.get("name") or "user", title=u.get("email", ""), style={"fontWeight": 600})]
+            if auth.login_required(REG.AUTH_CFG):
+                kids.append(html.A(" · sign out", href="/logout", style={"color": BLUE}))
+            return kids
+        return [html.A("Sign in →", href="/login", style={"color": BLUE, "fontWeight": 700})]
 
     # ---- mobile drawers: ☰/💬 toggle catalog/feedback; selecting an app or tapping the scrim closes ----
     @shell.callback(Output("cat-open", "data"), Output("fb-open", "data"),

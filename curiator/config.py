@@ -45,4 +45,10 @@ def load_config() -> dict:
     git.setdefault("signoff", True)              # add Signed-off-by (DCO) via `git commit -s`
     git.setdefault("include_ledger", True)       # bundle the feedback ledger in the same commit
     cfg["git"] = git
+    # Identity / provenance (docs: who gave each piece of feedback). Additive: absent ⇒ mode none
+    # (a fixed default_user — provenance even solo, today's anonymous single-tenant behavior).
+    auth = cfg.get("auth") or {}
+    auth.setdefault("mode", "none")              # none | header | oidc
+    auth.setdefault("default_user", "anonymous@local")
+    cfg["auth"] = auth
     return cfg

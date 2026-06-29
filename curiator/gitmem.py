@@ -162,6 +162,9 @@ def commit_run(cfg: dict, app: str, feedback_id: str, *, status: str, note_text:
 
         summary = (note_text or "").strip().splitlines()[0][:72] if note_text else f"feedback on {app}"
         msg = _build_message(app, summary, comment, stars, changed_desc, smoke).replace("{fid}", feedback_id)
+        from_email = ((fb or {}).get("user") or {}).get("email")
+        if from_email:
+            msg += f"Feedback-From: {from_email}\n"       # provenance → the git record (reputation substrate)
         msg += f"Co-Authored-By: curiator[{_agent_label(cfg)}] <noreply@curiator.dev>\n"
         commit_args = ["commit", "-m", msg] + (["-s"] if git.get("signoff", True) else [])
         _git(cfg, *commit_args)
