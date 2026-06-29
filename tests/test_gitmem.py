@@ -1,0 +1,108 @@
+"""gitmem: the commit-per-run schema + trailers, that the commit bundles source+ledger, branch
+selection, and that revert APPENDS a note (preserving the record) rather than erasing it. reflect →
+LESSONS.md. Runs against the tmp collection's real git repo — no agent needed.
+"""
+from __future__ import annotations
+
+import subprocess
+from pathlib import Path
+
+from curiator import gitmem, ledger
+
+
+def _log(collection: Path, *fmt) -> str:
+    return subprocess.run(["git", "log", *fmt], cwd=collection, capture_output=True, text=True).stdout
+
+
+def _do_fix(cfg, collection, *, comment="legend covers the chart", stars=2):
+    """Simulate an agent run: edit the source, post the reply note, set done — then commit_run."""
+    src = collection / "apps" / "sample.py"
+    src.write_text(src.read_text().replace('"sample"', '"sample (fixed)"'))
+    fid = ledger.save_entry(cfg, "sample", stars=stars, comment=comment, ts="t0")
+    nid = ledger.add_system_note(cfg, "sample", "Fixed the layout.", reply_to=[fid], ts="t1")
+    ledger.set_status(cfg, "sample", [fid], "done")
+    res = gitmem.commit_run(cfg, "sample", fid, status="done", note_text="Fixed the layout.")
+    return fid, nid, res
+
+
+def test_commit_bundles_source_and_ledger_with_trailers(cfg, collection):
+    fid, _, res = _do_fix(cfg, collection)
+    assert res["committed"], res
+    files = subprocess.run(["git", "show", "--name-only", "--format=", "HEAD"],
+                           cwd=collection, capture_output=True, text=True).stdout.split()
+    assert "apps/sample.py" in files                       # the source edit
+    assert "feedback/app_feedback.json" in files           # …and the ledger, in ONE commit
+    body = _log(collection, "-1", "--format=%B")
+    assert body.startswith("curator(sample):")
+    assert "Smoke-test: passed" in body
+    assert "Curiator-App: sample" in body
+    assert f"Curiator-Feedback: {fid}" in body
+    assert "Co-Authored-By: curiator[" in body
+    assert "Signed-off-by:" in body                        # DCO (signoff:true)
+    assert "(★★)" in body                                  # stars rendered
+
+
+def test_queryable_by_trailer(cfg, collection):
+    fid, _, _ = _do_fix(cfg, collection)
+    found = _log(collection, "--all", "--grep=Curiator-App: sample", "--format=%H")
+    assert found.strip(), "git log --grep on the trailer should find the commit"
+    assert gitmem.find_commit(cfg, fid) is not None
+
+
+def test_smoke_gate_blocks_broken_commit(cfg, collection):
+    src = collection / "apps" / "sample.py"
+    src.write_text("this is not valid python {{{")
+    fid = ledger.save_entry(cfg, "sample", comment="x", ts="t0")
+    ledger.add_system_note(cfg, "sample", "tried", reply_to=[fid], ts="t1")
+    res = gitmem.commit_run(cfg, "sample", fid, status="done", note_text="tried")
+    assert not res["committed"] and "smoke-test failed" in res["reason"]
+    # the broken edit was reverted, nothing committed
+    assert "{{{" not in src.read_text()
+    assert _log(collection, "--format=%s").splitlines()[0] == "init"
+
+
+def test_branch_selection(cfg, collection):
+    cfg["git"]["branch"] = "curiator/sandbox"
+    _do_fix(cfg, collection)
+    branch = subprocess.run(["git", "rev-parse", "--abbrev-ref", "HEAD"],
+                            cwd=collection, capture_output=True, text=True).stdout.strip()
+    assert branch == "curiator/sandbox"                    # commit landed on the configured branch
+
+
+def test_revert_appends_note_keeps_thread(cfg, collection):
+    fid, _, _ = _do_fix(cfg, collection)
+    res = gitmem.revert_feedback(cfg, fid, reason="rewind")
+    assert res["ok"] and res["reverted_source"]
+    # the source is back to its pre-fix state
+    assert "(fixed)" not in (collection / "apps" / "sample.py").read_text()
+    # a dedicated revert commit exists (history preserved — both fix and revert are on the log)
+    subjects = _log(collection, "--format=%s").splitlines()
+    assert any(s.startswith("curator(sample): revert") for s in subjects)
+    assert any(s.startswith("curator(sample): Fixed") for s in subjects)   # original NOT erased
+    # the conversation: original reply kept + a new ↩ revert note appended
+    notes = [e for e in ledger.load(cfg)["sample"] if e["author"] == "claude"]
+    assert any("Fixed the layout" in (e.get("comment") or "") for e in notes)
+    assert any("reverted" in (e.get("comment") or "").lower() for e in notes)
+
+
+def test_reflect_writes_lessons(cfg, collection):
+    fid, _, _ = _do_fix(cfg, collection)
+    gitmem.revert_feedback(cfg, fid, reason="rewind")
+    content = gitmem.reflect(cfg)
+    assert "## sample" in content
+    assert "revert" in content.lower()
+    p = gitmem.write_lessons(cfg)
+    assert Path(p).exists() and "## sample" in Path(p).read_text()
+
+
+def test_ledger_only_commit_for_no_source_change(cfg, collection):
+    # a positive ack: a reply with no source edit still produces a (ledger-only) commit
+    fid = ledger.save_entry(cfg, "sample", stars=5, comment="love it", ts="t0")
+    ledger.add_system_note(cfg, "sample", "Glad you like it!", reply_to=[fid], ts="t1")
+    ledger.set_status(cfg, "sample", [fid], "done")
+    res = gitmem.commit_run(cfg, "sample", fid, status="done", note_text="Glad you like it!")
+    assert res["committed"]
+    files = subprocess.run(["git", "show", "--name-only", "--format=", "HEAD"],
+                           cwd=collection, capture_output=True, text=True).stdout.split()
+    assert files == ["feedback/app_feedback.json"]         # ledger only, no source
+    assert "ack / no source change" in _log(collection, "-1", "--format=%B")

@@ -20,7 +20,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8.0"]
+dev = ["pytest>=8.0", "ruff>=0.5"]
 
 [project.urls]
 Homepage = "https://github.com/LearnedResponse/curiator"
@@ -35,3 +35,14 @@ packages = ["curiator", "curiator.shell", "curiator.loop", "curiator.loop.adapte
 [tool.setuptools.package-data]
 "curiator.shell" = ["assets/*"]
 "curiator.loop" = ["task_template.md"]
+
+[tool.ruff]
+line-length = 120
+
+[tool.ruff.lint]
+# Real-bug lint (syntax errors + pyflakes: undefined names, unused imports, f-string mistakes) —
+# meaningful without style bikeshedding, so `build passing` stays honest.
+select = ["E9", "F"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
