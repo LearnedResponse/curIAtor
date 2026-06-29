@@ -1,0 +1,10 @@
+CurIAtor
+Copyright 2026 Adam Guetz / LearnedResponse
+
+Licensed under the Apache License, Version 2.0 (see LICENSE).
+
+This product bundles the following third-party software, used under its own license:
+
+  - html2canvas (curiator/shell/assets/html2canvas.min.js)
+    Copyright (c) Niklas von Hertzen and contributors
+    MIT License — https://github.com/niklasvh/html2canvas
