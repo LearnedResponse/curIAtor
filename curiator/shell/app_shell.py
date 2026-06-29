@@ -47,9 +47,10 @@ from werkzeug.middleware.dispatcher import DispatcherMiddleware  # noqa: F401 (k
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
-PORT = 8200
+PORT = 8200  # default; overridden by gallery.yaml shell.port just below (after the registry import)
 
 import registry as REG  # gallery.yaml-backed registry (CurIAtor drop-in for all_apps_index)
+PORT = REG.SHELL_CFG.get("port", PORT)  # honor gallery.yaml: shell.port
 
 # The ledger + shots live at the repo-root feedback/ dir — the SAME tracked
 # feedback/app_feedback.json that ledger.py (the loop + `curiator reply`) reads/writes. The shell is

@@ -38,7 +38,7 @@ feedback:
   screenshots: true
 
 shell:
-  port: 8200
+  port: 8300        # 8200 is commonly taken; 8300 avoids the usual collisions
 
 # tag → chip color (optional)
 tags:
