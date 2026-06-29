@@ -48,12 +48,18 @@ from werkzeug.middleware.dispatcher import DispatcherMiddleware  # noqa: F401 (k
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 PORT = 8200
-FEEDBACK_JSON = HERE / "feedback" / "app_feedback.json"
-SHOTS = HERE / "feedback" / "shots"
-SHOTS.mkdir(parents=True, exist_ok=True)
-BLUE, GREEN, AMBER, GREY, PURPLE = "#2980b9", "#1f9d55", "#cc7a00", "#777", "#8e44ad"
 
 import registry as REG  # gallery.yaml-backed registry (CurIAtor drop-in for all_apps_index)
+
+# The ledger + shots live at the repo-root feedback/ dir — the SAME tracked
+# feedback/app_feedback.json that ledger.py (the loop + `curiator reply`) reads/writes. The shell is
+# nested under curiator/shell/, so `HERE / feedback` would be a stray, split-brain ledger. Honor
+# gallery.yaml's feedback.dir (default "feedback"), resolved against the repo root.
+FEEDBACK_DIR = REG.REPO_ROOT / (REG.FEEDBACK_CFG.get("dir") or "feedback")
+FEEDBACK_JSON = FEEDBACK_DIR / "app_feedback.json"
+SHOTS = FEEDBACK_DIR / "shots"
+SHOTS.mkdir(parents=True, exist_ok=True)
+BLUE, GREEN, AMBER, GREY, PURPLE = "#2980b9", "#1f9d55", "#cc7a00", "#777", "#8e44ad"
 
 
 # ============================== registry =====================================
@@ -65,9 +71,12 @@ def load_registry():
         key = a.get("key") or (Path(f).stem if f else None)
         if not key:
             continue
-        if f and f.endswith(".py") and (HERE / f).exists():
+        # registry.py emits ABSOLUTE source paths — use them as-is (not HERE / f, which assumed the
+        # research-era layout where apps lived next to the shell).
+        p = Path(f) if f else None
+        if p and p.suffix == ".py" and p.exists():
             kind = "dynamic"
-        elif (HERE / f"{key}.html").exists():
+        elif p and p.suffix == ".html" and p.exists():
             kind = "static"
         else:
             kind = "missing"
@@ -188,7 +197,7 @@ def app_metrics(key):
 def recency(rec):
     f = rec.get("file")
     try:
-        return (HERE / f).stat().st_mtime if f else 0
+        return Path(f).stat().st_mtime if f else 0   # registry gives an absolute path
     except Exception:
         return 0
 
@@ -447,7 +456,7 @@ def app_src(key):
 
 
 def build_shell() -> Dash:
-    shell = Dash(__name__, assets_folder="shell_assets", title="Viewer Shell",
+    shell = Dash(__name__, assets_folder="assets", title="Viewer Shell",
                  suppress_callback_exceptions=True,
                  meta_tags=[{"name": "viewport", "content": "width=device-width, initial-scale=1"}])
 
