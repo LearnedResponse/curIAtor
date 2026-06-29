@@ -1,0 +1,9 @@
+.git
+__pycache__/
+*.pyc
+*.egg-info/
+feedback/shots/
+feedback/task_*.md
+docs/demo.gif
+collection/
+.venv/

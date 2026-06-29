@@ -32,4 +32,9 @@ def load_config() -> dict:
     cfg = yaml.safe_load(p.read_text()) or {}
     cfg["repo_root"] = str(p.resolve().parent)   # everything (feedback/, sources) is relative to here
     cfg["gallery_path"] = str(p.resolve())
+    # How General-channel feedback on the RUNNER itself is handled. Additive + backward-compatible:
+    # absent `runner:` ⇒ pinned (the safe consumer default — drafts an upstream PR, never edits the package).
+    runner = cfg.get("runner") or {}
+    runner.setdefault("mode", "pinned")          # pinned | checkout
+    cfg["runner"] = runner
     return cfg

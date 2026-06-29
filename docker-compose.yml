@@ -1,0 +1,23 @@
+# One container per collection. `docker compose up` runs the gallery + the auto-fix loop against
+# the collection mounted at ./collection. Scaffold that collection first:  curiator init collection
+services:
+  curiator:
+    build:
+      context: .
+      # Local / pre-PyPI build of the runner (uncomment to build from this checkout):
+      # args: { CURIATOR_PIP: "/src" }     # also add `COPY . /src` to the Dockerfile
+    image: curiator:latest
+    ports:
+      - "8300:8300"                        # host:container — the gallery (match gallery.yaml shell.port)
+    volumes:
+      # Your collection repo — apps + gallery.yaml + the feedback ledger + LESSONS.md. Persistent +
+      # editable on the host, so the curator's diffs are reviewable / committable / PR-able.
+      - ./collection:/collection
+      # headless-cc: reuse your host Claude login (read-only). Omit this line for the `api` adapter.
+      - ${HOME}/.claude:/root/.claude:ro
+    environment:
+      CURIATOR_GALLERY: /collection/gallery.yaml
+      SHELL_HOST: "0.0.0.0"
+      # For agent.adapter: api (no Claude login needed), drop the ~/.claude mount and set:
+      # ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+    restart: unless-stopped

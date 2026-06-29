@@ -17,6 +17,10 @@ from pathlib import Path
 
 from . import headless_cc, api as api_adapter, command as command_adapter
 
+# The library/shell-wide feedback bucket (mirrors app_shell.GENERAL_KEY) — feedback on the RUNNER
+# itself, routed by `runner.mode` rather than to an app source.
+GENERAL_KEY = "__general__"
+
 
 @dataclass
 class Task:
@@ -50,23 +54,82 @@ def _source_for(cfg: dict, key: str) -> str | None:
     return None
 
 
-def build_task(cfg: dict, key: str, entry: dict) -> Task:
-    repo = Path(cfg["repo_root"])
+def _shot_path(cfg: dict, entry: dict) -> str | None:
+    """Absolute path to the feedback screenshot, or None. `entry['screenshot']` already carries its dir
+    relative to the feedback dir (e.g. 'shots/aviato_ab12.png'), so join it ONCE."""
+    shot = entry.get("screenshot")
+    if not shot:
+        return None
+    fb_dir = cfg.get("feedback", {}).get("dir", "feedback")
+    return str(Path(cfg["repo_root"]) / fb_dir / shot)
+
+
+def _runner_root(cfg: dict) -> str:
+    """Where the runner (curiator) source lives, for checkout-mode patching: `runner.path` if set,
+    else the package's own checkout root (works for an editable `pip install -e`)."""
+    rpath = (cfg.get("runner") or {}).get("path")
+    if rpath:
+        return str((Path(cfg["repo_root"]) / rpath).resolve())
+    import curiator
+    return str(Path(curiator.__file__).resolve().parent.parent)
+
+
+def _runner_bundle(cfg: dict, entry: dict, eid: str, shot_path: str | None) -> tuple[str, str | None]:
+    """Bundle for ◆ General (runner) feedback — feedback on CurIAtor itself. The action keys off
+    `runner.mode`: checkout ⇒ patch the runner locally (tracked, PR-able); pinned ⇒ draft an upstream
+    issue/PR (never edit site-packages, which is untracked + blown away on upgrade)."""
+    mode = (cfg.get("runner") or {}).get("mode", "pinned")
+    head = [
+        "# CurIAtor — feedback on the RUNNER itself (the ◆ General channel)",
+        "",
+        "This feedback is about **CurIAtor (the runner / shell), not one of your apps**. You are",
+        f"non-interactive, in the repo. Reply to feedback id `{eid}`.",
+        "",
+        f"- comment: {entry.get('comment')!r}",
+        f"- stars: {entry.get('stars')}",
+        (f"- screenshot (Read this PNG): `{shot_path}`" if shot_path else "- screenshot: (none)"),
+        f"- runner mode: **{mode}**",
+        "",
+    ]
+    if mode == "checkout":
+        root = _runner_root(cfg)
+        body = head + [
+            "## Mode: checkout — patch the runner locally (tracked, PR-able)",
+            f"The runner is an editable git checkout at `{root}`. Make the change there:",
+            "1. Locate the relevant source (shell = `curiator/shell/app_shell.py`, loop = `curiator/loop/`,",
+            "   CLI = `curiator/cli.py`, config = `curiator/config.py`).",
+            "2. Edit it, then smoke-test what you touched (import it / run a quick check).",
+            f"3. Reply (leave the diff UNCOMMITTED for a human to PR):",
+            f"   `curiator reply {GENERAL_KEY} {eid} \"<what you changed + why>\" --status done`",
+            "",
+            "Edit ONLY within the runner checkout. **Do NOT git commit** — a human reviews + PRs the diff.",
+        ]
+        return "\n".join(body) + "\n", root
+    # pinned (default)
+    body = head + [
+        "## Mode: pinned — draft an upstream contribution (do NOT edit the installed package)",
+        "The runner is a pinned, installed package; its `site-packages` source is untracked and is",
+        "**blown away on upgrade**, so editing it is a dead end. Turn this feedback into a contribution:",
+        "1. Draft a crisp upstream **issue / PR**: a one-line title, the problem, the proposed change,",
+        "   and the likely area in curiator (shell / loop / cli / docs).",
+        "2. Post the draft as your reply (a human files it upstream):",
+        f"   `curiator reply {GENERAL_KEY} {eid} \"<title + problem + proposed change>\" --status awaiting_approval`",
+        "",
+        "Make **no code edits**. The deliverable is the drafted contribution text.",
+    ]
+    return "\n".join(body) + "\n", None
+
+
+def _app_bundle(cfg: dict, key: str, entry: dict, eid: str, shot_path: str | None) -> tuple[str, str | None]:
+    """Bundle for app feedback — the standing protocol + this item + ready-to-run smoke-test/reply."""
     template = (Path(__file__).resolve().parents[1] / "task_template.md").read_text()
     source = _source_for(cfg, key)
-    shot = entry.get("screenshot")
-    # `shot` already carries its dir relative to the feedback dir (e.g. "shots/aviato_ab12.png"),
-    # so join it ONCE — don't re-insert "shots/".
-    fb_dir = cfg.get("feedback", {}).get("dir", "feedback")
-    shot_path = str(repo / fb_dir / shot) if shot else None
-    eid = entry.get("id")
-    mode = (cfg.get("agent", {}) or {}).get("autonomy", "auto-small")
-
+    autonomy = (cfg.get("agent", {}) or {}).get("autonomy", "auto-small")
     body = [
         template, "\n\n---\n\n# This wake — the new feedback to act on\n",
         f"- app: **{key}**",
         f"- source to edit: `{source}`" if source else "- source: (none registered — propose only)",
-        f"- autonomy mode: **{mode}**",
+        f"- autonomy mode: **{autonomy}**",
         f"- stars: {entry.get('stars')}",
         f"- comment: {entry.get('comment')!r}",
         f"- screenshot (Read this PNG): `{shot_path}`" if shot_path else "- screenshot: (none)",
@@ -85,7 +148,19 @@ def build_task(cfg: dict, key: str, entry: dict) -> Task:
         f"- reply with a plan:  `curiator reply {key} {eid} \"<plan + recommendation>\" --status awaiting_approval`",
         "\nEdit ONLY the source above, smoke-test before `done`, and DO NOT commit.",
     ]
-    tf = repo / cfg.get("feedback", {}).get("dir", "feedback") / f"task_{entry.get('id')}.md"
+    return "\n".join(body), source
+
+
+def build_task(cfg: dict, key: str, entry: dict) -> Task:
+    """Write the task bundle for one feedback item and return the Task the adapter runs. App feedback
+    routes to the app's source; ◆ General (runner) feedback routes by `runner.mode`."""
+    eid = entry.get("id")
+    shot_path = _shot_path(cfg, entry)
+    if key == GENERAL_KEY:
+        text, source = _runner_bundle(cfg, entry, eid, shot_path)
+    else:
+        text, source = _app_bundle(cfg, key, entry, eid, shot_path)
+    tf = Path(cfg["repo_root"]) / cfg.get("feedback", {}).get("dir", "feedback") / f"task_{eid}.md"
     tf.parent.mkdir(parents=True, exist_ok=True)
-    tf.write_text("\n".join(body))
+    tf.write_text(text)
     return Task(key=key, entry=entry, source=source, task_file=str(tf), cfg=cfg)

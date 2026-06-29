@@ -38,6 +38,12 @@ agent:
     bundle: null                # required for adapter: api (cold start) — a CONTEXT.md/LESSONS.md
     knowledge_store: null       # optional live index (e.g. graphify) to keep the bundle fresh
 
+# How ◆ General feedback on the RUNNER itself is handled. This repo IS the editable checkout, so the
+# curator can patch curiator's own source ("curiator maintains curiator"). Consumers pin → drafts a PR.
+runner:
+  mode: checkout                # checkout (patch the runner locally, PR-able) | pinned (draft an upstream PR)
+  path: .                       # the curiator checkout to edit (here: this repo root)
+
 feedback:
   dir: feedback                 # JSON ledger + shots/ live here
   screenshots: true

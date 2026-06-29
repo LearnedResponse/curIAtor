@@ -16,10 +16,11 @@ The feedback loop your dashboards never had.
 
 ---
 
+<!-- docs/demo.gif is recorded per docs/DEMO_SCRIPT.md (`curiator demo-up`, then hit record). Drop the file at docs/demo.gif. -->
 ![demo](docs/demo.gif)
 
 > *Above: `aviato` loads in the gallery — cramped, no axis labels. You drop a comment + screenshot
-> ("clean up the layout"). The curator edits the source, restarts the app, and replies. You refresh;
+> ("clean up the layout"). The curator edits the source, reloads the app, and replies. You refresh;
 > it's fixed. ~20 seconds, no terminal.*
 
 ## The problem
@@ -46,7 +47,7 @@ Coding agents can fix this stuff in seconds now — but they're wired to your *e
                                                         ▼
                                     watcher ──▶ agent (claude -p / API)
                                                         │ reads note + screenshot + source
-                                                        │ edits → smoke-tests → restarts
+                                                        │ edits → smoke-tests → reloads
                                                         ▼
                                               ⚙ replies in the panel
 ```
@@ -58,16 +59,17 @@ Coding agents can fix this stuff in seconds now — but they're wired to your *e
    wraps *around* each app — so you never touch an app's source to collect feedback on it. It lands
    in a JSON ledger.
 3. **The curator acts.** New feedback wakes an AI coding agent with the comment, the screenshot, and
-   the app's source path. It triages, makes the fix (or proposes a plan), smoke-tests it, restarts
+   the app's source path. It triages, makes the fix (or proposes a plan), smoke-tests it, reloads
    the app, and **replies right in the feedback panel.** You refresh and see it live.
 
 ## Quickstart
 
 ```bash
 pip install curiator
+curiator init my-collection      # scaffold a collection repo (gallery.yaml + apps/ + a sample app)
 ```
 
-Point it at your apps in `gallery.yaml`:
+…or point it at existing apps in `gallery.yaml`:
 
 ```yaml
 apps:
@@ -84,11 +86,12 @@ feedback: { dir: ./feedback, screenshots: true }
 ```
 
 ```bash
-curiator up           # serves the gallery at http://127.0.0.1:8200
-curiator watch        # arms the feedback→fix loop
+curiator up           # serves the gallery at http://127.0.0.1:8300
+curiator watch        # arms the feedback→fix loop  (or `curiator serve` to run both at once)
 ```
 
-Open the gallery, star/comment/screenshot an app, and watch the curator reply.
+Open the gallery, star/comment/screenshot an app, and watch the curator reply. To run it in a
+container (one sandbox per collection), see [`docs/USING_CURIATOR.md`](docs/USING_CURIATOR.md).
 
 ## The agent, and where it runs
 
@@ -140,7 +143,9 @@ the collection.
 
 ## License
 
-MIT.
+**Apache-2.0** (see `LICENSE` + `NOTICE`). Contributions are accepted under the
+[DCO](https://developercertificate.org/) — sign off your commits with `git commit -s`. See
+[`CONTRIBUTING.md`](CONTRIBUTING.md).
 
 ---
 

@@ -20,8 +20,13 @@ try:
 except ImportError as e:  # pragma: no cover
     raise SystemExit("CurIAtor needs PyYAML — `pip install pyyaml` (or `pip install curiator`).") from e
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
-GALLERY_YAML = Path(os.environ.get("CURIATOR_GALLERY", REPO_ROOT / "gallery.yaml"))
+PACKAGE_ROOT = Path(__file__).resolve().parents[2]   # the curiator package/checkout root (NOT the collection)
+GALLERY_YAML = Path(os.environ.get("CURIATOR_GALLERY", PACKAGE_ROOT / "gallery.yaml"))
+# The collection root = the directory holding gallery.yaml. App `source:` paths and the feedback/ ledger
+# resolve against THIS — so a separate collection (`curiator init`, the Docker /collection mount) works,
+# not just the demo repo. Matches config.py's cfg['repo_root']; for the demo repo the two coincide.
+COLLECTION_ROOT = GALLERY_YAML.resolve().parent
+REPO_ROOT = COLLECTION_ROOT                          # back-compat alias (app_shell feedback dir + source resolution)
 
 _DEFAULT_PORT_BASE = 8201   # reference IDs only (mounts are in-process, no real port is bound)
 
@@ -48,7 +53,7 @@ def _build_all_apps() -> list[dict]:
         name = a["name"]
         mount = a.get("mount", {}) or {}
         source = a.get("source")
-        src_path = (REPO_ROOT / source).resolve() if source else None
+        src_path = (COLLECTION_ROOT / source).resolve() if source else None
         if src_path and src_path.parent not in APP_SOURCE_DIRS:
             APP_SOURCE_DIRS.append(src_path.parent)
         apps.append({
