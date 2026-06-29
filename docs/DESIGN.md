@@ -166,9 +166,13 @@ links*, never hand-maintained; `dbt test` is the gate; `dbt docs` renders the gr
 shape every time: **declarative source-of-truth in git → a derived view for humans → an eval gate → the
 git history as the record.** curiator should sit in that lineage.
 
-Concretely, flip the default from "leave the fix uncommitted" to **one feedback item → one commit**, so
-the **git log becomes the durable, queryable, revertible memory** of everything the curator did. Three
-layers, not one:
+Concretely, flip the default from "leave the fix uncommitted" to **every agent run → one commit** — and
+the commit captures the *whole* state transition: the **source edit (if any) *and* the feedback-ledger
+update ride in the same commit**, so even a `propose-only` plan or a positive-feedback ack produces a
+(ledger-only) commit. Nothing the curator does is off the record. The **git log becomes the durable,
+queryable, revertible memory** of every action. The branch these land on is your **sandbox/dev
+environment** (dbt-style); promotion to dev/main is a later CI/CD step (see below). Three layers, not
+one:
 - **git = episodic memory** — the diffs: *what* changed and *why*, one commit per fix.
 - **the ledger = the conversation** — the ★/comment/⚙ thread, now pointing *at* commits (the reply
   carries the short SHA).
