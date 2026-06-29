@@ -157,6 +157,66 @@ upstream" — no up-front decision about whether you'll ever need generic mutabi
 checkout, **curiator maintains curiator** — feedback on the shell chrome patches the shell. Good dev
 loop, good README story.
 
+## Git as the memory
+
+The lineage here is Karpathy's **autoresearch** (a human steers via a markdown prompt; a headless agent
+edits the *real source* and **commits successful tweaks via git** — the commit log *is* the record of
+what was tried) and, before it, **dbt** (analytics-as-code-in-git; the DAG is *derived from `ref()`
+links*, never hand-maintained; `dbt test` is the gate; `dbt docs` renders the graph *for humans*). Same
+shape every time: **declarative source-of-truth in git → a derived view for humans → an eval gate → the
+git history as the record.** curiator should sit in that lineage.
+
+Concretely, flip the default from "leave the fix uncommitted" to **one feedback item → one commit**, so
+the **git log becomes the durable, queryable, revertible memory** of everything the curator did. Three
+layers, not one:
+- **git = episodic memory** — the diffs: *what* changed and *why*, one commit per fix.
+- **the ledger = the conversation** — the ★/comment/⚙ thread, now pointing *at* commits (the reply
+  carries the short SHA).
+- **`LESSONS.md` = distilled memory** — a `curiator reflect` step summarizing recent `curator(*)`
+  commits, which each fresh one-shot then loads (cross-item learning without a live session).
+
+**The commit *is* the record** — structured + machine-queryable:
+```
+curator(<app>): <one-line summary>
+
+Feedback: "<comment>"   (★<n>)
+Changed: <what was edited>      Smoke-test: <result>
+
+Curiator-App: <app>
+Curiator-Feedback: <id>
+Co-Authored-By: <agent model>
+```
+The trailers make the log a query surface: `git log --grep "Curiator-App: aviato"` = everything the
+curator ever did to that app; `git revert <sha>` = undo with the record intact.
+
+### Binding practices for the curator agent
+
+These are **not optional** — they live in `task_template.md` and every adapter enforces them. They are
+what make "commit freely" safe and keep the memory trustworthy:
+
+1. **One feedback item → one atomic commit.** No batching unrelated changes, no drive-by edits.
+2. **Edit only the feedback's target source.** Nothing else in the tree.
+3. **Smoke-test *before* committing.** Never commit a broken app; a failed test ⇒ revert + report, no commit.
+4. **Structured message + trailers** (above) + attribution (`Co-Authored-By`, and `Signed-off-by` where the project uses the DCO).
+5. **Commit only — never `push`, never merge to main, never force-push, never rewrite published history** (no `amend`/`rebase` of commits you didn't just make).
+6. **Undo with `git revert`, never `reset --hard` / force** — preserve the record.
+7. **Reference the SHA in the ⚙ reply**, so the conversation and the history stay linked.
+
+### The gate (now) and branching (deferred)
+
+The safety gate is **the human reviews the git log and merges to main** — *merge-to-main is always a
+human action.* For now that review happens in plain git (outside the UI): commits land on
+`git.branch` (default a `curiator/auto` branch; `HEAD` for the trusting your-own-box case), and you
+`merge`/`cherry-pick` what's good. A `git:` block in `gallery.yaml` carries the policy
+(`commit: bool` — default `false` = today's leave-uncommitted; `branch`; `signoff`), so it's **opt-in
+per collection** (a standalone collection runs `commit: true`; the QCRS instance, living in a repo with
+its own conventions, keeps `commit: false`).
+
+**Deferred to a later milestone:** a *branching/merging UI* — review/approve/merge curator commits from
+the gallery itself, per-app branches, one-click PR creation. We don't need that machinery yet; the
+binding practices above are exactly what make it safe to build on later. The principle stays dbt's:
+**never maintain the graph — derive it from the refs; git is the record, not a separate store.**
+
 ## Extraction checklist (our hack → shippable v0)
 
 - [ ] Decouple from this math repo + from Dash specifically (mount = generic proxy, not in-process).
