@@ -270,6 +270,20 @@ So once you go multi-user, feedback must be **tied to an authenticated identity*
   `weight(user) × signal(frequency, recency, stars)` — a **trust-weighted objective**, which is just a
   better-aimed version of the autoresearch loss.
 
+**How to delegate it (when the time comes): OIDC, not a vendor.** Standardize on the **protocol**
+(OpenID Connect) and every IdP plugs in — Keycloak, AD/Entra, Okta, Auth0, Google, GitHub — so the IdP
+is a config detail, not a choice baked into curiator. **Keycloak is the reference default**: open-source,
+self-hostable, and an identity *broker* (it federates to AD/LDAP/Google/GitHub upstream), so "Keycloak in
+front of AD" covers the enterprise case through one integration. And the cleanest integration builds
+**zero auth code in curiator** — put an **auth proxy at the edge** (`oauth2-proxy` / your ingress /
+Keycloak's gatekeeper, a sidecar in the Docker model) that runs the OIDC dance and passes a **trusted
+identity header** (`X-Auth-Request-User` + groups); curiator just reads it and stays auth-agnostic. A
+`gallery.yaml: auth:` block (`mode: none | header | oidc`, default `none`) selects it; direct OIDC via a
+library is the fallback for those who don't want a proxy. The three layers then map onto it cleanly:
+**authN** = the IdP (verified identity), **authZ** = curiator roles **driven by IdP group claims**
+(AD/Keycloak groups → roles, so access is managed in the directory, not the app), **reputation** =
+curiator's, derived from the git-as-memory record on top of that identity.
+
 **Scale-gated, like the other modes:** the **self-hosted single-tenant v0 needs none of this** (it's
 you, your box — identity is implicit), which is a feature, not a gap. IAM + reputation land exactly when
 the curation tier goes multi-user/public — same boundary as the `api` adapter and the static-export
