@@ -106,6 +106,57 @@ This is also where graphify's own "reflect → `LESSONS.md`" pattern lands: the 
 "this fix worked / that one was a dead end" feeds back into the store, so the agent stops repeating
 mistakes across runs — the team-scale substitute for the per-session memory the headless path enjoys.
 
+## How a collection consumes the runner
+
+The runner (this package) is generic; **your apps are content in a separate "collection" repo** — a
+`gallery.yaml` + an `apps/` dir + a pinned `curiator`. The `examples/dash/` apps here are demo content
+only; real apps never live in the generic repo (that's what keeps it generic).
+
+**Three ways a collection consumes the runner:**
+
+| model | how | generic stays clean? | PR-back |
+|---|---|---|---|
+| **A — dependency** *(default)* | collection pins `curiator`; `curiator up/watch` read your `gallery.yaml` | ✅ zero runner code in your repo | runner PRs made in a separate checkout — clean diffs |
+| **B — clone & run** | sandbox clones curiator, drops apps inside | ⚠️ apps+runner share a repo; upstream pulls conflict | needs a strict `apps/`-only convention |
+| **C — template + upstream** | create-from-template, merge upstream for updates | ✅ at start, drifts | merge/cherry-pick friction |
+
+**Recommend A + an editable escape hatch.** Default: pin the package. To improve the runner while
+dogfooding, `pip install -e ../curiator` from a sibling checkout — both live, runner edits PR straight
+up, your apps repo untouched. A runner improvement is then always a self-contained diff against the
+generic repo, never entangled with anyone's apps. **Keep the public surface small + stable** (the
+`gallery.yaml` schema + the adapter interface + the CLI) so configs survive runner upgrades and runner
+PRs need know nothing about apps.
+
+**The sandbox (Docker / VM + persistent storage).** The reason to sandbox is the core safety story:
+*the curator auto-edits AND runs code.* So the unit is **one container per collection**:
+- image = `python + curiator` (pinned) + the `claude` CLI (headless-cc) or API creds (api);
+- mounted volume (persistent) = the collection repo — apps, `gallery.yaml`, the `feedback/` ledger
+  (history survives restarts), and a `LESSONS.md` the agent accumulates about *your* apps (the context
+  bundle the `api` adapter needs);
+- two processes: `curiator up` + `curiator watch`; expose the gallery port.
+
+This maps onto the deployment modes above: a **personal container** (headless-cc, `auto-small`) vs a
+**shared/hosted container** (api, `propose-only` + PR). The container *is* "a team's collection."
+
+**Runner-aware General channel — the "suggest improvements to the tool itself" loop.** Feedback splits
+in two: feedback on an *app* → the curator edits your app source (always works); feedback on the
+*runner* (the `◆ General` / `__general__` bucket, or on the shell chrome itself) → the curator would
+edit curiator's own code. That only yields a *tracked, contributable* change when curiator is a **git
+checkout** — Python's `site-packages` source is mutable but **untracked and blown away on upgrade**, so
+patching it there is a dead end. So the General channel's *action* keys off the install mode:
+
+| runner install | General-channel feedback on the runner → |
+|---|---|
+| **editable checkout** (early / contributor) | curator **patches the runner locally** (tracked) → you PR it upstream |
+| **pinned package** (mature / consumer) | curator **drafts an upstream issue/PR** — the feedback becomes a *contribution*, not a local edit |
+
+`gallery.yaml` can carry `runner: { mode: checkout|pinned, path: ../curiator }` so the channel knows
+which behavior to use. It **degrades gracefully**: early you run the checkout and the runner is fair
+game; as it stabilizes you pin the package and the *same gesture* switches from "local patch" to "file
+upstream" — no up-front decision about whether you'll ever need generic mutability. Bonus: with the
+checkout, **curiator maintains curiator** — feedback on the shell chrome patches the shell. Good dev
+loop, good README story.
+
 ## Extraction checklist (our hack → shippable v0)
 
 - [ ] Decouple from this math repo + from Dash specifically (mount = generic proxy, not in-process).
