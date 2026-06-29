@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "curiator"
-version = "0.0.1"
+version = "0.1.0"
 description = "An AI-maintained app gallery for Dash — comment + screenshot a live app, and a coding agent fixes it."
 readme = "README.md"
 requires-python = ">=3.10"

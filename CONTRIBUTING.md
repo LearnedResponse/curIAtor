@@ -1,6 +1,28 @@
-# Contributing to CurIAtor
+# Contributing to curIAtor
 
-Thanks for helping make the curator better! Two lightweight rules.
+Thanks for helping make the curator better! Here's how to get set up — and the two rules for PRs.
+
+## Develop
+
+```bash
+git clone https://github.com/LearnedResponse/curiator && cd curiator
+pip install -e ".[dev]"          # editable install + pytest & ruff
+make test                        # run the suite (pytest)
+ruff check curiator tests        # lint
+```
+
+Run `make test` and `ruff check` **before opening a PR** — CI runs both on Python 3.10–3.12 and gates
+on a DCO sign-off (below). Try the loop locally with `make demo` (resets the broken `aviato`, starts
+the gallery + the fix loop at http://127.0.0.1:8300).
+
+## Add an app / start a collection
+
+- **Add an app to a gallery:** drop `apps/<name>.py` exposing `build_app() -> dash.Dash` (plus a
+  module-level `app`), then add an entry to `gallery.yaml`. Working examples live in `examples/dash/`.
+- **Start your own collection:** `curiator init my-collection` scaffolds a `gallery.yaml` + a sample
+  app + a feedback dir. Full guide: [`docs/USING_CURIATOR.md`](docs/USING_CURIATOR.md).
+- **Improve the runner itself:** with `runner: { mode: checkout }`, feedback on the **◆ General**
+  channel patches curiator's own source — curIAtor maintains curIAtor. Or just open a PR.
 
 ## 1. Sign off your commits (DCO)
 

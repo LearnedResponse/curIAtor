@@ -25,12 +25,12 @@ The feedback loop your dashboards never had.
 
 ---
 
-<!-- docs/demo.gif is recorded per docs/DEMO_SCRIPT.md (`curiator demo-up`, then hit record). Drop the file at docs/demo.gif. -->
-![demo](docs/demo.gif)
+<!-- ▶ RECORD THIS: run `curiator demo-up`, follow docs/DEMO_SCRIPT.md, and save the gif to docs/demo.gif (this exact path). -->
+[![curIAtor demo — comment + screenshot a live app, and the curator fixes it](docs/demo.gif)](docs/DEMO_SCRIPT.md)
 
-> *Above: `aviato` loads in the gallery — cramped, no axis labels. You drop a comment + screenshot
-> ("clean up the layout"). The curator edits the source, reloads the app, and replies. You refresh;
-> it's fixed. ~20 seconds, no terminal.*
+> *`aviato` loads in the gallery — cramped, no axis labels. You drop a comment + screenshot ("clean up
+> the layout"); the curator edits the source, reloads the app, and replies. Refresh — fixed. ~20s, no
+> terminal.* &nbsp;·&nbsp; [▶ recording guide](docs/DEMO_SCRIPT.md)
 
 ## The problem
 
@@ -142,10 +142,11 @@ thin to maintain.
 
 ## Status
 
-**v0 (Dash-first).** Shipping: the gallery shell + same-origin screenshot feedback + the
-`headless-cc` loop + the `aviato` demo. The `api`/team adapter, non-Dash mounts beyond the proxy
-stub, auth, and PR-review/rollback are on the roadmap — once the loop has earned it. Self-hosted,
-single-tenant: your box, your apps, your agent, your blast radius.
+**v0.1.0 — first release (Dash-first).** Shipping: the gallery shell + same-origin screenshot
+feedback + the closed `headless-cc` loop + **git-as-memory** (every fix is a commit; `curiator
+revert` / `reflect`) + `curiator init` collections + a **Docker** sandbox + the `aviato` demo. The
+`api`/team adapter, non-Dash (proxy) mounts, auth, and a branching/merge UI are on the roadmap — once
+the loop has earned it. Self-hosted, single-tenant: your box, your apps, your agent, your blast radius.
 
 ## The name
 

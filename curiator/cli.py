@@ -78,7 +78,7 @@ def _serve(cfg: dict, *, reset: bool = False) -> int:
     env = _child_env(cfg)
     watcher = subprocess.Popen([sys.executable, "-m", "curiator.cli", "watch"], cwd=cfg["repo_root"], env=env)
     bar = "─" * 56
-    print(f"\n{bar}\n  ◆ CurIAtor is up")
+    print(f"\n{bar}\n  ◆ curIAtor is up")
     print(f"    gallery : {url}")
     print(f"    watcher : armed — feedback→fix loop "
           f"(adapter={(cfg.get('agent', {}) or {}).get('adapter', 'headless-cc')}, "
@@ -334,7 +334,7 @@ if __name__ == "__main__":
 '''
 
 _SCAFFOLD_REQUIREMENTS = """\
-curiator>=0.0.1   # pin exact (curiator==X.Y.Z) for a reproducible collection
+curiator>=0.1.0   # pin exact (curiator==X.Y.Z) for a reproducible collection
 """
 
 _SCAFFOLD_README = """\
