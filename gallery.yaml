@@ -28,6 +28,11 @@ apps:
 agent:
   adapter: headless-cc          # headless-cc (default, your Claude sub) | api (teams) | command (BYO)
   autonomy: auto-small          # auto-small (fix small things) | propose-only (plan first)
+  # headless-cc (`claude -p`) knobs — all optional, sensible defaults shown:
+  model: null                   # claude --model (null = your CLI default; e.g. sonnet, opus)
+  permission_mode: acceptEdits  # acceptEdits (auto-apply edits) | bypassPermissions (zero prompts) | default
+  allowed_tools: [Read, Edit, Write, Bash, Glob, Grep]   # pre-approved without a prompt (Bash runs the reply)
+  timeout: 900                  # seconds before the one-shot agent is killed
   cmd: "claude -p {task_file}"  # used only by adapter: command
   context:
     bundle: null                # required for adapter: api (cold start) — a CONTEXT.md/LESSONS.md

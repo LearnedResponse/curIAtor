@@ -55,19 +55,35 @@ def build_task(cfg: dict, key: str, entry: dict) -> Task:
     template = (Path(__file__).resolve().parents[1] / "task_template.md").read_text()
     source = _source_for(cfg, key)
     shot = entry.get("screenshot")
-    shot_path = str(repo / cfg.get("feedback", {}).get("dir", "feedback") / "shots" / shot) if shot else None
+    # `shot` already carries its dir relative to the feedback dir (e.g. "shots/aviato_ab12.png"),
+    # so join it ONCE — don't re-insert "shots/".
+    fb_dir = cfg.get("feedback", {}).get("dir", "feedback")
+    shot_path = str(repo / fb_dir / shot) if shot else None
+    eid = entry.get("id")
+    mode = (cfg.get("agent", {}) or {}).get("autonomy", "auto-small")
 
     body = [
         template, "\n\n---\n\n# This wake — the new feedback to act on\n",
         f"- app: **{key}**",
         f"- source to edit: `{source}`" if source else "- source: (none registered — propose only)",
-        f"- autonomy mode: **{(cfg.get('agent', {}) or {}).get('autonomy', 'auto-small')}**",
+        f"- autonomy mode: **{mode}**",
         f"- stars: {entry.get('stars')}",
         f"- comment: {entry.get('comment')!r}",
-        f"- screenshot: `{shot_path}`" if shot_path else "- screenshot: (none)",
-        f"- feedback id (reply_to this): `{entry.get('id')}`",
-        "\nReply via the ledger helpers (see task_template.md), set status to `done` or "
-        "`awaiting_approval`, and DO NOT commit.",
+        f"- screenshot (Read this PNG): `{shot_path}`" if shot_path else "- screenshot: (none)",
+        f"- feedback id (reply_to this): `{eid}`",
+        "\n## Ready-to-run (fill in the message text)",
+    ]
+    if source:
+        body.append(
+            "- smoke-test the edit: "
+            f"`python -c \"import importlib.util as u; s=u.spec_from_file_location('m', r'{source}'); "
+            "m=u.module_from_spec(s); s.loader.exec_module(m); "
+            "(m.build_app() if hasattr(m,'build_app') else m.app); print('SMOKE OK')\"`"
+        )
+    body += [
+        f"- reply after a fix:  `curiator reply {key} {eid} \"<what changed + why>\" --status done`",
+        f"- reply with a plan:  `curiator reply {key} {eid} \"<plan + recommendation>\" --status awaiting_approval`",
+        "\nEdit ONLY the source above, smoke-test before `done`, and DO NOT commit.",
     ]
     tf = repo / cfg.get("feedback", {}).get("dir", "feedback") / f"task_{entry.get('id')}.md"
     tf.parent.mkdir(parents=True, exist_ok=True)

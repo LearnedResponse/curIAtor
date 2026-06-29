@@ -444,6 +444,25 @@ class LazyDispatcher:
         return self.root(environ, start_response)
 
 
+# The live dispatcher of a running shell. `invalidate_app` (reached via the /reload/<key> route, which
+# `curiator reply --status done` pokes after the agent edits an app) drops ONE app's cached module +
+# built server, so the next view rebuilds from the edited source — the M2 "shell-cache" fix: an edit
+# goes live without restarting the whole shell.
+_DISPATCHER = None
+
+
+def invalidate_app(key: str) -> bool:
+    """Forget a mounted app's cached build AND its imported Python module, so the next /app/<key>/ hit
+    re-imports the edited source and rebuilds fresh. Returns True if the module had been imported."""
+    importlib.invalidate_caches()
+    was_loaded = sys.modules.pop(key, None) is not None
+    d = _DISPATCHER
+    if d is not None:
+        with d.lock:
+            d.cache.pop(key, None)
+    return was_loaded
+
+
 # ============================== shell chrome =================================
 def app_src(key):
     if key == GENERAL_KEY:
@@ -472,6 +491,13 @@ def build_shell() -> Dash:
     @shell.server.route("/general")
     def _general():
         return render_history()
+
+    @shell.server.route("/reload/<key>", methods=["POST", "GET"])
+    def _reload(key):
+        # Poked by `curiator reply --status done` after the agent edits an app: drop the cached build so
+        # the next view rebuilds from the edited source (refresh the gallery to see the fix).
+        from flask import jsonify
+        return jsonify({"reloaded": key, "module_was_loaded": invalidate_app(key)})
 
     tag_opts = [{"label": t, "value": t} for t, _c in TAG_META]
     controls = html.Div([
@@ -663,8 +689,10 @@ def build_shell() -> Dash:
 
 
 def build_application():
+    global _DISPATCHER
     shell = build_shell()
-    return LazyDispatcher(shell.server), shell
+    _DISPATCHER = LazyDispatcher(shell.server)   # stash it so /reload/<key> can invalidate one app's cache
+    return _DISPATCHER, shell
 
 
 if __name__ == "__main__":

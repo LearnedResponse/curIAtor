@@ -23,6 +23,20 @@ def _shell_path() -> Path:
     return Path(__file__).resolve().parent / "shell" / "app_shell.py"
 
 
+def _reload_in_shell(cfg: dict, app: str) -> str | None:
+    """Best-effort: tell a running shell to drop its cached build of `app` so an edit goes live.
+    Non-fatal — the shell may be down or on another host. Returns a status line, or None."""
+    import urllib.error
+    import urllib.request
+    port = (cfg.get("shell", {}) or {}).get("port", 8200)
+    url = f"http://127.0.0.1:{port}/reload/{app}"
+    try:
+        with urllib.request.urlopen(urllib.request.Request(url, method="POST"), timeout=3) as r:
+            return f"reloaded {app} in shell :{port} (HTTP {r.status})"
+    except (urllib.error.URLError, OSError):
+        return None
+
+
 def cmd_up(args) -> int:
     cfg = load_config()
     port = (cfg.get("shell", {}) or {}).get("port", 8200)
@@ -46,6 +60,19 @@ def cmd_reply(args) -> int:
     if args.status:
         ledger.set_status(cfg, args.app, [args.feedback_id], args.status)
     print(f"curiator: replied on {args.app}/{args.feedback_id} (status={args.status or 'unchanged'})")
+    # On `done`, the agent has just edited the app — make the fix live in a running shell.
+    if args.status == "done":
+        msg = _reload_in_shell(cfg, args.app)
+        print(f"curiator: {msg}" if msg else "curiator: shell not reachable — reload skipped "
+              "(the fix shows once `curiator up` reloads the app).")
+    return 0
+
+
+def cmd_reload(args) -> int:
+    """Drop a running shell's cached build of <app> so its edited source rebuilds on the next view."""
+    cfg = load_config()
+    msg = _reload_in_shell(cfg, args.app)
+    print(f"curiator: {msg}" if msg else "curiator: shell not reachable on the configured port.")
     return 0
 
 
@@ -64,6 +91,8 @@ def main(argv=None) -> int:
     r.add_argument("app"); r.add_argument("feedback_id"); r.add_argument("text")
     r.add_argument("--status", choices=["done", "awaiting_approval", "working", "new"])
     r.set_defaults(func=cmd_reply)
+    rl = sub.add_parser("reload", help="drop a running shell's cached build of an app (make an edit live)")
+    rl.add_argument("app"); rl.set_defaults(func=cmd_reload)
     args = p.parse_args(argv)
     return args.func(args)
 

@@ -3,17 +3,26 @@
 Subscription billing (your Claude Max/Pro login) + full project context (it runs in the repo,
 so it loads CLAUDE.md, memories, skills) + robust (a one-shot, no live session to die).
 
-NOTE (M2 wiring): the exact `claude -p` flags + the reply path (how the agent posts ⚙ notes back
-to the ledger) are the first thing to finish. Options for the reply path:
-  (a) the task file tells the agent to call `curiator reply <app> <id> <text> --status done`
-      (a tiny CLI subcommand — recommended, language-agnostic), or
-  (b) the agent imports curiator.ledger directly.
-Until that's wired, this runs claude headless and leaves the human/agent to update status.
+Reply path (M2): the task bundle tells the agent to call
+    curiator reply <app> <id> "<what changed>" --status done
+after it edits + smoke-tests. That CLI posts the ⚙ note, sets status, and reloads the app in the
+shell so the fix goes live (see curiator/cli.py + the shell's /reload route). The agent reads the
+feedback screenshot (its path is in the bundle) with its own Read tool.
+
+Flags are read from gallery.yaml `agent:` (all optional, with working defaults):
+    model            → claude --model (null = your CLI default, e.g. sonnet / opus)
+    permission_mode  → acceptEdits (auto-apply edits; default) | bypassPermissions | default
+    allowed_tools    → tools pre-approved without a prompt (must cover Bash for the smoke-test + reply)
+    timeout          → seconds before the one-shot is killed (default 900)
 """
 from __future__ import annotations
 
 import shutil
 import subprocess
+from pathlib import Path
+
+# Enough to edit one app, smoke-test it, and run `curiator reply` — but not the whole toolbox.
+_DEFAULT_TOOLS = ["Read", "Edit", "Write", "Bash", "Glob", "Grep"]
 
 
 def available() -> bool:
@@ -23,6 +32,25 @@ def available() -> bool:
 def run(task) -> None:
     if not available():
         raise RuntimeError("`claude` CLI not on PATH — install Claude Code, or set agent.adapter: command")
-    # M2: finalize flags (model, --allowedTools for edit+bash, permission mode, output capture).
-    cmd = ["claude", "-p", f"@{task.task_file}"]
-    subprocess.run(cmd, cwd=task.cfg["repo_root"], check=False)
+
+    agent = task.cfg.get("agent", {}) or {}
+    prompt = Path(task.task_file).read_text()        # the bundle: protocol + this feedback + paths
+    allowed = agent.get("allowed_tools") or _DEFAULT_TOOLS
+
+    # --allowedTools is variadic (consumes args until the next flag), so keep it LAST.
+    cmd = ["claude", "-p", prompt, "--permission-mode", agent.get("permission_mode", "acceptEdits")]
+    if agent.get("model"):
+        cmd += ["--model", str(agent["model"])]
+    cmd += ["--allowedTools", *allowed]
+
+    try:
+        proc = subprocess.run(cmd, cwd=task.cfg["repo_root"], capture_output=True, text=True,
+                              timeout=int(agent.get("timeout", 900)))
+    except subprocess.TimeoutExpired as exc:
+        raise RuntimeError(f"claude -p timed out after {agent.get('timeout', 900)}s") from exc
+
+    out, err = (proc.stdout or "").strip(), (proc.stderr or "").strip()
+    if out:
+        print(f"[headless-cc] {task.key}/{task.entry.get('id')}:\n{out[-2000:]}")
+    if proc.returncode != 0:
+        raise RuntimeError(f"claude -p exited {proc.returncode}: {(err or out)[-800:]}")
