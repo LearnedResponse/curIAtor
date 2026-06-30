@@ -125,6 +125,38 @@ def test_cmd_user_add_hashes_and_verifies(cfg):
     assert u and u["name"] == "Bob" and u["groups"] == ["qa"]
 
 
+def test_cmd_user_add_update_preserves_name_and_groups(cfg):
+    """Re-adding with ONLY a new password must keep name/groups (they gate elevated runs)."""
+    import argparse
+
+    from curiator.cli import cmd_user
+    a = {"mode": "local", "users_file": cfg["auth"]["users_file"]}
+    cmd_user(argparse.Namespace(action="add", email="ann@x.io", name="Ann", groups="admin", password="pw1"))
+    cmd_user(argparse.Namespace(action="add", email="ann@x.io", name=None, groups=None, password="pw2"))
+    u = auth.verify_local(a, "ann@x.io", "pw2")
+    assert u and u["name"] == "Ann" and u["groups"] == ["admin"]    # preserved on update
+    assert auth.verify_local(a, "ann@x.io", "pw1") is None          # old password rotated out
+    # an explicit --groups still overrides (and empty clears)
+    cmd_user(argparse.Namespace(action="add", email="ann@x.io", name=None, groups="dev,ops", password="pw3"))
+    assert auth.verify_local(a, "ann@x.io", "pw3")["groups"] == ["dev", "ops"]
+
+
+def test_cmd_user_passwd_changes_only_password(cfg):
+    import argparse
+
+    from curiator.cli import cmd_user
+    a = {"mode": "local", "users_file": cfg["auth"]["users_file"]}
+    cmd_user(argparse.Namespace(action="add", email="bo@x.io", name="Bo", groups="qa,dev", password="old"))
+    rc = cmd_user(argparse.Namespace(action="passwd", email="bo@x.io", name=None, groups=None, password="new"))
+    assert rc == 0
+    u = auth.verify_local(a, "bo@x.io", "new")
+    assert u and u["name"] == "Bo" and u["groups"] == ["qa", "dev"]  # untouched
+    assert auth.verify_local(a, "bo@x.io", "old") is None
+    # passwd on a non-existent user fails (doesn't create one)
+    assert cmd_user(argparse.Namespace(action="passwd", email="ghost@x.io",
+                                       name=None, groups=None, password="x")) == 1
+
+
 def test_login_rate_limit_locks_then_clears():
     a = {"max_attempts": 3, "lockout_seconds": 60}
     auth.clear_login_failures("1.2.3.4")

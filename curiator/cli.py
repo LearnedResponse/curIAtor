@@ -229,7 +229,9 @@ def cmd_seed(args) -> int:
 
 
 def cmd_user(args) -> int:
-    """Manage local-login users (`auth.mode: local`) — hashed passwords in the gitignored users file."""
+    """Manage local-login users (`auth.mode: local`) — hashed passwords in the gitignored users file.
+    `add` upserts (re-running it keeps the existing name/groups unless you pass --name/--groups);
+    `passwd` changes only the password (so it can't silently wipe the groups that gate elevated runs)."""
     from . import auth
     cfg = load_config()
     users_file = (cfg.get("auth") or {}).get("users_file")
@@ -248,7 +250,10 @@ def cmd_user(args) -> int:
         auth.save_users_file(users_file, users)
         print(f"curiator: removed {args.email}")
         return 0
-    # add
+    # add (upsert) / passwd (change only the password)
+    existing = users.get(args.email) or {}
+    if args.action == "passwd" and not existing:
+        print(f"curiator: no such user {args.email} — `curiator user add {args.email}` to create it"); return 1
     from werkzeug.security import generate_password_hash
     pw = args.password
     if not pw:
@@ -258,12 +263,17 @@ def cmd_user(args) -> int:
             print("curiator: passwords don't match"); return 1
     if not pw:
         print("curiator: empty password"); return 1
-    existed = args.email in users
-    users[args.email] = {"name": args.name or args.email.split("@")[0],
-                         "groups": [g.strip() for g in (args.groups or "").split(",") if g.strip()],
-                         "password_hash": generate_password_hash(pw)}
+    if args.action == "passwd":                          # change ONLY the password — keep name/groups/etc.
+        rec = {**existing, "password_hash": generate_password_hash(pw)}
+    else:                                                # add: merge — keep existing name/groups unless overridden
+        name = args.name if args.name is not None else (existing.get("name") or args.email.split("@")[0])
+        groups = ([g.strip() for g in args.groups.split(",") if g.strip()]
+                  if args.groups is not None else (existing.get("groups") or []))
+        rec = {"name": name, "groups": groups, "password_hash": generate_password_hash(pw)}
+    users[args.email] = rec
     auth.save_users_file(users_file, users)
-    print(f"curiator: {'updated' if existed else 'added'} local user {args.email} → {users_file}")
+    verb = "changed password for" if args.action == "passwd" else ("updated" if existing else "added")
+    print(f"curiator: {verb} local user {args.email} → {users_file}")
     return 0
 
 
@@ -354,7 +364,8 @@ def main(argv=None) -> int:
     sd = sub.add_parser("seed", help="load canned feedback (YAML) into the ledger — a self-building demo queue")
     sd.add_argument("file"); sd.set_defaults(func=cmd_seed)
     us = sub.add_parser("user", help="manage local-login users (auth.mode: local)")
-    us.add_argument("action", choices=["add", "list", "remove"])
+    us.add_argument("action", choices=["add", "passwd", "list", "remove"],
+                    help="add (upsert, keeps name/groups) · passwd (change only the password) · list · remove")
     us.add_argument("email", nargs="?")
     us.add_argument("--name"); us.add_argument("--groups", help="comma-separated")
     us.add_argument("--password", help="non-interactive password (otherwise prompted)")
