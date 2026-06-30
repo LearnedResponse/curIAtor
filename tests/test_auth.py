@@ -73,6 +73,15 @@ def test_login_required_only_oidc():
     assert auth.login_required({}) is False
 
 
+def test_is_admin_open_in_none_group_gated_otherwise():
+    assert auth.is_admin({"mode": "none"}, None) is True            # solo / your box → open
+    assert auth.is_admin({}, None) is True                          # default mode is none
+    assert auth.is_admin({"mode": "local", "admin_groups": ["admin"]}, {"groups": ["admin"]}) is True
+    assert auth.is_admin({"mode": "local"}, {"groups": ["dev"]}) is False   # default admin group, no match
+    assert auth.is_admin({"mode": "local"}, None) is False          # not signed in
+    assert auth.is_admin({"mode": "header", "admin_groups": ["ops"]}, {"groups": ["ops", "x"]}) is True
+
+
 def test_stamp_carries_identity_and_groups():
     assert auth.stamp({"id": "i", "email": "e@x", "name": "N", "groups": ["g"]}) == \
         {"id": "i", "email": "e@x", "name": "N", "groups": ["g"]}   # groups gate elevated agent runs

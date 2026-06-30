@@ -50,7 +50,36 @@ def load_config() -> dict:
     auth = cfg.get("auth") or {}
     auth.setdefault("mode", "none")              # none | header | oidc | local
     auth.setdefault("default_user", "anonymous@local")
+    auth.setdefault("admin_groups", ["admin"])   # groups that may change agent settings (mode != none)
     # local-login user store (hashed passwords) — resolved against the collection root; gitignored
     auth["users_file"] = str(Path(cfg["repo_root"]) / auth.get("users_file", ".curiator-users.json"))
     cfg["auth"] = auth
     return cfg
+
+
+def _scalar(v) -> str:
+    """Render a Python value as a YAML scalar for in-place gallery.yaml edits."""
+    if v is None or v == "":
+        return "null"
+    if isinstance(v, bool):
+        return "true" if v else "false"
+    return str(v)
+
+
+def set_block_key(text: str, block: str, key: str, value) -> str:
+    """Set `<block>.<key>` in a gallery.yaml STRING, preserving comments + the rest of the file. Updates
+    the value in place if present (keeping any inline comment), inserts the key under an existing block
+    header, or appends a new block. Scalar keys only (the `agent:` knobs the settings page edits — not
+    lists/nested maps). The body matcher tolerates blank + comment lines but stops at the next top-level
+    key, so it can't bleed into another block."""
+    import re
+    repl = _scalar(value)
+    body = r"(?:(?:[ \t]+[^\n]*)?\n)*?"                      # indented/blank lines, not a col-0 key
+    pat = re.compile(rf"(?ms)^({re.escape(block)}:[^\n]*\n{body}[ \t]+{re.escape(key)}:[ \t]*)(\S+)")
+    if pat.search(text):
+        return pat.sub(lambda m: m.group(1) + repl, text, count=1)
+    bpat = re.compile(rf"(?m)^{re.escape(block)}:[^\n]*$")
+    if bpat.search(text):
+        return bpat.sub(lambda m: m.group(0) + f"\n  {key}: {repl}", text, count=1)
+    sep = "" if text.endswith("\n") else "\n"
+    return text + f"{sep}\n{block}:\n  {key}: {repl}\n"

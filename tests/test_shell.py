@@ -119,6 +119,27 @@ def test_catalog_has_share_buttons_and_general_row(shell_mod):
     assert types.count("share") == 1           # a per-app share button (General row has none)
 
 
+def test_settings_page_renders_and_writes_back(collection, client):
+    """GET renders the agent form (auth.mode none ⇒ admin); POST writes gallery.yaml + redirects, and
+    config then loads the new values — the loop hot-reloads them, no restart."""
+    r = client.get("/settings")
+    assert r.status_code == 200
+    body = r.get_data(as_text=True)
+    assert "Provider (adapter)" in body and "codex" in body and "Codex sandbox" in body
+
+    r2 = client.post("/settings", data={"adapter": "codex", "autonomy": "propose-only",
+                                        "permission_mode": "acceptEdits", "sandbox": "danger-full-access",
+                                        "timeout": "600", "model": "gpt-5-codex"})
+    assert r2.status_code in (302, 303)                # redirect to ?saved=1
+    gtext = (collection / "gallery.yaml").read_text()
+    assert "adapter: codex" in gtext and "autonomy: propose-only" in gtext
+    assert "sandbox: danger-full-access" in gtext and "model: gpt-5-codex" in gtext
+
+    from curiator.config import load_config
+    cfg = load_config()
+    assert cfg["agent"]["adapter"] == "codex" and cfg["agent"]["model"] == "gpt-5-codex"
+
+
 def test_share_and_fbshare_callbacks_are_clientside(shell_mod):
     shell = shell_mod.build_shell()
     cs_outputs = {c.get("clientside_function") and str(c.get("output"))

@@ -1,9 +1,10 @@
-"""config: gallery resolution + runner.mode / git defaults (additive + backward-compatible)."""
+"""config: gallery resolution + runner.mode / git defaults (additive + backward-compatible),
+and the comment-preserving in-place writer the settings page uses."""
 from __future__ import annotations
 
 import textwrap
 
-from curiator.config import load_config
+from curiator.config import load_config, set_block_key
 
 
 def test_loads_gallery_under_collection(cfg, collection):
@@ -33,3 +34,21 @@ def test_defaults_when_blocks_absent(tmp_path, monkeypatch):
     assert cfg["git"]["commit"] is False          # leave-uncommitted default
     assert cfg["git"]["branch"] == "curiator/auto"
     assert cfg["git"]["signoff"] is True
+    assert cfg["auth"]["admin_groups"] == ["admin"]   # who may change agent settings (mode != none)
+
+
+def test_set_block_key_updates_inserts_appends():
+    t = "agent:\n  adapter: headless-cc   # provider\n  autonomy: auto-small\n"
+    # update in place, KEEP the inline comment + the other keys
+    t2 = set_block_key(t, "agent", "adapter", "codex")
+    assert "adapter: codex   # provider" in t2 and "autonomy: auto-small" in t2
+    # insert a key the block doesn't have yet
+    assert "sandbox: workspace-write" in set_block_key(t2, "agent", "sandbox", "workspace-write")
+    # blank / None → null
+    assert "model: null" in set_block_key(t, "agent", "model", "")
+    # a brand-new block gets appended
+    assert "agent:\n  adapter: codex" in set_block_key("apps: []\n", "agent", "adapter", "codex")
+    # tolerate a blank line inside the block (don't bleed into the next top-level key)
+    tb = "agent:\n  adapter: headless-cc\n\n  autonomy: auto-small\nshell:\n  port: 8300\n"
+    out = set_block_key(tb, "agent", "autonomy", "propose-only")
+    assert "autonomy: propose-only" in out and "port: 8300" in out

@@ -138,6 +138,45 @@ _LOGIN_FORM = (
     f"border-radius:6px;font-weight:600;font-size:13px;cursor:pointer;margin-top:6px'>Sign in</button></form>")
 
 
+def _settings_html(agent: dict, gallery_path: str, saved: bool = False) -> str:
+    """The /settings form — edits the live `agent:` block (provider, model, autonomy, trust)."""
+    import shutil
+    lbl = "display:block;font-weight:600;font-size:12px;color:#555;margin-top:11px"
+
+    def sel(name, value, options):
+        opts = "".join(f"<option value='{_esc(o)}'{' selected' if o == value else ''}>{_esc(o)}</option>"
+                       for o in options)
+        return f"<select name='{_esc(name)}' style='{_INPUT}'>{opts}</select>"
+
+    model = agent.get("model")
+    model = "" if model in (None, "null") else str(model)
+    avail = " · ".join(f"<code>{c}</code> {'✓' if shutil.which(c) else '✗ not installed'}"
+                       for c in ("claude", "codex"))
+    banner = ("<div style='background:#e8f6ec;border:1px solid #b6e0c2;color:#1f7a44;padding:7px 11px;"
+              "border-radius:6px;margin-bottom:12px;font-size:13px'>✓ Saved — the watcher hot-reloads "
+              "it on the next poll (no restart).</div>" if saved else "")
+    return (
+        f"{banner}"
+        f"<form method='post' action='/settings' style='max-width:430px'>"
+        f"<label style='{lbl}'>Provider (adapter)</label>"
+        f"{sel('adapter', agent.get('adapter', 'headless-cc'), ['headless-cc', 'codex', 'command'])}"
+        f"<label style='{lbl}'>Model <span style='font-weight:400;color:#999'>(blank = provider default)</span></label>"
+        f"<input name='model' value='{_esc(model)}' placeholder='e.g. opus, gpt-5-codex' style='{_INPUT}'>"
+        f"<label style='{lbl}'>Autonomy</label>"
+        f"{sel('autonomy', agent.get('autonomy', 'auto-small'), ['auto-small', 'propose-only'])}"
+        f"<label style='{lbl}'>Claude trust <span style='font-weight:400;color:#999'>(headless-cc)</span></label>"
+        f"{sel('permission_mode', agent.get('permission_mode', 'acceptEdits'), ['acceptEdits', 'bypassPermissions', 'default'])}"
+        f"<label style='{lbl}'>Codex sandbox <span style='font-weight:400;color:#999'>(codex)</span></label>"
+        f"{sel('sandbox', agent.get('sandbox', 'workspace-write'), ['read-only', 'workspace-write', 'danger-full-access'])}"
+        f"<label style='{lbl}'>Timeout (seconds)</label>"
+        f"<input name='timeout' type='number' min='30' value='{_esc(str(agent.get('timeout', 900)))}' style='{_INPUT}'>"
+        f"<button type='submit' style='background:{PURPLE};color:white;border:none;padding:9px 20px;"
+        f"border-radius:6px;font-weight:600;font-size:13px;cursor:pointer;margin-top:15px'>Save</button>"
+        f"</form>"
+        f"<p style='color:#888;font-size:11.5px;margin-top:14px'>Agent CLIs on PATH: {avail}<br>"
+        f"Editing <code>{_esc(gallery_path)}</code> · comments preserved.</p>")
+
+
 # ============================== registry =====================================
 def load_registry():
     """Normalize ALL_APPS into shell records. kind ∈ {dynamic, static, missing}."""
@@ -668,6 +707,28 @@ def build_shell() -> Dash:
                       "Enable sign-in by setting <code>auth.mode: oidc</code> in <code>gallery.yaml</code>.</p>")
         return _page("Your profile", info + action)
 
+    @shell.server.route("/settings", methods=["GET", "POST"])
+    def _settings():             # admins configure the agent (provider / model / autonomy / trust)
+        from flask import redirect, request
+
+        from curiator.config import load_config, set_block_key
+        cfg = load_config()                                   # fresh — reflects live edits
+        acfg = cfg["auth"]
+        if not auth.is_admin(acfg, auth.current_user(acfg)):
+            return _page("Agent settings", "<p style='color:#a33;font-size:13px'>Admins only — your "
+                         "account isn't in <code>auth.admin_groups</code>.</p>"), 403
+        gallery = Path(cfg["gallery_path"])
+        if request.method == "POST":
+            text = gallery.read_text()
+            for key in ("adapter", "autonomy", "permission_mode", "sandbox", "timeout", "model"):
+                if key in request.form:
+                    text = set_block_key(text, "agent", key, request.form.get(key))
+            gallery.write_text(text)
+            return redirect("/settings?saved=1")
+        return _page("Agent settings",
+                     _settings_html(cfg.get("agent") or {}, cfg["gallery_path"],
+                                    saved=request.args.get("saved") == "1"))
+
     @shell.server.route("/whoami")
     def _whoami():               # the resolved identity for this request (handy for header-mode + debugging)
         from flask import jsonify
@@ -944,6 +1005,8 @@ def build_shell() -> Dash:
                     _menu_item("Sign out", "/logout", "_top")]
         else:
             menu = [_menu_item("Log in", "/login", "_top" if mode in ("oidc", "local") else "app-frame")]
+        if auth.is_admin(REG.AUTH_CFG, u):                    # admins (or solo `none` mode) → agent settings
+            menu = [_menu_item("⚙ Settings", "/settings", "app-frame")] + menu
         return trigger, menu
 
     @shell.callback(Output("auth-open", "data"), Input("auth-trigger", "n_clicks"),

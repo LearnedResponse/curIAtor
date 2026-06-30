@@ -75,6 +75,18 @@ def login_required(auth_cfg: dict) -> bool:
     return (auth_cfg or {}).get("mode") in ("oidc", "local")
 
 
+def is_admin(auth_cfg: dict, user: dict | None) -> bool:
+    """May this user change gallery-wide settings (e.g. the agent provider / trust level)? In `none` mode
+    there's no auth — it's your box, so yes. Otherwise the user's groups must intersect `auth.admin_groups`
+    (default ['admin']) — the same trusted-group idea that gates elevated agent runs."""
+    a = auth_cfg or {}
+    if a.get("mode", "none") == "none":
+        return True
+    if not user:
+        return False
+    return bool(set(user.get("groups") or []) & set(a.get("admin_groups") or ["admin"]))
+
+
 def stamp(user: dict | None) -> dict | None:
     """The identity subset recorded on a ledger entry — {id, email, name, groups}. `groups` carry the
     author's authorization context (e.g. `agent.elevated` trusted-group gating), not just provenance."""
