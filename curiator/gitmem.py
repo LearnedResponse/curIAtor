@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import contextlib
 import fcntl
+import fnmatch
 import importlib.util
 import re
 import subprocess
@@ -28,6 +29,16 @@ from . import ledger
 
 _FEEDBACK_TRAILER = "Curiator-Feedback"
 _APP_TRAILER = "Curiator-App"
+
+# Files that ride in the SAME atomic commit as a source edit when an agent changed them — dependency
+# manifests, so an elevated run that `pip install`s a package + adds it here isn't left dangling outside
+# the commit. Override per-collection via `git.also_commit` (a list of globs; [] disables).
+_DEFAULT_ALSO_COMMIT = [
+    "requirements.txt", "requirements/*.txt", "constraints.txt",
+    "pyproject.toml", "setup.cfg", "setup.py",
+    "Pipfile", "Pipfile.lock", "poetry.lock",
+    "package.json", "package-lock.json", "pnpm-lock.yaml", "yarn.lock",
+]
 
 
 # ───────────────────────────── low-level git ─────────────────────────────
@@ -102,6 +113,34 @@ def _path_changed(cfg: dict, rel: str) -> bool:
     return _git(cfg, "diff", "--quiet", "HEAD", "--", rel, check=False).returncode != 0
 
 
+def _dirty_paths(cfg: dict) -> list[str]:
+    """Every modified / added / untracked path in the working tree (porcelain, rename-aware)."""
+    out = []
+    for line in _git(cfg, "status", "--porcelain", check=False).stdout.splitlines():
+        rel = line[3:]                                    # strip the 2-char status + its trailing space
+        if " -> " in rel:                                 # a rename — take the destination path
+            rel = rel.split(" -> ", 1)[1]
+        rel = rel.strip().strip('"')
+        if rel:
+            out.append(rel)
+    return out
+
+
+def _extra_paths(cfg: dict, globs: list[str], exclude: set[str]) -> list[str]:
+    """Working-tree changes matching `globs` (dependency manifests by default), so an elevated run that
+    also edits e.g. requirements.txt rides in the SAME commit instead of dangling. Excludes the source +
+    ledger (staged separately). Returns [] when globs is empty (the strict source+ledger-only policy)."""
+    if not globs:
+        return []
+    out: list[str] = []
+    for rel in _dirty_paths(cfg):
+        if rel in exclude or rel in out:
+            continue
+        if any(fnmatch.fnmatch(rel, g) for g in globs):
+            out.append(rel)
+    return out
+
+
 def _trailers(cfg: dict, sha: str) -> dict:
     body = _git(cfg, "show", "-s", "--format=%B", sha).stdout
     out = {}
@@ -153,8 +192,13 @@ def commit_run(cfg: dict, app: str, feedback_id: str, *, status: str, note_text:
             smoke = "passed"
         changed_desc = f"edited {src}" if changed else ("plan only" if status == "awaiting_approval" else "ack / no source change")
 
+        ledger_rel = _ledger_relpath(cfg)
+        extra = _extra_paths(cfg, git.get("also_commit", _DEFAULT_ALSO_COMMIT), {src or "", ledger_rel})
+        if extra:
+            changed_desc += f" (+{', '.join(extra)})"     # dependency manifests captured in the same commit
+
         ensure_branch(cfg, git.get("branch"))
-        paths = ([src] if changed else []) + ([_ledger_relpath(cfg)] if git.get("include_ledger", True) else [])
+        paths = ([src] if changed else []) + ([ledger_rel] if git.get("include_ledger", True) else []) + extra
         if paths:
             _git(cfg, "add", "--", *paths)
         if _git(cfg, "diff", "--cached", "--quiet", check=False).returncode == 0:

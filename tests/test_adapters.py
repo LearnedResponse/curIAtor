@@ -54,3 +54,35 @@ def test_command_adapter_substitutes(cfg, monkeypatch):
 def test_get_adapter_by_name(cfg):
     assert adapters.get(cfg) is adapters.headless_cc           # gallery's agent.adapter == headless-cc
     assert adapters.get({**cfg, "agent": {"adapter": "command"}}) is command
+
+
+# ── elevated (trusted-group) agent profile ─────────────────────────────────
+_ELEV_CFG = {"agent": {"autonomy": "auto-small", "permission_mode": "acceptEdits",
+                       "elevated": {"groups": ["admin"], "autonomy": "auto",
+                                    "permission_mode": "bypassPermissions",
+                                    "disallowed_tools": ["Bash(git push:*)"]}}}
+
+
+def test_effective_agent_merges_elevated_for_trusted_group():
+    base = adapters.effective_agent(_ELEV_CFG, {"user": {"groups": ["analysts"]}})
+    assert base["elevated"] is False and base["autonomy"] == "auto-small"
+
+    elev = adapters.effective_agent(_ELEV_CFG, {"user": {"groups": ["admin", "x"]}})
+    assert elev["elevated"] is True and elev["autonomy"] == "auto"
+    assert elev["permission_mode"] == "bypassPermissions"
+    assert elev["disallowed_tools"] == ["Bash(git push:*)"]
+
+    assert adapters.effective_agent(_ELEV_CFG, {})["elevated"] is False        # no user → base
+
+
+def test_elevated_bundle_grants_install_scope(cfg):
+    cfg2 = {**cfg, "agent": _ELEV_CFG["agent"]}
+    admin = {"id": "f9", "comment": "live quotes via yfinance", "status": "new", "kind": "comment",
+             "author": "user", "user": {"groups": ["admin"]}}
+    t = build_task(cfg2, "sample", admin)
+    body = Path(t.task_file).read_text()
+    assert t.agent["elevated"] is True
+    assert "ELEVATED" in body and "pip install" in body and "requirements.txt" in body
+    # a non-admin author still gets the restricted, one-file bundle
+    t2 = build_task(cfg2, "sample", {**admin, "id": "f10", "user": {"groups": ["analysts"]}})
+    assert "Edit ONLY the source above" in Path(t2.task_file).read_text()

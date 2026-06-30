@@ -29,6 +29,20 @@ class Task:
     source: str | None
     task_file: str
     cfg: dict
+    agent: dict | None = None        # the EFFECTIVE agent profile for this item (base, or elevated)
+
+
+def effective_agent(cfg: dict, entry: dict) -> dict:
+    """The agent profile for THIS feedback item. Normally the base `agent:` block; but if the feedback
+    author's groups intersect `agent.elevated.groups`, the `elevated` overrides are merged on top — a
+    trusted group (e.g. `admin`) gets fuller rights (autonomy / permissions / scope). Safe because each
+    collection runs in its own sandbox (one container per collection); a deny-list still applies."""
+    base = {k: v for k, v in (cfg.get("agent") or {}).items() if k != "elevated"}
+    elev = (cfg.get("agent") or {}).get("elevated") or {}
+    groups = set((entry.get("user") or {}).get("groups") or [])
+    if elev and groups & set(elev.get("groups") or []):
+        return {**base, **{k: v for k, v in elev.items() if k != "groups"}, "elevated": True}
+    return {**base, "elevated": False}
 
 
 _ADAPTERS = {
@@ -130,16 +144,17 @@ def _runner_bundle(cfg: dict, entry: dict, eid: str, shot_path: str | None) -> t
     return "\n".join(body) + "\n", None
 
 
-def _app_bundle(cfg: dict, key: str, entry: dict, eid: str, shot_path: str | None) -> tuple[str, str | None]:
+def _app_bundle(cfg: dict, key: str, entry: dict, eid: str, shot_path: str | None, agent: dict) -> tuple[str, str | None]:
     """Bundle for app feedback — the standing protocol + this item + ready-to-run smoke-test/reply."""
     template = (Path(__file__).resolve().parents[1] / "task_template.md").read_text()
     source = _source_for(cfg, key)
-    autonomy = (cfg.get("agent", {}) or {}).get("autonomy", "auto-small")
+    autonomy = agent.get("autonomy", "auto-small")
+    elevated = agent.get("elevated")
     body = [
         template, "\n\n---\n\n# This wake — the new feedback to act on\n",
         f"- app: **{key}**",
         f"- source to edit: `{source}`" if source else "- source: (none registered — propose only)",
-        f"- autonomy mode: **{autonomy}**",
+        f"- autonomy mode: **{autonomy}**" + ("  ·  ELEVATED run (trusted group)" if elevated else ""),
         f"- stars: {entry.get('stars')}",
         f"- comment: {entry.get('comment')!r}",
         f"- screenshot (Read this PNG): `{shot_path}`" if shot_path else "- screenshot: (none)",
@@ -159,8 +174,19 @@ def _app_bundle(cfg: dict, key: str, entry: dict, eid: str, shot_path: str | Non
     body += [
         f"- reply after a fix:  `curiator reply {key} {eid} \"<what changed + why>\" --status done`",
         f"- reply with a plan:  `curiator reply {key} {eid} \"<plan + recommendation>\" --status awaiting_approval`",
-        "\nEdit ONLY the source above, smoke-test before `done`; the runner handles git — don't run git yourself.",
     ]
+    if elevated:
+        deny = ", ".join(f"`{d}`" for d in (agent.get("disallowed_tools") or [])) \
+            or "the runner's own config, `git push`/history rewrites, destructive commands"
+        body.append(
+            "\n**ELEVATED run** — the feedback author is in a trusted group, so you may go beyond a single "
+            "file: edit any source in this collection AND **add/install dependencies** (e.g. add to "
+            "`requirements.txt`, then `pip install <pkg>`) to fully service the request. Install BEFORE you "
+            "reply `--status done` so the gallery hot-reload doesn't crash. Smoke-test before `done`. "
+            f"Off-limits: {deny}. Still don't run git yourself — the runner commits.")
+    else:
+        body.append(
+            "\nEdit ONLY the source above, smoke-test before `done`; the runner handles git — don't run git yourself.")
     return "\n".join(body), source
 
 
@@ -169,11 +195,12 @@ def build_task(cfg: dict, key: str, entry: dict) -> Task:
     routes to the app's source; ◆ General (runner) feedback routes by `runner.mode`."""
     eid = entry.get("id")
     shot_path = _shot_path(cfg, entry)
+    agent = effective_agent(cfg, entry)
     if key == GENERAL_KEY:
         text, source = _runner_bundle(cfg, entry, eid, shot_path)
     else:
-        text, source = _app_bundle(cfg, key, entry, eid, shot_path)
+        text, source = _app_bundle(cfg, key, entry, eid, shot_path, agent)
     tf = Path(cfg["repo_root"]) / cfg.get("feedback", {}).get("dir", "feedback") / f"task_{eid}.md"
     tf.parent.mkdir(parents=True, exist_ok=True)
     tf.write_text(text)
-    return Task(key=key, entry=entry, source=source, task_file=str(tf), cfg=cfg)
+    return Task(key=key, entry=entry, source=source, task_file=str(tf), cfg=cfg, agent=agent)

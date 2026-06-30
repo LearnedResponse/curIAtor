@@ -105,12 +105,25 @@ def cmd_demo_up(args) -> int:
     return _serve(load_config(), reset=True)
 
 
+def _parse_actions_arg(s):
+    """`--actions "A,B,C"` or `"Yes:yes,No:no"` → [[label, value], …] for quick-approval buttons."""
+    out = []
+    for item in (s or "").split(","):
+        item = item.strip()
+        if not item:
+            continue
+        lbl, _, val = item.partition(":")
+        out.append([lbl.strip(), (val.strip() or lbl.strip())])
+    return out or None
+
+
 def cmd_reply(args) -> int:
-    """Agent reply path: `curiator reply <app> <feedback_id> "<text>" --status done`."""
+    """Agent reply path: `curiator reply <app> <feedback_id> "<text>" --status done`.
+    When offering options, pass `--actions "A,B,C"` so the approval buttons match the text exactly."""
     cfg = load_config()
     ts = datetime.now(timezone.utc).isoformat()
     nid = ledger.add_system_note(cfg, args.app, args.text, reply_to=[args.feedback_id],
-                                 status="update", ts=ts)
+                                 status="update", ts=ts, actions=_parse_actions_arg(args.actions))
     if args.status:
         ledger.set_status(cfg, args.app, [args.feedback_id], args.status)
     print(f"curiator: replied on {args.app}/{args.feedback_id} (status={args.status or 'unchanged'})")
@@ -196,6 +209,87 @@ def cmd_reset_demo(args) -> int:
     return 0
 
 
+def cmd_seed(args) -> int:
+    """Load canned feedback (a YAML file) into the ledger as new entries — the self-building-demo
+    build queue. Each item becomes a status:new entry, attributed to the seed's `user:` (provenance),
+    so the loop services it like any feedback. Format: `user: {…}` + `items: [{app, comment, stars?, user?}]`."""
+    import yaml
+    cfg = load_config()
+    spec = yaml.safe_load(Path(args.file).read_text()) or {}
+    default_user = spec.get("user")
+    ts = datetime.now(timezone.utc).isoformat()
+    n = 0
+    for it in (spec.get("items") or []):
+        ledger.save_entry(cfg, it["app"], stars=it.get("stars"), comment=it.get("comment", ""),
+                          ts=ts, user=it.get("user", default_user))
+        n += 1
+    who = (default_user or {}).get("name") or "—"
+    print(f"curiator: seeded {n} feedback item(s) from {args.file} (author: {who}) — `curiator watch` to build.")
+    return 0
+
+
+def cmd_user(args) -> int:
+    """Manage local-login users (`auth.mode: local`) — hashed passwords in the gitignored users file."""
+    from . import auth
+    cfg = load_config()
+    users_file = (cfg.get("auth") or {}).get("users_file")
+    users = auth.load_users_file(users_file)
+    if args.action == "list":
+        if not users:
+            print("curiator: no local users yet — `curiator user add <email>`")
+        for email, u in sorted(users.items()):
+            print(f"  {email}  ·  {u.get('name') or '—'}  ·  groups={u.get('groups') or []}")
+        return 0
+    if not args.email:
+        print(f"curiator: `user {args.action}` needs an <email>"); return 1
+    if args.action == "remove":
+        if users.pop(args.email, None) is None:
+            print(f"curiator: no such user {args.email}"); return 1
+        auth.save_users_file(users_file, users)
+        print(f"curiator: removed {args.email}")
+        return 0
+    # add
+    from werkzeug.security import generate_password_hash
+    pw = args.password
+    if not pw:
+        import getpass
+        pw = getpass.getpass("password: ")
+        if pw != getpass.getpass("confirm:  "):
+            print("curiator: passwords don't match"); return 1
+    if not pw:
+        print("curiator: empty password"); return 1
+    existed = args.email in users
+    users[args.email] = {"name": args.name or args.email.split("@")[0],
+                         "groups": [g.strip() for g in (args.groups or "").split(",") if g.strip()],
+                         "password_hash": generate_password_hash(pw)}
+    auth.save_users_file(users_file, users)
+    print(f"curiator: {'updated' if existed else 'added'} local user {args.email} → {users_file}")
+    return 0
+
+
+def cmd_auth(args) -> int:
+    """Show or set `auth.mode` in gallery.yaml (none | local | header | oidc), preserving comments."""
+    import re
+    cfg = load_config()
+    gallery = Path(cfg["gallery_path"])
+    if not args.mode:
+        print(f"curiator: auth.mode = {cfg['auth']['mode']}  ({gallery})")
+        return 0
+    text = gallery.read_text()
+    pat = re.compile(r"(?ms)^(auth:[^\n]*\n(?:[ \t]+[^\n]*\n)*?[ \t]+mode:[ \t]*)(\S+)")
+    if pat.search(text):
+        text = pat.sub(lambda m: m.group(1) + args.mode, text, count=1)   # keep the inline comment
+    else:
+        text += ("" if text.endswith("\n") else "\n") + f"\nauth:\n  mode: {args.mode}\n"
+    gallery.write_text(text)
+    print(f"curiator: auth.mode → {args.mode}  ({gallery})  — restart `curiator up` to apply")
+    if args.mode == "local":
+        from . import auth
+        if not auth.load_users_file(cfg["auth"]["users_file"]):
+            print("curiator: no local users yet — create one with `curiator user add <email>`")
+    return 0
+
+
 def cmd_demo(args) -> int:
     print(Path(__file__).resolve().parents[1].joinpath("docs", "DEMO_SCRIPT.md").read_text())
     return 0
@@ -253,9 +347,21 @@ def main(argv=None) -> int:
     r = sub.add_parser("reply", help="(agent) post a ⚙ note + set status")
     r.add_argument("app"); r.add_argument("feedback_id"); r.add_argument("text")
     r.add_argument("--status", choices=["done", "awaiting_approval", "working", "new"])
+    r.add_argument("--actions", help="quick-approval buttons, e.g. \"A,B,C\" or \"Yes:yes,No:no\"")
     r.set_defaults(func=cmd_reply)
     rl = sub.add_parser("reload", help="drop a running shell's cached build of an app (make an edit live)")
     rl.add_argument("app"); rl.set_defaults(func=cmd_reload)
+    sd = sub.add_parser("seed", help="load canned feedback (YAML) into the ledger — a self-building demo queue")
+    sd.add_argument("file"); sd.set_defaults(func=cmd_seed)
+    us = sub.add_parser("user", help="manage local-login users (auth.mode: local)")
+    us.add_argument("action", choices=["add", "list", "remove"])
+    us.add_argument("email", nargs="?")
+    us.add_argument("--name"); us.add_argument("--groups", help="comma-separated")
+    us.add_argument("--password", help="non-interactive password (otherwise prompted)")
+    us.set_defaults(func=cmd_user)
+    at = sub.add_parser("auth", help="show or set auth.mode in gallery.yaml")
+    at.add_argument("mode", nargs="?", choices=["none", "local", "header", "oidc"])
+    at.set_defaults(func=cmd_auth)
     rv = sub.add_parser("revert", help="(git-as-memory) undo a curator commit; record + thread stay intact")
     rv.add_argument("target", help="a feedback id or a commit SHA")
     rv.add_argument("--reason", default=None, help="why (recorded in the ⚙ note + revert commit)")
@@ -362,6 +468,7 @@ See the consumer guide: https://github.com/LearnedResponse/curiator/blob/main/do
 _SCAFFOLD_GITIGNORE = """\
 feedback/shots/
 feedback/task_*.md
+.curiator-users.json
 __pycache__/
 *.pyc
 """

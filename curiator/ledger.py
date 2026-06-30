@@ -12,7 +12,14 @@ from __future__ import annotations
 
 import json
 import uuid
+from datetime import datetime, timezone
 from pathlib import Path
+
+
+def _now() -> str:
+    """UTC, tz-aware (e.g. 2026-06-29T17:06:15+00:00) — unambiguous, so the UI can render it in the
+    viewer's local timezone. The fallback when a caller doesn't pass an explicit `ts`."""
+    return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
 def path(cfg: dict) -> Path:
@@ -55,13 +62,17 @@ def amend_note(cfg: dict, key: str, note_id: str, suffix: str) -> None:
 
 
 def add_system_note(cfg: dict, key: str, text: str, reply_to: list[str] | None = None,
-                    status: str = "update", ts: str | None = None) -> str:
-    """Append an agent/⚙ note. Caller should pass a timestamp (ledger stays clock-free)."""
+                    status: str = "update", ts: str | None = None, actions=None) -> str:
+    """Append an agent/⚙ note. `ts` defaults to UTC-now when omitted (so loop/revert notes are never
+    timestamp-less — a null ts otherwise breaks the history sort). `actions` is an optional list of
+    quick-approval buttons — bare strings or [label, value] pairs — rendered verbatim in the feedback
+    UI (so the buttons match the offered options instead of being guessed from the text)."""
+    norm = [[a, a] if isinstance(a, str) else list(a) for a in actions] if actions else None
     data = load(cfg)
     nid = uuid.uuid4().hex[:8]
     data.setdefault(key, []).append({
         "id": nid, "author": "claude", "kind": "system", "comment": text,
-        "status": status, "reply_to": reply_to or [], "ts": ts,
+        "status": status, "reply_to": reply_to or [], "ts": ts or _now(), "actions": norm,
     })
     _save(cfg, data)
     return nid
@@ -73,7 +84,7 @@ def save_entry(cfg: dict, key: str, *, stars=None, comment="", screenshot=None, 
     eid = uuid.uuid4().hex[:8]
     data.setdefault(key, []).append({
         "id": eid, "author": "user", "kind": "comment", "comment": comment,
-        "stars": stars, "status": "new", "screenshot": screenshot, "ts": ts, "user": user,
+        "stars": stars, "status": "new", "screenshot": screenshot, "ts": ts or _now(), "user": user,
     })
     _save(cfg, data)
     return eid

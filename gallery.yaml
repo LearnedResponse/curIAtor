@@ -37,6 +37,14 @@ agent:
   context:
     bundle: null                # required for adapter: api (cold start) — a CONTEXT.md/LESSONS.md
     knowledge_store: null       # optional live index (e.g. graphify) to keep the bundle fresh
+  # Elevated profile — feedback from these groups (the author's `groups`, from auth) runs with fuller
+  # rights. INTENDED FOR THE SANDBOX/LOCAL CASE (one container per collection = the blast-radius boundary).
+  # elevated:
+  #   groups: [admin]                     # author in any of these → this profile is merged on top
+  #   autonomy: auto                      # do substantive work directly (not just small tweaks)
+  #   permission_mode: bypassPermissions  # no prompts — so it can `pip install`, edit requirements.txt, …
+  #   allowed_tools: [Read, Edit, Write, Bash, Glob, Grep, WebFetch]
+  #   disallowed_tools: ["Edit(.claude/**)", "Write(.claude/**)", "Bash(git push:*)", "Bash(rm -rf:*)"]  # the blacklist
 
 # How ◆ General feedback on the RUNNER itself is handled. This repo IS the editable checkout, so the
 # curator can patch curiator's own source ("curiator maintains curiator"). Consumers pin → drafts a PR.
@@ -48,11 +56,14 @@ feedback:
   dir: feedback                 # JSON ledger + shots/ live here
   screenshots: true
 
-# Who gave each piece of feedback. curiator RESOLVES + RECORDS identity; it never runs its own login.
-# Additive: omit this block (or mode: none) for today's anonymous single-tenant behavior.
+# Who gave each piece of feedback. curiator RESOLVES + RECORDS identity. Additive: omit this block
+# (or mode: none) for today's anonymous single-tenant behavior.
 auth:
-  mode: none                    # none | header | oidc
+  mode: none                    # none | local | header | oidc
   default_user: adam@local      # used by mode: none (provenance even solo)
+  # local mode — a built-in username/password login (no IdP, no proxy): set `mode: local`, then
+  #   `curiator user add <email>` to create accounts (hashed in a gitignored .curiator-users.json).
+  #   Brute-force lockout (optional): max_attempts (default 5), lockout_seconds (default 300).
   # header mode — an edge proxy (oauth2-proxy / ingress) did the OIDC dance and sets trusted headers:
   # user_header:   X-Auth-Request-User
   # email_header:  X-Auth-Request-Email
@@ -69,6 +80,9 @@ git:
   branch: curiator/auto         # the sandbox/env branch commits land on (empty/null = current HEAD)
   signoff: true                 # add Signed-off-by (DCO)
   include_ledger: true          # commit feedback/app_feedback.json in the same commit
+  # also_commit: dependency manifests an ELEVATED run may touch (pip install → requirements.txt) ride in
+  # the SAME atomic commit, not left dangling. Defaults to the common manifests below; set [] to disable.
+  # also_commit: [requirements.txt, pyproject.toml, package.json, poetry.lock, package-lock.json]
   # This repo (the runner's own checkout) keeps commit:false — a standalone collection runs commit:true.
 
 shell:

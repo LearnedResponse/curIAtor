@@ -33,15 +33,18 @@ def run(task) -> None:
     if not available():
         raise RuntimeError("`claude` CLI not on PATH — install Claude Code, or set agent.adapter: command")
 
-    agent = task.cfg.get("agent", {}) or {}
+    # the EFFECTIVE profile for this item (base agent, or `agent.elevated` when the author's group qualifies)
+    agent = getattr(task, "agent", None) or task.cfg.get("agent", {}) or {}
     prompt = Path(task.task_file).read_text()        # the bundle: protocol + this feedback + paths
     allowed = agent.get("allowed_tools") or _DEFAULT_TOOLS
+    denied = agent.get("disallowed_tools") or []     # the blacklist — never allowed, even when elevated
 
-    # --allowedTools is variadic (consumes args until the next flag), so keep it LAST.
     cmd = ["claude", "-p", prompt, "--permission-mode", agent.get("permission_mode", "acceptEdits")]
     if agent.get("model"):
         cmd += ["--model", str(agent["model"])]
-    cmd += ["--allowedTools", *allowed]
+    if denied:                                        # before the variadic --allowedTools
+        cmd += ["--disallowedTools", *denied]
+    cmd += ["--allowedTools", *allowed]               # variadic — keep LAST (consumes args until the next flag)
 
     try:
         proc = subprocess.run(cmd, cwd=task.cfg["repo_root"], capture_output=True, text=True,

@@ -17,11 +17,34 @@ Run:  curiator watch     (or: python -m curiator.loop.loop)
 from __future__ import annotations
 
 import time
+from pathlib import Path
 
 from . import adapters
 from .. import ledger      # tiny ledger read/write (status, replies) — see curiator/ledger.py
 
 POLL_SECONDS = 5
+
+
+def _gallery_mtime(cfg: dict):
+    gp = (cfg or {}).get("gallery_path")
+    try:
+        return Path(gp).stat().st_mtime if gp else None
+    except OSError:
+        return None
+
+
+def reload_if_changed(cfg: dict, last_mtime) -> tuple[dict, float | None, bool]:
+    """Hot-reload gallery.yaml when it changes on disk, so edits (e.g. `agent.elevated`, autonomy) take
+    effect WITHOUT restarting the loop — no need to kill/restart the shell or watcher. Returns
+    (cfg, mtime, reloaded). On a parse error the old cfg is kept (the loop never dies on a bad edit)."""
+    from ..config import load_config
+    mtime = _gallery_mtime(cfg)
+    if mtime is not None and mtime != last_mtime:
+        try:
+            return load_config(), mtime, True
+        except Exception:                                 # a half-saved / invalid YAML — keep running on the old cfg
+            return cfg, mtime, False
+    return cfg, mtime, False
 
 
 def _new_items(led: dict) -> list[tuple[str, dict]]:
@@ -55,12 +78,18 @@ def run_once(cfg: dict) -> int:
 
 
 def watch(cfg: dict) -> None:
-    """Long-running poll loop. Ctrl-C to stop."""
+    """Long-running poll loop. Ctrl-C to stop. Re-reads gallery.yaml when it changes, so config edits
+    (autonomy, `agent.elevated`, …) apply live — no restart needed."""
     print(f"curiator: watching {ledger.path(cfg)} every {POLL_SECONDS}s "
           f"(adapter={cfg.get('agent', {}).get('adapter')}, "
           f"autonomy={cfg.get('agent', {}).get('autonomy')}) — Ctrl-C to stop")
+    mtime = _gallery_mtime(cfg)
     while True:
         try:
+            cfg, mtime, reloaded = reload_if_changed(cfg, mtime)
+            if reloaded:
+                print(f"curiator: reloaded gallery.yaml (autonomy={cfg.get('agent', {}).get('autonomy')}, "
+                      f"elevated={'yes' if (cfg.get('agent', {}) or {}).get('elevated') else 'no'})")
             n = run_once(cfg)
             if n:
                 print(f"curiator: dispatched {n} feedback item(s)")

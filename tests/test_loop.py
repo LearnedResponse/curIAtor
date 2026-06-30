@@ -1,5 +1,9 @@
-"""loop: new-item detection + serialized dispatch (with a stub adapter, so no real agent runs)."""
+"""loop: new-item detection + serialized dispatch (with a stub adapter, so no real agent runs),
+and live gallery.yaml reload (config edits apply without restarting the loop)."""
 from __future__ import annotations
+
+import os
+from pathlib import Path
 
 from curiator import ledger
 from curiator.loop import loop
@@ -49,4 +53,26 @@ def test_run_once_resets_item_on_adapter_error(cfg, monkeypatch):
     data = ledger.load(cfg)
     user = [e for e in data["sample"] if e["author"] == "user"][0]
     assert user["status"] == "new"                                  # reset, not stuck on 'working'
-    assert any("loop error" in (e.get("comment") or "") for e in data["sample"] if e["author"] == "claude")
+    note = next(e for e in data["sample"] if e["author"] == "claude")
+    assert "loop error" in (note.get("comment") or "")
+    assert note.get("ts"), "loop-error notes must carry a ts — a null ts crashes render_history's sort"
+
+
+def test_reload_if_changed_applies_edits_without_restart(cfg, collection):
+    gp = cfg["gallery_path"]
+    m0 = os.stat(gp).st_mtime
+
+    # unchanged → no reload, same cfg object
+    same, _, reloaded = loop.reload_if_changed(cfg, m0)
+    assert reloaded is False and same is cfg
+
+    # edit gallery.yaml (bump autonomy + add an elevated block) and advance its mtime
+    txt = Path(gp).read_text().replace("autonomy: auto-small",
+                                       "autonomy: auto\n  elevated:\n    groups: [admin]")
+    Path(gp).write_text(txt)
+    os.utime(gp, (m0 + 5, m0 + 5))
+
+    fresh, m1, reloaded = loop.reload_if_changed(cfg, m0)
+    assert reloaded is True and m1 == m0 + 5
+    assert fresh["agent"]["autonomy"] == "auto"                     # the edit took effect — no restart
+    assert fresh["agent"]["elevated"]["groups"] == ["admin"]

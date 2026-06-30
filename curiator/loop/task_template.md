@@ -30,6 +30,8 @@ this protocol**. Act on *that* item, reply, and you're done. The loop handles ev
 
 4. **To propose instead of fix:**
    `curiator reply <app> <feedback_id> "<plan + recommendation>" --status awaiting_approval`
+   When you offer choices, pass `--actions` so the quick-approval buttons match your text **exactly**,
+   e.g. `--actions "A,B,C"` (or `--actions "Yes,No"`). Refer to the options the same way in the text.
 
 ## The reply command
 

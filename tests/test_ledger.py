@@ -29,3 +29,30 @@ def test_amend_note_appends(cfg):
     ledger.amend_note(cfg, "sample", nid, "  committed abc1234")
     note = [e for e in ledger.load(cfg)["sample"] if e["id"] == nid][0]
     assert note["comment"] == "Fixed.  committed abc1234"
+
+
+def test_system_note_actions_normalized(cfg):
+    nid = ledger.add_system_note(cfg, "sample", "Pick one", ts="t",
+                                 actions=["A", ["B", "b"]])
+    note = [e for e in ledger.load(cfg)["sample"] if e["id"] == nid][0]
+    assert note["actions"] == [["A", "A"], ["B", "b"]]          # bare string → [label, label]; pair kept
+
+
+def test_reply_actions_arg_parsing():
+    from curiator.cli import _parse_actions_arg
+    assert _parse_actions_arg("A,B,C") == [["A", "A"], ["B", "B"], ["C", "C"]]
+    assert _parse_actions_arg("Yes:yes, No:no") == [["Yes", "yes"], ["No", "no"]]
+    assert _parse_actions_arg("") is None
+
+
+def test_ts_defaults_to_utc_when_omitted(cfg):
+    """No caller can store a null ts (a null breaks the history sort). Omitted ⇒ UTC, tz-aware."""
+    fid = ledger.save_entry(cfg, "sample", comment="hi")            # no ts
+    nid = ledger.add_system_note(cfg, "sample", "auto note")        # no ts (the loop/revert path)
+    d = ledger.load(cfg)
+    user = next(e for e in d["sample"] if e["id"] == fid)
+    note = next(e for e in d["sample"] if e["id"] == nid)
+    assert user["ts"] and user["ts"].endswith("+00:00")            # tz-aware UTC → client localizes it
+    assert note["ts"] and note["ts"].endswith("+00:00")
+    assert ledger.save_entry(cfg, "sample", comment="x", ts="t9") and \
+        next(e for e in ledger.load(cfg)["sample"] if e["comment"] == "x")["ts"] == "t9"  # explicit wins

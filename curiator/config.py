@@ -48,7 +48,9 @@ def load_config() -> dict:
     # Identity / provenance (docs: who gave each piece of feedback). Additive: absent ⇒ mode none
     # (a fixed default_user — provenance even solo, today's anonymous single-tenant behavior).
     auth = cfg.get("auth") or {}
-    auth.setdefault("mode", "none")              # none | header | oidc
+    auth.setdefault("mode", "none")              # none | header | oidc | local
     auth.setdefault("default_user", "anonymous@local")
+    # local-login user store (hashed passwords) — resolved against the collection root; gitignored
+    auth["users_file"] = str(Path(cfg["repo_root"]) / auth.get("users_file", ".curiator-users.json"))
     cfg["auth"] = auth
     return cfg

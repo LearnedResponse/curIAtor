@@ -140,6 +140,15 @@ coding agent you already have. Pick the adapter that fits your setup:
 curIAtor is the **wiring + the convention** between the two. That's the whole idea — thin to adopt,
 thin to maintain.
 
+## Examples
+
+- **[curiator-finance](https://github.com/LearnedResponse/curiator-finance)** — a *self-building* demo
+  collection: deliberately-rough finance apps (portfolio, watchlist, correlation, returns) on
+  reproducible committed data + a **seeded review queue** authored by an analyst. Run
+  `curiator seed seed/feedback.yaml && curiator watch` and the curator builds the apps up — one commit
+  per fix, each carrying a `Feedback-From:` trailer. **`git log` is the build story.** This is the
+  reusable *seed → watch → git-log-as-receipt* template for new example domains.
+
 ## Status
 
 **v0.1.0 — first release (Dash-first).** Shipping: the gallery shell + same-origin screenshot

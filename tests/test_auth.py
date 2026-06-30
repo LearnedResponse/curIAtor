@@ -73,9 +73,9 @@ def test_login_required_only_oidc():
     assert auth.login_required({}) is False
 
 
-def test_stamp_is_id_email_name_only():
+def test_stamp_carries_identity_and_groups():
     assert auth.stamp({"id": "i", "email": "e@x", "name": "N", "groups": ["g"]}) == \
-        {"id": "i", "email": "e@x", "name": "N"}                 # groups stay in the session, not the ledger
+        {"id": "i", "email": "e@x", "name": "N", "groups": ["g"]}   # groups gate elevated agent runs
     assert auth.stamp(None) is None
 
 
@@ -88,3 +88,70 @@ def test_ledger_entry_carries_user(cfg):
     ledger.save_entry(cfg, "sample", comment="hi",
                       user={"id": "u", "email": "u@x.io", "name": "u"}, ts="t")
     assert ledger.load(cfg)["sample"][0]["user"]["email"] == "u@x.io"
+
+
+# ── local login (built-in username/password) ───────────────────────────────
+def test_local_login_required():
+    assert auth.login_required({"mode": "local"}) is True
+
+
+def test_local_verify_inline_users():
+    from werkzeug.security import generate_password_hash
+    a = {"mode": "local", "users": [{"email": "a@x.io", "name": "A", "groups": ["dev"],
+                                     "password_hash": generate_password_hash("pw")}]}
+    assert auth.verify_local(a, "a@x.io", "pw") == {"id": "a@x.io", "email": "a@x.io", "name": "A", "groups": ["dev"]}
+    assert auth.verify_local(a, "a@x.io", "bad") is None        # wrong password
+    assert auth.verify_local(a, "nobody@x.io", "pw") is None    # unknown user
+
+
+def test_local_users_file_roundtrip(tmp_path):
+    from werkzeug.security import generate_password_hash
+    f = tmp_path / "users.json"
+    auth.save_users_file(str(f), {"u@x.io": {"name": "U", "groups": [],
+                                             "password_hash": generate_password_hash("s3cret")}})
+    a = {"mode": "local", "users_file": str(f)}
+    assert auth.verify_local(a, "u@x.io", "s3cret")["email"] == "u@x.io"
+    assert auth.verify_local(a, "u@x.io", "wrong") is None
+
+
+def test_cmd_user_add_hashes_and_verifies(cfg):
+    import argparse
+
+    from curiator.cli import cmd_user
+    cmd_user(argparse.Namespace(action="add", email="bob@x.io", name="Bob", groups="qa", password="hunter2"))
+    uf = cfg["auth"]["users_file"]
+    assert "hunter2" not in __import__("pathlib").Path(uf).read_text()   # stored as a hash, never plaintext
+    u = auth.verify_local({"mode": "local", "users_file": uf}, "bob@x.io", "hunter2")
+    assert u and u["name"] == "Bob" and u["groups"] == ["qa"]
+
+
+def test_login_rate_limit_locks_then_clears():
+    a = {"max_attempts": 3, "lockout_seconds": 60}
+    auth.clear_login_failures("1.2.3.4")
+    assert auth.rate_limit_status(a, "1.2.3.4") == (False, 0)
+    for _ in range(3):
+        auth.record_login_failure(a, "1.2.3.4")
+    blocked, retry = auth.rate_limit_status(a, "1.2.3.4")
+    assert blocked is True and retry > 0                    # locked out after 3 failures
+    assert auth.rate_limit_status(a, "5.6.7.8")[0] is False  # a different IP is unaffected
+    auth.clear_login_failures("1.2.3.4")                   # success clears the counter
+    assert auth.rate_limit_status(a, "1.2.3.4")[0] is False
+
+
+def test_cmd_auth_sets_mode_preserving_comments(tmp_path, monkeypatch):
+    import argparse
+    import textwrap
+
+    from curiator.cli import cmd_auth
+    g = tmp_path / "gallery.yaml"
+    g.write_text(textwrap.dedent('''\
+        apps: []
+        auth:
+          mode: none          # none | local | header | oidc
+          default_user: x@y
+    '''))
+    monkeypatch.setenv("CURIATOR_GALLERY", str(g))
+    cmd_auth(argparse.Namespace(mode="local"))
+    txt = g.read_text()
+    assert "mode: local" in txt and "# none | local | header | oidc" in txt   # changed + comment kept
+    assert "default_user: x@y" in txt                                          # rest intact

@@ -87,6 +87,31 @@ package and the *same gesture* switches from "local patch" to "file upstream." `
 your feedback becomes an upstream contribution. (Auto-filing via `gh` is on the roadmap; for now the
 draft is posted as the ⚙ reply for a human to file.)
 
+## Identity & sign-in (who gives feedback)
+
+curiator records *who* gave each piece of feedback — it lands on the ledger entry and flows into the
+`Feedback-From:` git trailer. Pick an `auth.mode` in `gallery.yaml`:
+
+| mode | how you sign in | best for |
+|---|---|---|
+| **`none`** *(default)* | nobody — everyone is `default_user` | solo / trusted box (provenance, no login) |
+| **`local`** | a built-in username/password form curiator serves | **self-hosted installs with no IdP or proxy** |
+| **`header`** | an edge proxy (oauth2-proxy / ingress) sets trusted headers | behind a gateway you already run |
+| **`oidc`** | curiator runs the OIDC flow against your IdP (Keycloak, …) | self-hosted SSO |
+
+**Local sign-in — the quick self-hosted option** (no IdP, no proxy):
+
+```bash
+# gallery.yaml →  auth: { mode: local }
+curiator user add alice@example.com --name Alice    # prompts for a password (or pass --password)
+curiator user list
+curiator up        # click the account corner (top-right) → "Log in" → the built-in form
+```
+
+Passwords are stored only as **hashes** (`werkzeug`) in a gitignored `.curiator-users.json` (perms `600`)
+— no plaintext, no extra dependency. The `header` / `oidc` settings live in the same `auth:` block; see
+the `gallery.yaml` comments. `oidc` needs the `[oidc]` extra (`pip install 'curiator[oidc]'`).
+
 ## 5. Run it in a container (one sandbox per collection)
 
 The curator **auto-edits and runs** your code, so the safety unit is **one container per collection** —

@@ -123,3 +123,53 @@ def test_feedback_from_trailer_carries_provenance(cfg, collection):
 def test_no_feedback_from_trailer_when_anonymous(cfg, collection):
     fid, _, _ = _do_fix(cfg, collection)                   # _do_fix saves with no user
     assert "Feedback-From:" not in _log(collection, "-1", "--format=%B")
+
+
+def _names_at_head(collection: Path) -> list[str]:
+    return subprocess.run(["git", "show", "--name-only", "--format=", "HEAD"],
+                          cwd=collection, capture_output=True, text=True).stdout.split()
+
+
+def test_commit_includes_dependency_manifest(cfg, collection):
+    """An elevated run that adds a dependency: requirements.txt rides in the SAME atomic commit as the
+    source + ledger — not left dangling in the working tree (the M2/elevated re-run regression)."""
+    src = collection / "apps" / "sample.py"
+    src.write_text(src.read_text().replace('"sample"', '"sample (live)"'))
+    (collection / "requirements.txt").write_text("dash\nyfinance>=0.2\n")    # the agent's new dep
+    fid = ledger.save_entry(cfg, "sample", comment="use yfinance", ts="t0")
+    ledger.add_system_note(cfg, "sample", "Added live data.", reply_to=[fid], ts="t1")
+    ledger.set_status(cfg, "sample", [fid], "done")
+    res = gitmem.commit_run(cfg, "sample", fid, status="done", note_text="Added live data.")
+    assert res["committed"], res
+    files = _names_at_head(collection)
+    assert "apps/sample.py" in files and "feedback/app_feedback.json" in files
+    assert "requirements.txt" in files                     # the dep manifest, in the SAME commit
+    assert "requirements.txt" in _log(collection, "-1", "--format=%B")      # and noted in the message
+    porcelain = subprocess.run(["git", "status", "--porcelain"], cwd=collection,
+                               capture_output=True, text=True).stdout
+    assert "requirements.txt" not in porcelain             # nothing dependency-related left behind
+
+
+def test_unrelated_files_not_swept_into_commit(cfg, collection):
+    """Only source + ledger (+ manifests) are captured — a stray non-manifest change is left untouched."""
+    src = collection / "apps" / "sample.py"
+    src.write_text(src.read_text().replace('"sample"', '"sample (x)"'))
+    (collection / "scratch.txt").write_text("not a manifest")
+    fid = ledger.save_entry(cfg, "sample", comment="x", ts="t0")
+    ledger.add_system_note(cfg, "sample", "y", reply_to=[fid], ts="t1")
+    ledger.set_status(cfg, "sample", [fid], "done")
+    gitmem.commit_run(cfg, "sample", fid, status="done", note_text="y")
+    assert "scratch.txt" not in _names_at_head(collection)  # stray file stays in the working tree
+
+
+def test_also_commit_can_be_disabled(cfg, collection):
+    """`git.also_commit: []` restores the strict source+ledger-only policy."""
+    cfg["git"]["also_commit"] = []
+    src = collection / "apps" / "sample.py"
+    src.write_text(src.read_text().replace('"sample"', '"sample (z)"'))
+    (collection / "requirements.txt").write_text("dash\n")
+    fid = ledger.save_entry(cfg, "sample", comment="x", ts="t0")
+    ledger.add_system_note(cfg, "sample", "y", reply_to=[fid], ts="t1")
+    ledger.set_status(cfg, "sample", [fid], "done")
+    gitmem.commit_run(cfg, "sample", fid, status="done", note_text="y")
+    assert "requirements.txt" not in _names_at_head(collection)   # opt-out honored

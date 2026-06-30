@@ -3,6 +3,17 @@
 
 .shell-mobilebar { display: none; }
 
+/* account dropdown (upper-right) menu items */
+.auth-menu-item:hover { background: #f3f0fb; }
+.auth-menu-item + .auth-menu-item { border-top: 1px solid #f0f0f0; }
+
+/* catalog rows + per-app share button (revealed/emphasized on row hover; stays tappable on touch) */
+.approw-wrap:hover { background: #f5f5f5 !important; }
+.share-btn { color: #b0b0b0; opacity: .45; transition: opacity .12s, background .12s, color .12s; }
+.approw-wrap:hover .share-btn { opacity: 1; }
+.share-btn:hover { background: #ececec; color: #555; }
+.fb-share-btn:hover { border-color: #b9a6e0 !important; color: #6a4fa3 !important; }
+
 @media (max-width: 860px) {
   .shell-mobilebar {
     display: flex !important;

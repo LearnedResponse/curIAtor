@@ -1,16 +1,23 @@
 """auth.py — resolve a *verified* identity per request, for feedback provenance.
 
-curiator RECORDS identity; it never runs its own user database. Three modes (gallery.yaml `auth.mode`):
+curiator RECORDS identity; it doesn't run a user database it doesn't have to. Modes (gallery.yaml `auth.mode`):
   none   → a fixed `default_user` (provenance even solo; the default — today's behavior)
   header → trust an edge proxy's OIDC headers (oauth2-proxy / ingress already did the dance) — near-zero code
   oidc   → curiator runs the OIDC auth-code flow itself via authlib (self-hosted, no proxy)
+  local  → a built-in username/password login form against a hashed-password user file (managed by
+           `curiator user add`) — for self-hosted installs with no IdP and no proxy
 
 A user is `{id, email, name, groups}`. Roles + reputation are OUT OF SCOPE — we only capture `groups`
-for when they arrive. Secrets come from env (`auth.client_secret_env`), NEVER the YAML.
+for when they arrive. OIDC secrets come from env (`auth.client_secret_env`), NEVER the YAML; local
+passwords are stored only as hashes (werkzeug), in a gitignored file.
 """
 from __future__ import annotations
 
+import json
 import os
+import threading
+import time
+from pathlib import Path
 
 from flask import has_request_context, redirect, request, session, url_for
 
@@ -58,21 +65,103 @@ def current_user(auth_cfg: dict) -> dict | None:
         return None
     if mode == "header":
         return _from_headers(a)
-    if mode == "oidc":
-        return session.get(SESSION_KEY)
+    if mode in ("oidc", "local"):
+        return session.get(SESSION_KEY)                   # set on a successful login (OIDC callback / local form)
     return None
 
 
 def login_required(auth_cfg: dict) -> bool:
-    """Does this mode gate feedback behind a curiator login? (oidc yes; none/header resolve transparently.)"""
-    return (auth_cfg or {}).get("mode") == "oidc"
+    """Does this mode gate feedback behind a curiator login? (oidc/local yes; none/header resolve transparently.)"""
+    return (auth_cfg or {}).get("mode") in ("oidc", "local")
 
 
 def stamp(user: dict | None) -> dict | None:
-    """The provenance subset recorded on a ledger entry — {id, email, name} (groups stay in the session)."""
+    """The identity subset recorded on a ledger entry — {id, email, name, groups}. `groups` carry the
+    author's authorization context (e.g. `agent.elevated` trusted-group gating), not just provenance."""
     if not user:
         return None
-    return {"id": user.get("id"), "email": user.get("email"), "name": user.get("name")}
+    return {"id": user.get("id"), "email": user.get("email"), "name": user.get("name"),
+            "groups": list(user.get("groups") or [])}
+
+
+# ─────────────────────────── local login (built-in, for self-hosted installs) ───────────────────────────
+def load_users_file(path: str | None) -> dict:
+    """The local user store: {email: {name, password_hash, groups}}. Empty if absent/unreadable."""
+    if not path or not Path(path).exists():
+        return {}
+    try:
+        return json.loads(Path(path).read_text()) or {}
+    except (json.JSONDecodeError, OSError):
+        return {}
+
+
+def save_users_file(path: str, users: dict) -> None:
+    p = Path(path)
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(json.dumps(users, indent=2) + "\n")
+    try:
+        p.chmod(0o600)                                    # password hashes — keep it owner-only
+    except OSError:
+        pass
+
+
+def _local_users(auth_cfg: dict) -> dict:
+    """Merge the managed users_file (the CLI's `curiator user add`) with any inline `auth.users` list."""
+    users = dict(load_users_file((auth_cfg or {}).get("users_file")))
+    for u in (auth_cfg or {}).get("users") or []:
+        if u.get("email"):
+            users[u["email"]] = {"name": u.get("name"), "groups": u.get("groups") or [],
+                                 "password_hash": u.get("password_hash")}
+    return users
+
+
+def verify_local(auth_cfg: dict, email: str, password: str) -> dict | None:
+    """Check email + password against the local store. Returns the user (no hash), or None."""
+    from werkzeug.security import check_password_hash
+    rec = _local_users(auth_cfg).get((email or "").strip())
+    if not (rec and rec.get("password_hash") and password):
+        return None
+    if not check_password_hash(rec["password_hash"], password):
+        return None
+    return _norm(email, email, rec.get("name"), rec.get("groups"))
+
+
+# ── login rate limit (brute-force lockout for the local portal) ──
+# In-memory, per key (the client IP), in the single shell process. A sliding window of recent failures;
+# once `max_attempts` failures land within `lockout_seconds`, the key is blocked until the oldest ages out.
+_LOGIN_FAILS: dict = {}
+_LOGIN_LOCK = threading.Lock()
+
+
+def _rl_params(auth_cfg) -> tuple[int, float]:
+    a = auth_cfg or {}
+    return int(a.get("max_attempts", 5)), float(a.get("lockout_seconds", 300))
+
+
+def rate_limit_status(auth_cfg, key) -> tuple[bool, int]:
+    """(blocked, retry_after_seconds) for a login `key` (e.g. the client IP)."""
+    maxn, window = _rl_params(auth_cfg)
+    now = time.monotonic()
+    with _LOGIN_LOCK:
+        fails = [t for t in _LOGIN_FAILS.get(key, []) if now - t < window]
+        _LOGIN_FAILS[key] = fails
+        if len(fails) >= maxn:
+            return True, int(window - (now - fails[0])) + 1
+        return False, 0
+
+
+def record_login_failure(auth_cfg, key) -> None:
+    _, window = _rl_params(auth_cfg)
+    now = time.monotonic()
+    with _LOGIN_LOCK:
+        fails = [t for t in _LOGIN_FAILS.get(key, []) if now - t < window]
+        fails.append(now)
+        _LOGIN_FAILS[key] = fails
+
+
+def clear_login_failures(key) -> None:
+    with _LOGIN_LOCK:
+        _LOGIN_FAILS.pop(key, None)
 
 
 # ─────────────────────────────── OIDC flow (authlib) ───────────────────────────────

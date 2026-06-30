@@ -36,7 +36,7 @@ import re
 import sys
 import threading
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from html import escape as _esc
 from pathlib import Path
 
@@ -52,7 +52,28 @@ PORT = 8200  # default; overridden by gallery.yaml shell.port just below (after 
 import registry as REG  # gallery.yaml-backed registry (CurIAtor drop-in for all_apps_index)
 from curiator import auth  # identity / provenance resolution (none | header | oidc)
 PORT = REG.SHELL_CFG.get("port", PORT)  # honor gallery.yaml: shell.port
-TITLE = REG.SHELL_CFG.get("title", "curIAtor")  # gallery title — browser tab + the brand header
+def _norm_title(raw):
+    """Browser-tab title: normalize a leading brand token to the canonical lowercase 'curIAtor'."""
+    s = (raw or "curIAtor").strip()
+    m = re.match(r"(?i)^curiator\b", s)
+    return ("curIAtor" + s[m.end():]) if m else s
+
+
+def _collection_name(raw):
+    """The collection/repo name for the General banner — the title with a leading brand token stripped
+    (the purple logo already shows the brand), or the repo dir name."""
+    s = (raw or "").strip()
+    m = re.match(r"(?i)^curiator\b", s)
+    if m:
+        rest = s[m.end():].lstrip(" ·:|/–—-").strip()
+        if rest:
+            return rest
+    return s or REG.COLLECTION_ROOT.name
+
+
+TITLE = _norm_title(REG.SHELL_CFG.get("title"))                # browser tab title (lowercase brand)
+POLL_MS = int(REG.SHELL_CFG.get("poll_seconds", 4) * 1000)     # live-refresh the feedback panel (0 = off)
+COLLECTION_NAME = _collection_name(REG.SHELL_CFG.get("title"))  # this collection/repo's name (brand-free)
 
 # The ledger + shots live at the repo-root feedback/ dir — the SAME tracked
 # feedback/app_feedback.json that ledger.py (the loop + `curiator reply`) reads/writes. The shell is
@@ -75,6 +96,46 @@ def _wordmark(size=15, suffix=None):
                                                           "fontSize": f"{max(size - 4, 10)}px"}))
     return html.Span(parts, style={"fontWeight": 800, "fontSize": f"{size}px",
                                    "fontFamily": "system-ui, sans-serif", "letterSpacing": ".2px"})
+
+
+def _wordmark_html(size=22):
+    """The curIAtor wordmark as an HTML string (for the server-rendered General/history view)."""
+    return (f"<span style='font-weight:800;font-size:{size}px;font-family:system-ui,sans-serif;"
+            f"letter-spacing:.3px;white-space:nowrap'><span style='color:{PURPLE}'>◆</span> "
+            f"cur<span style='color:{PURPLE}'>IA</span>tor</span>")
+
+
+def _page(heading, body_html):
+    """A small server-rendered shell page (logo banner + heading + body) — for /profile and /login."""
+    return (f"<div style='font-family:system-ui,sans-serif;padding:1.6em 2em;color:#333;max-width:680px'>"
+            f"<div style='display:flex;align-items:baseline;gap:11px;margin:0 0 12px'>{_wordmark_html(20)}"
+            f"<span style='color:#ccc;font-size:15px'>/</span>"
+            f"<span style='font-weight:700;font-size:15px;color:#444'>{_esc(COLLECTION_NAME)}</span></div>"
+            f"<h2 style='color:{PURPLE};margin:0 0 12px;font-size:17px'>{heading}</h2>{body_html}</div>")
+
+
+# the account dropdown (upper-right): a mini menu of Profile / Sign out (or Log in)
+_AUTH_MENU_BASE = {"position": "absolute", "top": "100%", "right": "0", "marginTop": "5px",
+                   "background": "white", "border": "1px solid #ddd", "borderRadius": "8px",
+                   "boxShadow": "0 6px 18px rgba(0,0,0,.13)", "minWidth": "132px", "zIndex": 1000,
+                   "overflow": "hidden", "textAlign": "left"}
+_AUTH_MENU_HIDDEN = {**_AUTH_MENU_BASE, "display": "none"}
+
+
+def _menu_item(label, href, target):
+    return html.A(label, href=href, target=target, className="auth-menu-item",
+                  style={"display": "block", "padding": "7px 14px", "color": "#333",
+                         "textDecoration": "none", "fontSize": "12.5px", "whiteSpace": "nowrap"})
+
+
+_INPUT = ("display:block;width:100%;padding:8px 10px;margin:6px 0;box-sizing:border-box;"
+          "border:1px solid #ccc;border-radius:6px;font-size:13px")
+_LOGIN_FORM = (
+    f"<form method='post' action='/login' style='max-width:300px'>"
+    f"<input name='email' type='email' placeholder='email' autofocus required style='{_INPUT}'>"
+    f"<input name='password' type='password' placeholder='password' required style='{_INPUT}'>"
+    f"<button type='submit' style='background:{PURPLE};color:white;border:none;padding:9px 18px;"
+    f"border-radius:6px;font-weight:600;font-size:13px;cursor:pointer;margin-top:6px'>Sign in</button></form>")
 
 
 # ============================== registry =====================================
@@ -138,7 +199,7 @@ def _current_user():
 
 def save_entry(key, stars, comment, shot_dataurl, user=None):
     data = load_feedback()
-    e = {"id": uuid.uuid4().hex[:8], "ts": datetime.now().isoformat(timespec="seconds"),
+    e = {"id": uuid.uuid4().hex[:8], "ts": datetime.now(timezone.utc).isoformat(timespec="seconds"),
          "author": "user", "kind": "comment", "stars": stars, "comment": (comment or "").strip(),
          "screenshot": None, "status": "new", "proposed_plan": None,
          "user": auth.stamp(user if user is not None else _current_user())}
@@ -159,7 +220,7 @@ def add_system_note(key, text, reply_to=None, actions=None):
     if actions:
         norm = [[a, a] if isinstance(a, str) else list(a) for a in actions]
     data = load_feedback()
-    e = {"id": uuid.uuid4().hex[:8], "ts": datetime.now().isoformat(timespec="seconds"),
+    e = {"id": uuid.uuid4().hex[:8], "ts": datetime.now(timezone.utc).isoformat(timespec="seconds"),
          "author": "claude", "kind": "system", "comment": text.strip(), "reply_to": reply_to or [],
          "status": "update", "stars": None, "screenshot": None, "actions": norm}
     data.setdefault(key, []).append(e)
@@ -176,15 +237,19 @@ def set_status(key, ids, status):
 
 
 def _parse_actions(text):
-    """Fallback action detection for system notes posted without an explicit `actions` list.
-    Detect A/B/C/D option bullets; else offer Yes/No when the note reads like an approval ask."""
+    """Fallback action detection for ⚙ notes posted without an explicit `actions` list. Detect A/B/C/D
+    options in the phrasings agents actually use — parenthesized ("(A)", "(A, recommended)") or line
+    bullets ("A)", "A:", "A —") — else offer Yes/No when the note reads like an approval ask. (Prefer
+    passing `curiator reply --actions` so the buttons match the text exactly.)"""
     letters = [L for L in ("A", "B", "C", "D")
-               if re.search(rf"(?:^|[•\n])\s*{L}\b\s*(?:\(recommended\))?\s*[:\)]", text)
-               or re.search(rf"\b{L}\s*\(recommended\)", text)]
+               if re.search(rf"\(\s*{L}\b", text)                      # (A   (A,   (A)   (A, recommended)
+               or re.search(rf"(?:^|\n)\s*{L}\s*[).:—\-]", text)       # A)  A.  A:  A—  at a line start
+               or re.search(rf"\b{L}\s*\(recommended\)", text)         # A (recommended)
+               or re.search(rf"\boption\s+{L}\b", text, re.I)]         # option A
     if len(letters) >= 2:
         return [[L, L] for L in letters]
     low = text.lower()
-    if any(s in low for s in ("want me to", "say the word", "say go", "recommend ", "shall i", "?")):
+    if any(s in low for s in ("want me to", "say the word", "say go", "shall i", "approve", "go ahead", "?")):
         return [["Yes", "yes"], ["No", "no"]]
     return []
 
@@ -226,12 +291,20 @@ def recency(rec):
         return 0
 
 
+def _ts_span(iso):
+    """A timestamp wrapped so assets/localtime.js re-renders it in the viewer's LOCAL timezone. Degrades
+    to the raw ISO (JS off) or '' (missing). Stored timestamps are UTC (tz-aware), so the conversion is
+    unambiguous; the same `.ts[data-ts]` marker is emitted as HTML in render_history for the General view."""
+    iso = iso or ""
+    return html.Span(iso, className="ts", title=iso, **{"data-ts": iso})
+
+
 def render_history():
     """Server-rendered HTML: every feedback thread across the library, newest app
     first (General pinned), entries chronological with user/⚙Claude styling."""
     data = load_feedback()
     keys = [k for k in data if data.get(k)]
-    keys.sort(key=lambda k: max((e["ts"] for e in data[k]), default=""), reverse=True)
+    keys.sort(key=lambda k: max((e.get("ts") or "" for e in data[k]), default=""), reverse=True)
     if GENERAL_KEY in keys:
         keys.remove(GENERAL_KEY)
         keys = [GENERAL_KEY] + keys
@@ -240,7 +313,11 @@ def render_history():
                  if e.get("kind") != "system" and e.get("status") in ("new", "awaiting_approval"))
     out = [
         "<div style='font-family:system-ui,sans-serif;padding:1.6em 2em;color:#333;max-width:760px'>",
-        "<h2 style='color:#8e44ad;margin:0 0 2px'>General feedback &amp; history</h2>",
+        # curIAtor logo + this collection's name (the custom repo name)
+        f"<div style='display:flex;align-items:baseline;gap:11px;margin:0 0 10px'>{_wordmark_html(22)}"
+        f"<span style='color:#ccc;font-size:16px'>/</span>"
+        f"<span style='font-weight:700;font-size:16px;color:#444'>{_esc(COLLECTION_NAME)}</span></div>",
+        "<h2 style='color:#8e44ad;margin:0 0 2px;font-size:17px'>General feedback &amp; history</h2>",
         "<p style='color:#555;margin:0 0 6px;font-size:13px'>Use the panel on the right for "
         "<b>gallery & runner-wide</b> notes (this thread is “General”). Below: every feedback thread across "
         f"the library.</p><p style='color:#777;font-size:12px;margin:0 0 14px'>{n_threads} threads · "
@@ -270,7 +347,9 @@ def render_history():
                        f"<span style='color:#2980b9;font-size:10.5px'>↗ open</span></div>")
         tb = thread_buttons(items)
         for e in items:
-            ts = e.get("ts", "")
+            ts = e.get("ts") or ""
+            tsh = (f"<span class='ts' data-ts='{_esc(ts)}' style='color:#999;font-size:10px'>"
+                   f"{_esc(ts)}</span>") if ts else ""
             if e.get("kind") == "system" or e.get("author") == "claude":
                 btns = ""
                 if tb and e["id"] == tb[0]:
@@ -285,8 +364,7 @@ def render_history():
                             f"optional — or type a reply</span></div>")
                 out.append(f"<div style='margin:4px 0 4px 22px;border-left:3px solid #2980b9;"
                            f"background:#eef5fb;padding:5px 9px;border-radius:3px'>"
-                           f"<b style='color:#2980b9'>⚙ Claude</b> "
-                           f"<span style='color:#999;font-size:10px'>{ts}</span>"
+                           f"<b style='color:#2980b9'>⚙ Claude</b> {tsh}"
                            f"<div style='font-size:12.5px;color:#1a3a5a;white-space:pre-wrap;margin-top:2px'>"
                            f"{_esc(e.get('comment', ''))}</div>{btns}</div>")
             else:
@@ -303,11 +381,11 @@ def render_history():
                            f"background:#fafafa;border-radius:3px'>"
                            f"<span style='color:#cc7a00'>{stars}</span> "
                            f"<span style='background:{stc};color:white;font-size:9.5px;border-radius:8px;"
-                           f"padding:1px 6px'>{st}</span> "
-                           f"<span style='color:#999;font-size:10px'>{ts}</span>{whoh}"
+                           f"padding:1px 6px'>{st}</span> {tsh}{whoh}"
                            f"<div style='font-size:12.5px;color:#333;white-space:pre-wrap;margin-top:2px'>"
                            f"{_esc(e.get('comment', ''))}{shot}</div></div>")
     out.append("</div>")
+    out.append("<script src='/assets/localtime.js'></script>")   # render .ts in the viewer's local tz
     return "".join(out)
 
 
@@ -320,7 +398,8 @@ def feedback_list(key):
     for e in reversed(items):
         if e.get("kind") == "system" or e.get("author") == "claude":
             kids = [html.Div([html.Span("⚙ Claude", style={"fontWeight": 700, "color": BLUE}),
-                              html.Span(f"  update · {e['ts']}", style={"color": GREY, "fontSize": "10px"})]),
+                              html.Span(["  update · ", _ts_span(e.get("ts"))],
+                                        style={"color": GREY, "fontSize": "10px"})]),
                     html.Div(e.get("comment", ""), style={"fontSize": "12px", "color": "#1a3a5a",
                              "marginTop": "2px", "whiteSpace": "pre-wrap"})]
             if tb and e["id"] == tb[0]:
@@ -342,7 +421,7 @@ def feedback_list(key):
         head = [html.Span(stars, style={"color": AMBER, "fontSize": "13px", "marginRight": "6px"}),
                 html.Span(st, style={"fontSize": "9.5px", "color": "white", "background": st_col,
                           "padding": "1px 6px", "borderRadius": "8px"}),
-                html.Span(f"  {e['ts']}", style={"color": GREY, "fontSize": "10px"})]
+                html.Span(["  ", _ts_span(e.get("ts"))], style={"color": GREY, "fontSize": "10px"})]
         who = (e.get("user") or {}).get("name")
         if who:
             head.append(html.Span(f"  · {who}", title=(e.get("user") or {}).get("email", ""),
@@ -368,6 +447,15 @@ SORTS = [("recency", "recently touched"), ("open", "open feedback"), ("rating", 
 def _tag_chip(t):
     return html.Span(t, style={"fontSize": "9px", "color": "white", "background": TAG_COLOR.get(t, "#999"),
                                "padding": "0 5px", "borderRadius": "7px", "marginRight": "3px"})
+
+
+def _share_btn(key):
+    """A small per-app share button — copies a deep-link (?app=<key>) so a teammate lands on this app."""
+    return html.Button("🔗", id={"type": "share", "key": key}, n_clicks=0, className="share-btn",
+                       title="Copy a shareable link to this app",
+                       style={"border": "none", "background": "transparent", "cursor": "pointer",
+                              "fontSize": "12px", "padding": "2px 6px", "borderRadius": "4px",
+                              "flex": "0 0 auto", "lineHeight": "1"})
 
 
 def catalog_rows(search, sortby, tags_sel, reverse):
@@ -401,14 +489,16 @@ def catalog_rows(search, sortby, tags_sel, reverse):
         num = html.Span(str(r.get("port") or "—"), style={"fontFamily": "monospace", "fontSize": "10.5px",
                         "color": "white", "background": r["color"], "padding": "1px 5px", "borderRadius": "4px"})
         dead = r["kind"] == "missing"
-        rows.append(html.Div([
+        content = html.Div([
             html.Div([num] + badges, style={"display": "flex", "alignItems": "center"}),
             html.Div(r["title"], style={"fontSize": "12px", "color": "#999" if dead else "#222",
                      "fontWeight": 600, "margin": "2px 0", "lineHeight": "1.25"}),
             html.Div([_tag_chip(t) for t in r["tags"][:5]]),
         ], id={"type": "approw", "key": r["key"]}, n_clicks=0,
-            style={"padding": "7px 9px", "borderBottom": "1px solid #eee", "cursor": "pointer",
-                   "background": "#fff"}))
+            style={"cursor": "pointer", "flex": "1", "minWidth": "0"})
+        rows.append(html.Div([content, _share_btn(r["key"])], className="approw-wrap",
+            style={"display": "flex", "alignItems": "center", "gap": "2px", "padding": "7px 9px",
+                   "borderBottom": "1px solid #eee", "background": "#fff"}))
     head = html.Div(f"{len(recs)} apps", style={"fontSize": "10.5px", "color": GREY, "padding": "4px 9px"})
     # pinned general (library/shell) feedback row at the very top
     _, gopen, _ = app_metrics(GENERAL_KEY)
@@ -510,10 +600,73 @@ def build_shell() -> Dash:
                  suppress_callback_exceptions=True,
                  meta_tags=[{"name": "viewport", "content": "width=device-width, initial-scale=1"}])
 
-    # Flask session (OIDC login state) + the self-hosted OIDC routes when auth.mode == oidc.
+    # Flask session (login state) + the login routes appropriate to auth.mode.
     shell.server.secret_key = os.environ.get("CURIATOR_SECRET_KEY") or os.urandom(24)
-    if auth.login_required(REG.AUTH_CFG):
-        auth.register_oidc(REG.AUTH_CFG, shell.server)
+    _mode = REG.AUTH_CFG.get("mode", "none")
+    if _mode == "oidc":
+        auth.register_oidc(REG.AUTH_CFG, shell.server)       # /login → IdP, /auth/callback, /logout
+    elif _mode == "local":
+        @shell.server.route("/login", methods=["GET", "POST"])   # built-in username/password portal
+        def _local_login():
+            from flask import redirect, request, session
+            ip = request.remote_addr or "?"
+            err = ""
+            blocked, retry = auth.rate_limit_status(REG.AUTH_CFG, ip)
+            if request.method == "POST" and not blocked:
+                u = auth.verify_local(REG.AUTH_CFG, request.form.get("email", ""), request.form.get("password", ""))
+                if u:
+                    auth.clear_login_failures(ip)
+                    session[auth.SESSION_KEY] = u
+                    return redirect("/")
+                auth.record_login_failure(REG.AUTH_CFG, ip)   # too many → lock the IP out for a while
+                blocked, retry = auth.rate_limit_status(REG.AUTH_CFG, ip)
+                err = "" if blocked else "<p style='color:#c0392b;font-size:13px;margin:0 0 8px'>Invalid email or password.</p>"
+            if blocked:
+                err = f"<p style='color:#c0392b;font-size:13px;margin:0 0 8px'>Too many attempts — try again in {retry}s.</p>"
+            return _page("Sign in", err + ("" if blocked else _LOGIN_FORM))
+
+        @shell.server.route("/logout")
+        def _local_logout():
+            from flask import redirect, session
+            session.pop(auth.SESSION_KEY, None)
+            return redirect("/")
+    else:                                                    # none / header — no curiator login
+        @shell.server.route("/login")
+        def _login_info():
+            return _page("Sign in",
+                f"<p>Sign-in isn't enabled for this gallery (<code>auth.mode: {_mode}</code>).</p>"
+                "<p style='color:#777;font-size:13px'>Turn it on in <code>gallery.yaml</code>: "
+                "<code>auth.mode: local</code> (a built-in username/password login — run "
+                "<code>curiator user add &lt;email&gt;</code> to create accounts), <code>oidc</code> "
+                "(your own IdP), or <code>header</code> (behind an auth proxy). See "
+                "<code>docs/USING_CURIATOR.md</code>.</p>")
+
+        @shell.server.route("/logout")                       # header/none: no curiator session to clear
+        def _logout_noop():
+            from flask import redirect
+            return redirect("/")
+
+    @shell.server.route("/profile")                          # who you are + sign in/out (all modes)
+    def _profile():
+        u = auth.current_user(REG.AUTH_CFG) or {}
+        m = REG.AUTH_CFG.get("mode", "none")
+        btn = (f"display:inline-block;background:{PURPLE};color:white;text-decoration:none;"
+               "padding:6px 14px;border-radius:6px;font-weight:600;font-size:13px")
+        info = (f"<p style='font-size:15px'><b>{_esc(u.get('name') or 'anonymous')}</b> &nbsp;"
+                f"<span style='color:#777'>{_esc(u.get('email') or '—')}</span></p>"
+                f"<p style='color:#777;font-size:12.5px'>groups: {_esc(', '.join(u.get('groups') or []) or '—')} "
+                f"· auth mode: <code>{m}</code></p>")
+        if m == "oidc":
+            action = (f"<a href='/logout' target='_top' style='{btn}'>Sign out</a>" if u
+                      else f"<a href='/login' target='_top' style='{btn}'>Sign in</a>")
+        elif m == "header":
+            action = ("<p style='color:#777;font-size:13px'>Authenticated via your gateway — "
+                      "sign out through your identity provider.</p>")
+        else:
+            du = _esc(REG.AUTH_CFG.get("default_user") or "anonymous@local")
+            action = (f"<p style='color:#777;font-size:13px'>Anonymous mode — everyone is <code>{du}</code>. "
+                      "Enable sign-in by setting <code>auth.mode: oidc</code> in <code>gallery.yaml</code>.</p>")
+        return _page("Your profile", info + action)
 
     @shell.server.route("/whoami")
     def _whoami():               # the resolved identity for this request (handy for header-mode + debugging)
@@ -558,20 +711,39 @@ def build_shell() -> Dash:
     catalog = html.Div([
         html.Div(_wordmark(16, suffix="gallery"), style={"padding": "10px 9px 5px"}),
         controls,
+        html.Div(id="share-toast", className="share-toast",
+                 style={"fontSize": "10px", "color": GREEN, "padding": "0 9px", "minHeight": "13px",
+                        "whiteSpace": "nowrap", "overflow": "hidden", "textOverflow": "ellipsis"}),
         html.Div(id="cat-list", style={"overflowY": "auto", "flex": "1"}),
     ], id="catalog-div", className="shell-catalog",
         style={"width": "270px", "flex": "0 0 270px", "borderRight": "1px solid #ddd", "display": "flex",
                "flexDirection": "column", "height": "100vh", "background": "#fcfcfc"})
 
-    frame = html.Iframe(id="app-frame", src="", style={"flex": "1", "border": "none", "height": "100%",
-                        "width": "100%"})
+    frame = html.Iframe(id="app-frame", name="app-frame", src="", style={"flex": "1", "border": "none",
+                        "height": "100%", "width": "100%"})
 
     sidebar = html.Div([
-        html.Div(id="auth-bar", style={"fontSize": "10.5px", "color": GREY, "textAlign": "right",
-                                       "minHeight": "14px", "marginBottom": "2px"}),
-        dcc.Store(id="auth-init", data=1),
+        html.Div([                                    # the account corner: click the identity → a mini menu
+            html.Div(id="auth-trigger", n_clicks=0,
+                     style={"cursor": "pointer", "display": "inline-block", "padding": "1px 5px",
+                            "borderRadius": "5px", "userSelect": "none"}),
+            html.Div(id="auth-menu", style=_AUTH_MENU_HIDDEN),
+            html.Div(id="auth-scrim", n_clicks=0, style={"display": "none"}),   # outside-click → close
+            dcc.Store(id="auth-init", data=1),
+            dcc.Store(id="auth-open", data=False),
+        ], style={"position": "relative", "textAlign": "right", "minHeight": "16px",
+                  "marginBottom": "2px", "fontSize": "11px"}),
         html.H4("Feedback", style={"margin": "0 0 2px", "fontSize": "14px"}),
-        html.Div(id="fb-appname", style={"fontSize": "11.5px", "color": GREY, "marginBottom": "8px"}),
+        html.Div([
+            html.Div(id="fb-appname", style={"fontSize": "11.5px", "color": GREY, "flex": "1", "minWidth": "0"}),
+            html.Button("🔗 Share", id="fb-share", n_clicks=0, className="fb-share-btn",
+                        title="Copy a shareable link to the app you're viewing",
+                        style={"fontSize": "10.5px", "padding": "2px 8px", "cursor": "pointer",
+                               "border": "1px solid #ddd", "borderRadius": "5px", "background": "#fff",
+                               "color": GREY, "whiteSpace": "nowrap", "flex": "0 0 auto"}),
+        ], style={"display": "flex", "alignItems": "center", "gap": "6px", "marginBottom": "3px"}),
+        html.Div(id="fb-share-msg", style={"fontSize": "10px", "color": GREEN, "minHeight": "12px",
+                 "marginBottom": "6px", "whiteSpace": "nowrap", "overflow": "hidden", "textOverflow": "ellipsis"}),
         dcc.RadioItems(id="fb-stars", inline=True,
                        options=[{"label": "★" * i, "value": i} for i in range(1, 6)],
                        style={"fontSize": "15px", "color": AMBER, "marginBottom": "6px"}),
@@ -610,8 +782,12 @@ def build_shell() -> Dash:
     scrim = html.Div(id="scrim", className="shell-scrim")
 
     row = html.Div([catalog, frame, sidebar], style={"display": "flex", "flex": "1", "minHeight": "0"})
-    shell.layout = html.Div([mobilebar, scrim, dcc.Store(id="cat-open", data=False),
-                             dcc.Store(id="fb-open", data=False), row],
+    shell.layout = html.Div([dcc.Location(id="url", refresh=False),     # deep-link ?app=<key> ↔ selection
+                             mobilebar, scrim, dcc.Store(id="cat-open", data=False),
+                             dcc.Store(id="fb-open", data=False), dcc.Store(id="url-sync"),
+                             dcc.Interval(id="live-poll", interval=max(POLL_MS, 1000),
+                                          disabled=(POLL_MS <= 0)),   # live feedback refresh
+                             dcc.Store(id="live-sig"), row],
                             style={"display": "flex", "flexDirection": "column", "height": "100vh",
                                    "margin": 0, "fontFamily": "system-ui, sans-serif"})
 
@@ -621,13 +797,57 @@ def build_shell() -> Dash:
     def _catalog(search, sortby, tags_sel, rev):
         return catalog_rows(search, sortby, tags_sel, bool(rev))
 
-    @shell.callback(Output("selected-app", "data"), Input({"type": "approw", "key": ALL}, "n_clicks"),
-                    prevent_initial_call=True)
-    def _select(_clicks):
-        if not ctx.triggered or not ctx.triggered[0]["value"]:
-            return no_update
+    @shell.callback(Output("selected-app", "data"),
+                    Input("url", "search"), Input({"type": "approw", "key": ALL}, "n_clicks"))
+    def _select(search, _clicks):
+        """Single owner of the selected app — ONE output (no allow_duplicate: two callbacks writing the
+        same prop mis-routes inputs). A row click wins; otherwise route from the URL (?app=<key>) on load
+        and back/forward, defaulting to ◆ General so you land on something instead of a blank frame."""
         tid = ctx.triggered_id
-        return tid["key"] if isinstance(tid, dict) else no_update
+        if isinstance(tid, dict) and tid.get("type") == "approw":          # a catalog row was clicked
+            return tid["key"] if (ctx.triggered and ctx.triggered[0].get("value")) else no_update
+        if isinstance(search, (list, tuple)):                              # be defensive about input shape
+            search = search[0] if search else ""
+        from urllib.parse import parse_qs
+        cand = (parse_qs((search or "").lstrip("?")).get("app") or [None])[0]
+        if cand == "general":
+            cand = GENERAL_KEY
+        return cand if cand in BY_KEY else GENERAL_KEY
+
+    # ⤴ share: copy a deep-link to the clicked app (clientside — no round-trip). Robust across Dash
+    # versions: parse the triggered pattern-id from prop_id for the key.
+    shell.clientside_callback(
+        "function(n){var c=window.dash_clientside.callback_context;"
+        "if(!c||!c.triggered||!c.triggered.length||!c.triggered[0].value)return window.dash_clientside.no_update;"
+        "var p=c.triggered[0].prop_id||'';var key=null;"
+        "try{key=JSON.parse(p.substring(0,p.lastIndexOf('.'))).key;}catch(e){key=(c.triggered_id||{}).key;}"
+        "if(!key)return window.dash_clientside.no_update;"
+        "var url=window.location.origin+'/?app='+encodeURIComponent(key);"
+        "try{navigator.clipboard.writeText(url);}catch(e){}"
+        "return '🔗 copied: '+url;}",
+        Output("share-toast", "children"),
+        Input({"type": "share", "key": ALL}, "n_clicks"), prevent_initial_call=True)
+
+    # keep the address bar in sync with the open app (so the bare URL is itself shareable) — via
+    # replaceState so it doesn't feed back into dcc.Location. ◆ General stays the clean default (no param).
+    shell.clientside_callback(
+        "function(key){try{var G='" + GENERAL_KEY + "';"
+        "if(key&&key!==G){var s='?app='+encodeURIComponent(key);"
+        "if(window.location.search!==s){window.history.replaceState(null,'',s);}}"
+        "else if(key===G&&window.location.search){window.history.replaceState(null,'',window.location.pathname);}"
+        "}catch(e){}return window.dash_clientside.no_update;}",
+        Output("url-sync", "data"), Input("selected-app", "data"), prevent_initial_call=True)
+
+    # 🔗 Share (feedback-panel header): copy a link to the app you're currently viewing. Reads the
+    # selection directly (not the address bar), so it's correct even before the bar syncs. General → clean URL.
+    shell.clientside_callback(
+        "function(n, key){if(!n)return window.dash_clientside.no_update;"
+        "var G='" + GENERAL_KEY + "';"
+        "var url=window.location.origin+'/'+((key&&key!==G)?('?app='+encodeURIComponent(key)):'');"
+        "try{navigator.clipboard.writeText(url);}catch(e){}"
+        "return '🔗 copied: '+url;}",
+        Output("fb-share-msg", "children"),
+        Input("fb-share", "n_clicks"), State("selected-app", "data"), prevent_initial_call=True)
 
     @shell.callback(Output("app-frame", "src"), Output("fb-appname", "children"),
                     Output("fb-list", "children"), Input("selected-app", "data"))
@@ -686,17 +906,57 @@ def build_shell() -> Dash:
         return msg, okstyle, feedback_list(key), "", None, None, hide, \
             catalog_rows(search, sortby, tags_sel, bool(rev))
 
-    # ---- identity bar: who you're signed in as (or a sign-in link in oidc mode) ----
-    @shell.callback(Output("auth-bar", "children"), Input("auth-init", "data"))
-    def _auth_bar(_):
+    # ---- live refresh: poll the ledger; update the open thread + catalog badges when it changes ----
+    @shell.callback(Output("fb-list", "children", allow_duplicate=True),
+                    Output("cat-list", "children", allow_duplicate=True),
+                    Output("live-sig", "data"),
+                    Input("live-poll", "n_intervals"),
+                    State("selected-app", "data"), State("live-sig", "data"),
+                    State("cat-search", "value"), State("cat-sort", "value"),
+                    State("cat-tags", "value"), State("cat-rev", "value"), prevent_initial_call=True)
+    def _live_refresh(_n, sel, sig, search, sortby, tags_sel, rev):
+        sig = sig or {}
+        try:
+            mtime = FEEDBACK_JSON.stat().st_mtime
+        except OSError:
+            mtime = 0
+        if mtime == sig.get("mtime"):
+            return no_update, no_update, no_update            # ledger unchanged → skip the render
+        data = load_feedback()
+        # re-render the open thread only if THIS app's entries changed (avoids scroll-jumps from other apps)
+        fb = [[e.get("id"), e.get("status"), len(e.get("comment") or "")] for e in data.get(sel, [])] if sel else []
+        fb_out = feedback_list(sel) if (sel and fb != sig.get("fb")) else no_update
+        return fb_out, catalog_rows(search, sortby, tags_sel, bool(rev)), {"mtime": mtime, "fb": fb}
+
+    # ---- account menu: click the identity → a mini menu (Profile / Sign out, or Log in) ----
+    @shell.callback(Output("auth-trigger", "children"), Output("auth-menu", "children"),
+                    Input("auth-init", "data"))
+    def _auth_render(_):
         u = _current_user()
-        if u:
-            kids = [html.Span("● ", style={"color": GREEN}),
-                    html.Span(u.get("name") or "user", title=u.get("email", ""), style={"fontWeight": 600})]
-            if auth.login_required(REG.AUTH_CFG):
-                kids.append(html.A(" · sign out", href="/logout", style={"color": BLUE}))
-            return kids
-        return [html.A("Sign in →", href="/login", style={"color": BLUE, "fontWeight": 700})]
+        mode = REG.AUTH_CFG.get("mode", "none")
+        verified = bool(u) and mode != "none"                 # a real identity vs the anonymous default
+        name = (u or {}).get("name") or "anonymous"
+        trigger = [html.Span("● " if verified else "○ ", style={"color": GREEN if verified else GREY}),
+                   html.Span(name, style={"fontWeight": 600, "color": "#333" if verified else GREY}),
+                   html.Span(" ▾", style={"color": GREY, "fontSize": "9px", "marginLeft": "2px"})]
+        if verified:
+            menu = [_menu_item("Profile", "/profile", "app-frame"),
+                    _menu_item("Sign out", "/logout", "_top")]
+        else:
+            menu = [_menu_item("Log in", "/login", "_top" if mode in ("oidc", "local") else "app-frame")]
+        return trigger, menu
+
+    @shell.callback(Output("auth-open", "data"), Input("auth-trigger", "n_clicks"),
+                    Input("auth-scrim", "n_clicks"), State("auth-open", "data"), prevent_initial_call=True)
+    def _auth_toggle(_t, _s, is_open):
+        return (not is_open) if ctx.triggered_id == "auth-trigger" else False   # trigger toggles; scrim closes
+
+    @shell.callback(Output("auth-menu", "style"), Output("auth-scrim", "style"), Input("auth-open", "data"))
+    def _auth_menu_vis(is_open):
+        if is_open:
+            return ({**_AUTH_MENU_BASE, "display": "block"},
+                    {"position": "fixed", "inset": "0", "zIndex": 999, "display": "block"})
+        return _AUTH_MENU_HIDDEN, {"display": "none"}
 
     # ---- mobile drawers: ☰/💬 toggle catalog/feedback; selecting an app or tapping the scrim closes ----
     @shell.callback(Output("cat-open", "data"), Output("fb-open", "data"),

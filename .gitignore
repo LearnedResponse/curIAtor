@@ -12,3 +12,6 @@ dist/
 feedback/shots/
 feedback/task_*.md
 docs/demo.gif
+
+# local-login user store (password hashes) — never commit
+.curiator-users.json
