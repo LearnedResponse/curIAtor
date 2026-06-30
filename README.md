@@ -7,9 +7,9 @@
   </picture>
 </h1>
 
-### Your Dash apps have a curator now.
+### Your web apps have a curator now.
 
-A self-hosted gallery for your team's Dash apps — **star, comment, and screenshot** any of them
+A self-hosted overlay for your team's web apps — **star, comment, and screenshot** any of them
 right in the browser, and an **AI coding agent reads the note, fixes the app, and replies.**
 The feedback loop your dashboards never had.
 
@@ -34,7 +34,7 @@ The feedback loop your dashboards never had.
 
 ## The problem
 
-You have a pile of internal dashboards — Dash apps for the sales team, a cohort explorer, three
+You have a pile of internal web apps — Dash dashboards for the sales team, a cohort explorer, three
 one-off analyses someone built last quarter. They're scattered across a dozen ports, half of them
 are a little broken, and there's **no channel for "hey, this axis is unlabeled"** that doesn't end
 in a Slack thread and a context-switch. Feedback dies; the apps rot.
@@ -66,7 +66,7 @@ Coding agents can fix this stuff in seconds now — but they're wired to your *e
    iframe.)
 2. **Feedback lives in the chrome, not the app.** The ★ / comment / **one-click screenshot** panel
    wraps *around* each app — so you never touch an app's source to collect feedback on it. It lands
-   in a JSON ledger.
+   in a SQLite ledger, which is the single runtime source of truth.
 3. **The curator acts.** New feedback wakes an AI coding agent with the comment, the screenshot, and
    the app's source path. It triages, makes the fix (or proposes a plan), smoke-tests it, reloads
    the app, and **replies right in the feedback panel.** You refresh and see it live.
@@ -76,6 +76,8 @@ Coding agents can fix this stuff in seconds now — but they're wired to your *e
 ```bash
 pip install curiator
 curiator init my-collection      # scaffold a collection repo (gallery.yaml + apps/ + a sample app)
+cd my-collection
+curiator app create orange_picker --template dash --title "Orange Picker"
 ```
 
 …or point it at existing apps in `gallery.yaml`:
@@ -87,11 +89,20 @@ apps:
     source: ./apps/aviato.py           # what the curator edits
     tags: [sales]
 
+  - name: research_suite                # app directories are first-class
+    root: ./apps/research_suite
+    source: .                           # the editable source scope for feedback
+    mounts:                             # multiple gallery endpoints can share one folder
+      - name: dashboard
+        mount: { kind: proxy, cmd: "python dashboard.py --port {port}", port: 8701 }
+      - name: diagnostics
+        mount: { kind: dash-inproc, module: diagnostics, source: diagnostics.py }
+
 agent:
   adapter: headless-cc                 # headless-cc (default) | api | command
   autonomy: auto-small                 # auto-small (fix small things) | propose-only (plan first)
 
-feedback: { dir: ./feedback, screenshots: true }
+feedback: { dir: ./feedback, screenshots: true }   # SQLite ledger source of truth
 ```
 
 ```bash
@@ -101,6 +112,9 @@ curiator watch        # arms the feedback→fix loop  (or `curiator serve` to ru
 
 Open the gallery, star/comment/screenshot an app, and watch the curator reply. To run it in a
 container (one sandbox per collection), see [`docs/USING_CURIATOR.md`](docs/USING_CURIATOR.md).
+While an agent is working, curIAtor writes the prompt bundle to `feedback/tasks/<feedback_id>.md`
+and streams stdout/stderr to `feedback/replies/<feedback_id>.md`; click a `working`/`done` status
+badge to inspect the trace.
 
 ## The agent, and where it runs
 
@@ -151,11 +165,10 @@ thin to maintain.
 
 ## Status
 
-**v0.1.0 — first release (Dash-first).** Shipping: the gallery shell + same-origin screenshot
-feedback + the closed `headless-cc` loop + **git-as-memory** (every fix is a commit; `curiator
-revert` / `reflect`) + `curiator init` collections + a **Docker** sandbox + the `aviato` demo. The
-`api`/team adapter, non-Dash (proxy) mounts, auth, and a branching/merge UI are on the roadmap — once
-the loop has earned it. Self-hosted, single-tenant: your box, your apps, your agent, your blast radius.
+**v0.2.0-dev — framework-neutral overlay.** The shell is moving to a Flask + React overlay with
+same-origin app mounting, SQLite feedback, threaded replies, and live agent traces. `dash-inproc`
+stays as a first-class mount for Dash apps; `proxy` is the universal mount for React/Node, Rust,
+Streamlit, Gradio, static apps, or anything else that speaks HTTP.
 
 ## The name
 

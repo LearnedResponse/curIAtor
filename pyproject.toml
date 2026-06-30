@@ -5,13 +5,13 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "curiator"
 version = "0.1.0"
-description = "An AI-maintained app gallery for Dash — comment + screenshot a live app, and a coding agent fixes it."
+description = "An AI-maintained web app overlay — comment + screenshot a live app, and a coding agent fixes it."
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "Apache-2.0" }
 classifiers = ["License :: OSI Approved :: Apache Software License"]
 authors = [{ name = "Adam Guetz" }]
-keywords = ["dash", "plotly", "gallery", "ai-agent", "claude", "feedback", "dashboards"]
+keywords = ["web-apps", "dash", "react", "gallery", "ai-agent", "feedback", "dashboards"]
 dependencies = [
   "dash>=2.14",
   "plotly>=5.18",

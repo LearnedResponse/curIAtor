@@ -1,6 +1,6 @@
-# CLAUDE.md — CurIAtor
+# CLAUDE.md — curIAtor
 
-> **This is a software project, not research.** CurIAtor is a self-hosted gallery for Dash apps with
+> **This is a software project, not research.** curIAtor is a self-hosted gallery for Dash apps with
 > an in-context feedback loop an AI coding agent acts on. There is **no math/geometry here** — if you
 > wandered in from a positive-geometry repo, that context does not apply. Stay in software.
 
@@ -54,7 +54,7 @@ coupling); the registry seam swapped to `registry.py`/`gallery.yaml`; 3 demo app
 **Next — pick up here, in order:**
 
 - **M1 — make `curiator up` actually boot the gallery.** The shell was written for apps living *next to*
-  it (`HERE / file`); CurIAtor's apps live in `examples/dash/`. `registry.py` already (a) gives each app
+  it (`HERE / file`); curIAtor's apps live in `examples/dash/`. `registry.py` already (a) gives each app
   an **absolute** `file` path and a `source`, and (b) inserts the source dirs on `sys.path` so
   `importlib.import_module("aviato")` resolves. Verify/finish:
   1. In `app_shell.py`, `load_registry()` decides `kind` via `(HERE / f).exists()` — with absolute paths
@@ -89,7 +89,7 @@ coupling); the registry seam swapped to `registry.py`/`gallery.yaml`; 3 demo app
   gallery.
 - **Keep research out.** Nothing from any positive-geometry repo belongs here. The shell's 0-coupling is
   the whole reason this extraction is clean — keep it that way.
-- **The name:** CurIAtor = curator + IA (also creator + curator). The broken demo app is `aviato` — the
+- **The name:** curIAtor = curator + IA (also creator + curator). The broken demo app is `aviato` — the
   joke is that *this* one gets fixed. Don't rename either without reason.
 
 ## Provenance

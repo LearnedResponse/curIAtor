@@ -1,4 +1,4 @@
-"""app_shell.py — CurIAtor — single-origin gallery shell + catalog + feedback. Port 8200.
+"""app_shell.py — curIAtor — single-origin gallery shell + catalog + feedback. Port 8200.
 
 The consolidated front door for your whole app gallery. ONE Flask server
 (via a lazy DispatcherMiddleware) mounts every Dash app at a PATH, so everything
@@ -21,22 +21,29 @@ Key properties:
     recency · open-feedback (the last is the Phase-2 loop's work queue).
   • Same-origin feedback — ★1–5 + comment + one-click html2canvas screenshot of
     the iframe (the thing separate ports blocked) + upload fallback. Claude posts
-    back ⚙ system notes; entries carry status badges. Persisted to
-    feedback/app_feedback.json (git-tracked) + feedback/shots/ (gitignored).
+    back ⚙ system notes; entries carry status badges. Runtime state is persisted to
+    feedback/app_feedback.sqlite; legacy JSON is import-only, and any web cache belongs under
+    feedback/cache/.
 
 Run:  python app_shell.py   →   http://127.0.0.1:8200
 """
 from __future__ import annotations
 
 import base64
+import atexit
 import importlib
 import json
 import os
 import re
+import shlex
 import sys
+import subprocess
 import threading
+import time
 import uuid
-from datetime import datetime, timezone
+import urllib.error
+import urllib.request
+from datetime import datetime, timedelta, timezone
 from html import escape as _esc
 from pathlib import Path
 
@@ -49,8 +56,8 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 PORT = 8200  # default; overridden by gallery.yaml shell.port just below (after the registry import)
 
-import registry as REG  # gallery.yaml-backed registry (CurIAtor drop-in for all_apps_index)
-from curiator import auth  # identity / provenance resolution (none | header | oidc)
+import registry as REG  # gallery.yaml-backed registry (curIAtor drop-in for all_apps_index)
+from curiator import auth, ledger  # identity/provenance + shared SQLite feedback ledger
 PORT = REG.SHELL_CFG.get("port", PORT)  # honor gallery.yaml: shell.port
 def _norm_title(raw):
     """Browser-tab title: normalize a leading brand token to the canonical lowercase 'curIAtor'."""
@@ -76,14 +83,31 @@ POLL_MS = int(REG.SHELL_CFG.get("poll_seconds", 4) * 1000)     # live-refresh th
 COLLECTION_NAME = _collection_name(REG.SHELL_CFG.get("title"))  # this collection/repo's name (brand-free)
 
 # The ledger + shots live at the repo-root feedback/ dir — the SAME tracked
-# feedback/app_feedback.json that ledger.py (the loop + `curiator reply`) reads/writes. The shell is
+# feedback/app_feedback.sqlite that ledger.py (the loop + `curiator reply`) reads/writes. The shell is
 # nested under curiator/shell/, so `HERE / feedback` would be a stray, split-brain ledger. Honor
 # gallery.yaml's feedback.dir (default "feedback"), resolved against the repo root.
 FEEDBACK_DIR = REG.REPO_ROOT / (REG.FEEDBACK_CFG.get("dir") or "feedback")
-FEEDBACK_JSON = FEEDBACK_DIR / "app_feedback.json"
+LEDGER_CFG = {**REG.CONFIG, "repo_root": str(REG.REPO_ROOT), "gallery_path": str(REG.GALLERY_YAML)}
 SHOTS = FEEDBACK_DIR / "shots"
+REPLIES = FEEDBACK_DIR / "replies"
 SHOTS.mkdir(parents=True, exist_ok=True)
+REPLIES.mkdir(parents=True, exist_ok=True)
 BLUE, GREEN, AMBER, GREY, PURPLE = "#2980b9", "#1f9d55", "#cc7a00", "#777", "#8e44ad"
+OPEN_STATUSES = {"new", "working", "awaiting_approval"}
+
+
+def _sync_shell_config() -> None:
+    """Refresh shell globals derived from gallery.yaml after registry reloads."""
+    global TITLE, POLL_MS, COLLECTION_NAME, FEEDBACK_DIR, LEDGER_CFG, SHOTS, REPLIES
+    TITLE = _norm_title(REG.SHELL_CFG.get("title"))
+    POLL_MS = int(REG.SHELL_CFG.get("poll_seconds", 4) * 1000)
+    COLLECTION_NAME = _collection_name(REG.SHELL_CFG.get("title"))
+    FEEDBACK_DIR = REG.REPO_ROOT / (REG.FEEDBACK_CFG.get("dir") or "feedback")
+    LEDGER_CFG = {**REG.CONFIG, "repo_root": str(REG.REPO_ROOT), "gallery_path": str(REG.GALLERY_YAML)}
+    SHOTS = FEEDBACK_DIR / "shots"
+    REPLIES = FEEDBACK_DIR / "replies"
+    SHOTS.mkdir(parents=True, exist_ok=True)
+    REPLIES.mkdir(parents=True, exist_ok=True)
 
 
 def _wordmark(size=15, suffix=None):
@@ -112,6 +136,165 @@ def _page(heading, body_html):
             f"<span style='color:#ccc;font-size:15px'>/</span>"
             f"<span style='font-weight:700;font-size:15px;color:#444'>{_esc(COLLECTION_NAME)}</span></div>"
             f"<h2 style='color:{PURPLE};margin:0 0 12px;font-size:17px'>{heading}</h2>{body_html}</div>")
+
+
+def _trace_path(feedback_id: str | None) -> Path | None:
+    if not feedback_id or not re.fullmatch(r"[A-Za-z0-9_-]+", str(feedback_id)):
+        return None
+    return REPLIES / f"{feedback_id}.md"
+
+
+def _trace_exists(entry: dict) -> bool:
+    p = _trace_path(entry.get("id"))
+    return bool(p and p.exists())
+
+
+def _trace_href(entry: dict) -> str:
+    return f"/feedback-trace/{entry.get('id')}"
+
+
+def _status_badge(entry: dict, status: str, color: str):
+    style = {"fontSize": "9.5px", "color": "white", "background": color,
+             "padding": "1px 6px", "borderRadius": "8px", "textDecoration": "none"}
+    if _trace_exists(entry):
+        return html.A(status, href=_trace_href(entry), target="_blank", title="open agent trace",
+                      style={**style, "cursor": "pointer"})
+    return html.Span(status, style=style)
+
+
+def _status_badge_html(entry: dict, status: str, color: str) -> str:
+    style = f"background:{color};color:white;font-size:9.5px;border-radius:8px;padding:1px 6px"
+    if _trace_exists(entry):
+        href = _esc(_trace_href(entry))
+        return (f"<a href='{href}' target='_blank' title='open agent trace' "
+                f"style='{style};text-decoration:none;cursor:pointer'>{_esc(status)}</a>")
+    return f"<span style='{style}'>{_esc(status)}</span>"
+
+
+def _entry_actor(entry: dict) -> str:
+    if entry.get("kind") == "system" or entry.get("author") == "claude":
+        return "Codex" if entry.get("agent") == "Codex" else str(entry.get("agent") or "Claude")
+    return (entry.get("user") or {}).get("name") or "user"
+
+
+def _entry_excerpt(entry: dict, limit: int = 74) -> str:
+    text = " ".join((entry.get("comment") or "").split())
+    if not text and entry.get("stars"):
+        text = "★" * int(entry.get("stars") or 0)
+    return text[:limit] + ("…" if len(text) > limit else "")
+
+
+def _thread_tree(items: list[dict]) -> tuple[list[dict], dict[str, list[dict]], dict[str, int]]:
+    """Build a parent→children tree from reply_to links, preserving ledger order inside each sibling set."""
+    by_id = {e.get("id"): e for e in items if e.get("id")}
+    children: dict[str, list[dict]] = {}
+    roots: list[dict] = []
+    order = {e.get("id"): i for i, e in enumerate(items) if e.get("id")}
+    for e in items:
+        parents = [pid for pid in (e.get("reply_to") or []) if pid in by_id]
+        parent = parents[-1] if parents else None
+        if parent:
+            children.setdefault(parent, []).append(e)
+        else:
+            roots.append(e)
+    return roots, children, order
+
+
+def _thread_activity(entry: dict, children: dict[str, list[dict]], order: dict[str, int]) -> int:
+    eid = entry.get("id")
+    latest = order.get(eid, -1)
+    for child in children.get(eid, []):
+        latest = max(latest, _thread_activity(child, children, order))
+    return latest
+
+
+def _reply_button(key: str, entry: dict):
+    return html.Button(
+        "reply",
+        id={"type": "fbreply", "key": key, "target": entry.get("id")},
+        n_clicks=0,
+        title="Reply to this message",
+        style={"border": "none", "background": "transparent", "color": BLUE, "fontSize": "10px",
+               "fontWeight": 700, "padding": "0 0 0 6px", "cursor": "pointer"},
+    )
+
+
+def _reply_button_html(key: str, entry: dict) -> str:
+    key_js = json.dumps(key)
+    id_js = json.dumps(entry.get("id"))
+    onclick = (
+        "event.stopPropagation();"
+        "if(window.parent&&window.parent.curiatorShell){"
+        f"window.parent.curiatorShell.replyTo({key_js}, {id_js});return;"
+        "}"
+        "if(window.parent&&window.parent.dash_clientside){"
+        f"window.parent.dash_clientside.set_props('selected-app', {{data: {key_js}}});"
+        f"window.parent.dash_clientside.set_props('fb-reply-to', {{data: {{key: {key_js}, id: {id_js}}}}});"
+        "}"
+    )
+    return (f"<button onclick=\"{_esc(onclick)}\" title='Reply to this message' "
+            f"style='border:none;background:transparent;color:{BLUE};font-size:10px;"
+            f"font-weight:700;padding:0 0 0 6px;cursor:pointer'>reply</button>")
+
+
+def _reply_context(key: str | None, target: dict | None):
+    if not key or not target or target.get("key") != key:
+        return None
+    entry = next((e for e in load_feedback().get(key, []) if e.get("id") == target.get("id")), None)
+    if not entry:
+        return None
+    return html.Div([
+        html.Div([
+            html.Span("replying to ", style={"color": GREY}),
+            html.B(_entry_actor(entry), style={"color": BLUE if entry.get("author") == "claude" else "#333"}),
+            html.Button("×", id="fb-reply-cancel", n_clicks=0, title="Cancel reply",
+                        style={"float": "right", "border": "none", "background": "transparent",
+                               "fontWeight": 800, "color": GREY, "cursor": "pointer", "fontSize": "13px"}),
+        ], style={"fontSize": "11px", "marginBottom": "2px"}),
+        html.Div(_entry_excerpt(entry, 110),
+                 style={"fontSize": "11px", "color": "#444", "whiteSpace": "nowrap",
+                        "overflow": "hidden", "textOverflow": "ellipsis"}),
+    ], style={"borderLeft": f"3px solid {BLUE}", "background": "#eef5fb", "padding": "5px 7px",
+              "borderRadius": "3px", "marginBottom": "6px"})
+
+
+def _trace_page(feedback_id: str, text: str) -> str:
+    fid = _esc(feedback_id)
+    return f"""<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <title>curIAtor trace {fid}</title>
+    <style>
+      body {{ margin: 0; font-family: system-ui, sans-serif; color: #222; background: #f6f7f9; }}
+      header {{ position: sticky; top: 0; z-index: 2; background: white; border-bottom: 1px solid #ddd;
+        padding: 10px 14px; display: flex; align-items: baseline; gap: 10px; }}
+      h1 {{ font-size: 14px; margin: 0; color: {PURPLE}; }}
+      .meta {{ color: #777; font-size: 11px; }}
+      pre {{ box-sizing: border-box; height: calc(100vh - 43px); margin: 0; overflow: auto; padding: 14px;
+        background: #111820; color: #dce7ef; font: 12px/1.45 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        white-space: pre-wrap; word-break: break-word; }}
+    </style>
+  </head>
+  <body>
+    <header>{_wordmark_html(17)}<h1>agent trace</h1><span class="meta">feedback {fid}</span></header>
+    <pre id="trace">{_esc(text)}</pre>
+    <script>
+      const pre = document.getElementById('trace');
+      async function refresh() {{
+        const nearBottom = pre.scrollTop + pre.clientHeight >= pre.scrollHeight - 40;
+        const r = await fetch('/feedback-trace/{fid}.md', {{cache: 'no-store'}});
+        if (r.ok) {{
+          pre.textContent = await r.text();
+          if (nearBottom) pre.scrollTop = pre.scrollHeight;
+        }}
+      }}
+      pre.scrollTop = pre.scrollHeight;
+      setInterval(refresh, 1500);
+    </script>
+  </body>
+</html>"""
 
 
 # the account dropdown (upper-right): a mini menu of Profile / Sign out (or Log in)
@@ -189,43 +372,60 @@ def load_registry():
         # registry.py emits ABSOLUTE source paths — use them as-is (not HERE / f, which assumed the
         # research-era layout where apps lived next to the shell).
         p = Path(f) if f else None
-        if p and p.suffix == ".py" and p.exists():
+        mount = a.get("mount") or {}
+        if mount.get("kind") == "proxy":
+            kind = "proxy"
+        elif p and p.suffix == ".py" and p.exists():
             kind = "dynamic"
         elif p and p.suffix == ".html" and p.exists():
             kind = "static"
+        elif p and p.is_dir() and p.exists():
+            kind = mount.get("kind", "directory")
         else:
             kind = "missing"
         recs.append({
             "key": key, "port": a.get("port"), "title": a.get("title", key),
             "tags": list(a.get("tags") or []), "color": a.get("color", "#888"),
-            "file": f, "kind": kind,
+            "file": f, "kind": kind, "mount": a.get("mount") or {},
+            "root": a.get("root"), "source": a.get("source"), "smoke": a.get("smoke"),
         })
     return recs
 
 
-REGISTRY = load_registry()
-BY_KEY = {r["key"]: r for r in REGISTRY}
-TAG_META = list(getattr(REG, "TAG_META", []))
-TAG_COLOR = dict(TAG_META)
-
 # gallery & runner-wide feedback target (not tied to any single app)
 GENERAL_KEY = "__general__"
-BY_KEY[GENERAL_KEY] = {"key": GENERAL_KEY, "port": None, "title": "General — the gallery & runner",
-                       "tags": ["meta"], "kind": "general"}
+
+
+def _general_record() -> dict:
+    return {"key": GENERAL_KEY, "port": None, "title": "General — the gallery & runner",
+            "tags": ["meta"], "kind": "general"}
+
+
+def refresh_registry(*, reload_module: bool = True) -> int:
+    """Re-read gallery.yaml so newly scaffolded apps appear in a running shell."""
+    global REG, REGISTRY, BY_KEY, TAG_META, TAG_COLOR
+    importlib.invalidate_caches()
+    if reload_module:
+        REG = importlib.reload(REG)
+    _sync_shell_config()
+    REGISTRY = load_registry()
+    BY_KEY = {r["key"]: r for r in REGISTRY}
+    TAG_META = list(getattr(REG, "TAG_META", []))
+    TAG_COLOR = dict(TAG_META)
+    BY_KEY[GENERAL_KEY] = _general_record()
+    return len(REGISTRY)
+
+
+refresh_registry(reload_module=False)
+HISTORY_RANGES = {
+    "1m": ("1 minute", timedelta(minutes=1)),
+    "5m": ("5 minutes", timedelta(minutes=5)),
+}
 
 
 # ============================== feedback =====================================
 def load_feedback() -> dict:
-    if FEEDBACK_JSON.exists():
-        try:
-            return json.loads(FEEDBACK_JSON.read_text())
-        except Exception:
-            return {}
-    return {}
-
-
-def _write(data):
-    FEEDBACK_JSON.write_text(json.dumps(data, indent=2) + "\n")
+    return ledger.load(LEDGER_CFG)
 
 
 def _current_user():
@@ -236,43 +436,37 @@ def _current_user():
         return None
 
 
-def save_entry(key, stars, comment, shot_dataurl, user=None):
-    data = load_feedback()
-    e = {"id": uuid.uuid4().hex[:8], "ts": datetime.now(timezone.utc).isoformat(timespec="seconds"),
-         "author": "user", "kind": "comment", "stars": stars, "comment": (comment or "").strip(),
-         "screenshot": None, "status": "new", "proposed_plan": None,
-         "user": auth.stamp(user if user is not None else _current_user())}
+def save_entry(key, stars, comment, shot_dataurl, user=None, reply_to=None):
+    eid = uuid.uuid4().hex[:8]
+    screenshot = None
     if shot_dataurl and shot_dataurl.startswith("data:image"):
-        fname = f"{key}_{e['id']}.png"
+        fname = f"{key}_{eid}.png"
         (SHOTS / fname).write_bytes(base64.b64decode(shot_dataurl.split(",", 1)[1]))
-        e["screenshot"] = f"shots/{fname}"
-    data.setdefault(key, []).append(e)
-    _write(data)
-    return e
+        screenshot = f"shots/{fname}"
+    ledger.save_entry(
+        LEDGER_CFG,
+        key,
+        entry_id=eid,
+        stars=stars,
+        comment=(comment or "").strip(),
+        screenshot=screenshot,
+        ts=datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        user=auth.stamp(user if user is not None else _current_user()),
+        extra={"proposed_plan": None, "reply_to": reply_to or []},
+    )
+    return next(e for e in load_feedback().get(key, []) if e.get("id") == eid)
 
 
 def add_system_note(key, text, reply_to=None, actions=None):
     """`actions` (optional) = list of approval-macro buttons, each a [label, value] pair (or a bare
     string used for both). When set — or when omitted but the note text contains A/B/C options — the
     feedback UI shows quick-approval buttons that post `value` as a user reply (so the loop fires)."""
-    norm = None
-    if actions:
-        norm = [[a, a] if isinstance(a, str) else list(a) for a in actions]
-    data = load_feedback()
-    e = {"id": uuid.uuid4().hex[:8], "ts": datetime.now(timezone.utc).isoformat(timespec="seconds"),
-         "author": "claude", "kind": "system", "comment": text.strip(), "reply_to": reply_to or [],
-         "status": "update", "stars": None, "screenshot": None, "actions": norm}
-    data.setdefault(key, []).append(e)
-    _write(data)
-    return e
+    nid = ledger.add_system_note(LEDGER_CFG, key, text.strip(), reply_to=reply_to, actions=actions)
+    return next(e for e in load_feedback().get(key, []) if e.get("id") == nid)
 
 
 def set_status(key, ids, status):
-    data = load_feedback()
-    for e in data.get(key, []):
-        if e["id"] in ids:
-            e["status"] = status
-    _write(data)
+    ledger.set_status(LEDGER_CFG, key, ids, status)
 
 
 def _parse_actions(text):
@@ -307,10 +501,10 @@ def thread_buttons(items):
     return (note["id"], acts) if acts else None
 
 
-def record_action(key, value):
+def record_action(key, value, reply_to=None):
     """A quick-approval button was clicked → post it as a normal user reply (status 'new') so the
     feedback watcher fires and the loop processes it exactly like a typed approval."""
-    return save_entry(key, None, str(value), None)
+    return save_entry(key, None, str(value), None, reply_to=[reply_to] if reply_to else None)
 
 
 def app_metrics(key):
@@ -318,7 +512,7 @@ def app_metrics(key):
     items = load_feedback().get(key, [])
     stars = [e["stars"] for e in items if e.get("stars")]
     avg = round(sum(stars) / len(stars), 1) if stars else None
-    n_open = sum(1 for e in items if e.get("kind") != "system" and e.get("status") in ("new", "awaiting_approval"))
+    n_open = sum(1 for e in items if e.get("kind") != "system" and e.get("status") in OPEN_STATUSES)
     return avg, n_open, len(items)
 
 
@@ -338,62 +532,127 @@ def _ts_span(iso):
     return html.Span(iso, className="ts", title=iso, **{"data-ts": iso})
 
 
-def render_history():
+def _parse_history_ts(iso):
+    if not iso:
+        return None
+    try:
+        dt = datetime.fromisoformat(str(iso).replace("Z", "+00:00"))
+    except (TypeError, ValueError):
+        return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(timezone.utc)
+
+
+def _history_range_nav(active):
+    def link(label, href, selected=False):
+        bg = PURPLE if selected else "#fff"
+        fg = "#fff" if selected else "#555"
+        border = PURPLE if selected else "#ddd"
+        return (f"<a href='{href}' style='display:inline-block;text-decoration:none;font-size:11px;"
+                f"font-weight:700;color:{fg};background:{bg};border:1px solid {border};"
+                f"border-radius:999px;padding:3px 9px;margin-left:5px'>{label}</a>")
+
+    return ("<div style='margin:2px 0 12px;color:#777;font-size:11px'>range "
+            f"{link('All', '/general', active is None)}"
+            f"{link(HISTORY_RANGES['1m'][0], '/general?range=1m', active == '1m')}"
+            f"{link(HISTORY_RANGES['5m'][0], '/general?range=5m', active == '5m')}</div>")
+
+
+def render_history(range_key=None):
     """Server-rendered HTML: every feedback thread across the library, newest app
     first (General pinned), entries chronological with user/⚙Claude styling."""
+    range_key = range_key if range_key in HISTORY_RANGES else None
+    cutoff = None
+    if range_key:
+        cutoff = datetime.now(timezone.utc) - HISTORY_RANGES[range_key][1]
+
+    def in_range(e):
+        if cutoff is None:
+            return True
+        dt = _parse_history_ts(e.get("ts"))
+        return bool(dt and dt >= cutoff)
+
     data = load_feedback()
-    keys = [k for k in data if data.get(k)]
-    keys.sort(key=lambda k: max((e.get("ts") or "" for e in data[k]), default=""), reverse=True)
-    if GENERAL_KEY in keys:
-        keys.remove(GENERAL_KEY)
-        keys = [GENERAL_KEY] + keys
-    n_threads = len(keys)
-    n_open = sum(1 for k in keys for e in data[k]
-                 if e.get("kind") != "system" and e.get("status") in ("new", "awaiting_approval"))
+    visible = {k: [e for e in items if in_range(e)] for k, items in data.items()}
+    visible.setdefault(GENERAL_KEY, [])
+    activity_keys = [k for k in visible if k != GENERAL_KEY and visible.get(k)]
+    activity_keys.sort(key=lambda k: max((_parse_history_ts(e.get("ts")) or datetime.min.replace(tzinfo=timezone.utc)
+                                          for e in visible[k]),
+                                         default=datetime.min.replace(tzinfo=timezone.utc)),
+                       reverse=True)
+    keys = [GENERAL_KEY] + activity_keys
+    n_threads = sum(1 for k in keys if visible.get(k))
+    n_open = sum(1 for k in keys for e in visible.get(k, [])
+                 if e.get("kind") != "system" and e.get("status") in OPEN_STATUSES)
     out = [
-        "<div style='font-family:system-ui,sans-serif;padding:1.6em 2em;color:#333;max-width:760px'>",
+        "<div style='font-family:system-ui,sans-serif;padding:1.6em 2em;color:#333;max-width:920px'>",
         # curIAtor logo + this collection's name (the custom repo name)
         f"<div style='display:flex;align-items:baseline;gap:11px;margin:0 0 10px'>{_wordmark_html(22)}"
         f"<span style='color:#ccc;font-size:16px'>/</span>"
         f"<span style='font-weight:700;font-size:16px;color:#444'>{_esc(COLLECTION_NAME)}</span></div>",
-        "<h2 style='color:#8e44ad;margin:0 0 2px;font-size:17px'>General feedback &amp; history</h2>",
-        "<p style='color:#555;margin:0 0 6px;font-size:13px'>Use the panel on the right for "
-        "<b>gallery & runner-wide</b> notes (this thread is “General”). Below: every feedback thread across "
-        f"the library.</p><p style='color:#777;font-size:12px;margin:0 0 14px'>{n_threads} threads · "
-        f"{n_open} open · {len(REGISTRY)} apps.</p>",
+        f"<h2 style='color:#8e44ad;margin:0 0 2px;font-size:18px'>{_esc(COLLECTION_NAME)} collection home</h2>",
+        "<p style='color:#555;margin:0 0 10px;font-size:13px;max-width:720px'>Use the panel on the right "
+        "for <b>gallery &amp; runner-wide</b> notes. General feedback stays pinned here; app-specific "
+        "threads roll up below as recent collection activity.</p>",
+        "<div style='display:flex;gap:8px;flex-wrap:wrap;margin:0 0 16px'>"
+        f"<span style='font-size:11px;color:#555;background:#f6f1fb;border:1px solid #e3d8ef;"
+        f"border-radius:999px;padding:3px 9px'>{len(REGISTRY)} apps</span>"
+        f"<span style='font-size:11px;color:#555;background:#f7f7f7;border:1px solid #e5e5e5;"
+        f"border-radius:999px;padding:3px 9px'>{n_threads} active threads</span>"
+        f"<span style='font-size:11px;color:#555;background:#fff5f5;border:1px solid #f0d4d4;"
+        f"border-radius:999px;padding:3px 9px'>{n_open} open</span></div>",
+        _history_range_nav(range_key),
     ]
-    for key in keys:
+    for idx, key in enumerate(keys):
+        if idx == 1:
+            out.append("<div style='margin:18px 0 6px;border-top:1px solid #eee;padding-top:13px'>"
+                       "<h3 style='font-size:14px;margin:0 0 3px;color:#333'>Latest activity</h3>"
+                       "<p style='color:#777;font-size:12px;margin:0 0 8px'>Recent app-specific "
+                       "feedback across the collection.</p></div>")
         rec = BY_KEY.get(key, {})
         if key == GENERAL_KEY:
-            label = "◆ General — library &amp; shell"
+            label = "◆ General feedback"
         else:
             label = f"<span style='font-family:monospace;background:{rec.get('color', '#888')};color:white;" \
                     f"padding:1px 5px;border-radius:4px;font-size:11px'>{rec.get('port', '—')}</span> " \
                     f"{_esc(rec.get('title', key))}"
-        items = data[key]
-        opn = sum(1 for e in items if e.get("kind") != "system" and e.get("status") in ("new", "awaiting_approval"))
+        items = visible.get(key, [])
+        opn = sum(1 for e in items if e.get("kind") != "system" and e.get("status") in OPEN_STATUSES)
         ob = f" <span style='background:#c0392b;color:white;font-size:10px;border-radius:8px;" \
              f"padding:0 6px'>{opn} open</span>" if opn else ""
         if key == GENERAL_KEY:                       # the General thread itself doesn't navigate
-            out.append(f"<div style='margin:14px 0 4px;border-top:1px solid #eee;padding-top:10px'>"
-                       f"<span style='font-weight:700;font-size:13px'>{label}</span>{ob}</div>")
+            out.append(f"<div style='margin:0 0 6px;border-top:1px solid #eee;padding-top:12px'>"
+                       f"<span style='font-weight:700;font-size:14px;color:{PURPLE}'>{label}</span>{ob}"
+                       "<div style='color:#777;font-size:12px;margin-top:2px'>Collection-wide notes, "
+                       "runner feedback, and coordination for the overlay itself.</div></div>")
         else:                                        # app threads: click → select that app (same-origin)
-            click = (f"window.parent && window.parent.dash_clientside && "
-                     f"window.parent.dash_clientside.set_props('selected-app', {{data: '{key}'}})")
-            out.append(f"<div onclick=\"{click}\" title='open this app' "
+            key_js = json.dumps(key)
+            click = (f"if(window.parent&&window.parent.curiatorShell){{window.parent.curiatorShell.selectApp({key_js});}}"
+                     f"else if(window.parent&&window.parent.dash_clientside){{"
+                     f"window.parent.dash_clientside.set_props('selected-app', {{data: {key_js}}});}}")
+            out.append(f"<div onclick=\"{_esc(click)}\" title='open this app' "
                        f"style='margin:14px 0 4px;border-top:1px solid #eee;padding-top:10px;cursor:pointer'>"
                        f"<span style='font-weight:700;font-size:13px'>{label}</span>{ob} "
                        f"<span style='color:#2980b9;font-size:10.5px'>↗ open</span></div>")
-        tb = thread_buttons(items)
-        for e in items:
+        if key == GENERAL_KEY and not items:
+            out.append("<div style='background:#fafafa;border-left:2px solid #ddd;padding:7px 10px;"
+                       "font-size:12.5px;color:#777;margin:4px 0 8px'>No General feedback yet. "
+                       "Use the feedback panel on the right for collection-wide notes.</div>")
+        tb = thread_buttons(data.get(key, []))
+        roots, children, order = _thread_tree(items)
+
+        def render_entry(e: dict, depth: int = 0):
             ts = e.get("ts") or ""
             tsh = (f"<span class='ts' data-ts='{_esc(ts)}' style='color:#999;font-size:10px'>"
                    f"{_esc(ts)}</span>") if ts else ""
+            indent = min(depth * 18, 72)
             if e.get("kind") == "system" or e.get("author") == "claude":
                 btns = ""
                 if tb and e["id"] == tb[0]:
                     chips = "".join(
-                        f"<button onclick=\"fetch('/fb-action?key={_esc(key)}&amp;value={_esc(val)}',"
+                        f"<button onclick=\"fetch('/fb-action?key={_esc(key)}&amp;value={_esc(val)}"
+                        f"&amp;reply_to={_esc(tb[0])}',"
                         f"{{method:'POST'}}).then(function(){{location.reload()}})\" "
                         f"style='font-size:11px;font-weight:700;color:white;background:#2980b9;border:none;"
                         f"border-radius:6px;padding:3px 11px;margin:0 5px 0 0;cursor:pointer'>{_esc(lbl)}</button>"
@@ -401,14 +660,16 @@ def render_history():
                     btns = (f"<div style='margin-top:6px'>{chips}"
                             f"<span style='color:#999;font-size:10px;margin-left:4px'>"
                             f"optional — or type a reply</span></div>")
-                out.append(f"<div style='margin:4px 0 4px 22px;border-left:3px solid #2980b9;"
+                out.append(f"<div style='margin:4px 0 4px {22 + indent}px;border-left:3px solid #2980b9;"
                            f"background:#eef5fb;padding:5px 9px;border-radius:3px'>"
                            f"<b style='color:#2980b9'>⚙ {_esc(e.get('agent') or 'Claude')}</b> {tsh}"
+                           f"{_reply_button_html(key, e)}"
                            f"<div style='font-size:12.5px;color:#1a3a5a;white-space:pre-wrap;margin-top:2px'>"
                            f"{_esc(e.get('comment', ''))}</div>{btns}</div>")
             else:
                 st = e.get("status", "new")
-                stc = {"new": "#cc7a00", "done": "#1f9d55", "awaiting_approval": "#2980b9"}.get(st, "#777")
+                stc = {"new": "#cc7a00", "working": "#8e44ad", "done": "#1f9d55",
+                       "awaiting_approval": "#2980b9"}.get(st, "#777")
                 stars = ("★" * (e.get("stars") or 0)) if e.get("stars") else ""
                 shot = (f"<br><img src='/feedback-shot/{Path(e['screenshot']).name}' "
                         f"style='max-width:320px;border:1px solid #ddd;border-radius:4px;margin-top:4px'>"
@@ -416,13 +677,19 @@ def render_history():
                 who = (e.get("user") or {}).get("name")
                 whoh = (f" <span style='color:#8e44ad;font-size:10px;font-weight:600'>· {_esc(who)}</span>"
                         if who else "")
-                out.append(f"<div style='margin:4px 0;border-left:2px solid {stc};padding:5px 9px;"
+                out.append(f"<div style='margin:4px 0 4px {indent}px;border-left:2px solid {stc};padding:5px 9px;"
                            f"background:#fafafa;border-radius:3px'>"
                            f"<span style='color:#cc7a00'>{stars}</span> "
-                           f"<span style='background:{stc};color:white;font-size:9.5px;border-radius:8px;"
-                           f"padding:1px 6px'>{st}</span> {tsh}{whoh}"
+                           f"{_status_badge_html(e, st, stc)} {tsh}{whoh}"
+                           f"{_reply_button_html(key, e)}"
                            f"<div style='font-size:12.5px;color:#333;white-space:pre-wrap;margin-top:2px'>"
                            f"{_esc(e.get('comment', ''))}{shot}</div></div>")
+            for child in children.get(e.get("id"), []):
+                render_entry(child, depth + 1)
+
+        roots = sorted(roots, key=lambda e: _thread_activity(e, children, order), reverse=True)
+        for root in roots:
+            render_entry(root, 0)
     out.append("</div>")
     out.append("<script src='/assets/localtime.js'></script>")   # render .ts in the viewer's local tz
     return "".join(out)
@@ -433,49 +700,56 @@ def feedback_list(key):
     if not items:
         return html.Div("No feedback yet.", style={"color": GREY, "fontSize": "12px"})
     tb = thread_buttons(items)
-    rows = []
-    for e in reversed(items):
+    roots, children, order = _thread_tree(items)
+
+    def render_entry(e: dict, depth: int = 0):
+        indent = min(depth * 14, 56)
         if e.get("kind") == "system" or e.get("author") == "claude":
             kids = [html.Div([html.Span(f"⚙ {e.get('agent') or 'Claude'}",
                                         style={"fontWeight": 700, "color": BLUE}),
                               html.Span(["  update · ", _ts_span(e.get("ts"))],
-                                        style={"color": GREY, "fontSize": "10px"})]),
+                                        style={"color": GREY, "fontSize": "10px"}),
+                              _reply_button(key, e)]),
                     html.Div(e.get("comment", ""), style={"fontSize": "12px", "color": "#1a3a5a",
                              "marginTop": "2px", "whiteSpace": "pre-wrap"})]
             if tb and e["id"] == tb[0]:
                 kids.append(html.Div(
-                    [html.Button(lbl, id={"type": "fbact", "key": key, "value": val}, n_clicks=0,
+                    [html.Button(lbl, id={"type": "fbact", "key": key, "value": val, "reply_to": tb[0]}, n_clicks=0,
                                  style={"fontSize": "11px", "fontWeight": 700, "color": "white",
                                         "background": BLUE, "border": "none", "borderRadius": "6px",
                                         "padding": "3px 11px", "marginRight": "5px", "cursor": "pointer"})
                      for lbl, val in tb[1]]
                     + [html.Span("optional — or type a reply", style={"color": GREY, "fontSize": "10px"})],
                     style={"marginTop": "6px"}))
-            rows.append(html.Div(kids,
+            row = html.Div(kids,
                 style={"borderLeft": f"3px solid {BLUE}", "padding": "5px 8px", "marginBottom": "6px",
-                       "background": "#eef5fb", "borderRadius": "3px"}))
-            continue
-        st = e.get("status", "new")
-        st_col = {"new": AMBER, "done": GREEN, "awaiting_approval": BLUE}.get(st, GREY)
-        stars = ("★" * (e.get("stars") or 0) + "✩" * (5 - (e.get("stars") or 0))) if e.get("stars") else ""
-        head = [html.Span(stars, style={"color": AMBER, "fontSize": "13px", "marginRight": "6px"}),
-                html.Span(st, style={"fontSize": "9.5px", "color": "white", "background": st_col,
-                          "padding": "1px 6px", "borderRadius": "8px"}),
-                html.Span(["  ", _ts_span(e.get("ts"))], style={"color": GREY, "fontSize": "10px"})]
-        who = (e.get("user") or {}).get("name")
-        if who:
-            head.append(html.Span(f"  · {who}", title=(e.get("user") or {}).get("email", ""),
-                                  style={"color": PURPLE, "fontSize": "10px", "fontWeight": 600}))
-        kids = [html.Div(head)]
-        if e.get("comment"):
-            kids.append(html.Div(e["comment"], style={"fontSize": "12px", "color": "#333", "marginTop": "2px"}))
-        if e.get("screenshot"):
-            kids.append(html.Img(src=f"/feedback-shot/{Path(e['screenshot']).name}",
-                                 style={"maxWidth": "100%", "marginTop": "4px", "border": "1px solid #ddd",
-                                        "borderRadius": "4px"}))
-        rows.append(html.Div(kids, style={"borderLeft": f"2px solid {st_col}", "padding": "4px 8px",
-                                          "marginBottom": "6px", "background": "#fafafa",
-                                          "opacity": 0.6 if st == "done" else 1.0}))
+                       "marginLeft": f"{indent}px", "background": "#eef5fb", "borderRadius": "3px"})
+        else:
+            st = e.get("status", "new")
+            st_col = {"new": AMBER, "working": PURPLE, "done": GREEN, "awaiting_approval": BLUE}.get(st, GREY)
+            stars = ("★" * (e.get("stars") or 0) + "✩" * (5 - (e.get("stars") or 0))) if e.get("stars") else ""
+            head = [html.Span(stars, style={"color": AMBER, "fontSize": "13px", "marginRight": "6px"}),
+                    _status_badge(e, st, st_col),
+                    html.Span(["  ", _ts_span(e.get("ts"))], style={"color": GREY, "fontSize": "10px"}),
+                    _reply_button(key, e)]
+            who = (e.get("user") or {}).get("name")
+            if who:
+                head.append(html.Span(f"  · {who}", title=(e.get("user") or {}).get("email", ""),
+                                      style={"color": PURPLE, "fontSize": "10px", "fontWeight": 600}))
+            kids = [html.Div(head)]
+            if e.get("comment"):
+                kids.append(html.Div(e["comment"], style={"fontSize": "12px", "color": "#333", "marginTop": "2px"}))
+            if e.get("screenshot"):
+                kids.append(html.Img(src=f"/feedback-shot/{Path(e['screenshot']).name}",
+                                     style={"maxWidth": "100%", "marginTop": "4px", "border": "1px solid #ddd",
+                                            "borderRadius": "4px"}))
+            row = html.Div(kids, style={"borderLeft": f"2px solid {st_col}", "padding": "4px 8px",
+                                        "marginBottom": "6px", "marginLeft": f"{indent}px",
+                                        "background": "#fafafa", "opacity": 0.6 if st == "done" else 1.0})
+        return html.Div([row] + [render_entry(child, depth + 1) for child in children.get(e.get("id"), [])])
+
+    roots = sorted(roots, key=lambda e: _thread_activity(e, children, order), reverse=True)
+    rows = [render_entry(root, 0) for root in roots]
     return html.Div(rows)
 
 
@@ -554,12 +828,29 @@ def catalog_rows(search, sortby, tags_sel, reverse):
 
 
 # ============================== lazy mounting ================================
+_PROXY_PROCS: dict[str, subprocess.Popen] = {}
+_HOP_HEADERS = {"connection", "keep-alive", "proxy-authenticate", "proxy-authorization",
+                "te", "trailers", "transfer-encoding", "upgrade"}
+
+
+def _cleanup_proxies():
+    for proc in list(_PROXY_PROCS.values()):
+        if proc.poll() is None:
+            proc.terminate()
+
+
+atexit.register(_cleanup_proxies)
+
+
 def resolve_server(key):
     """Build a sub-app's WSGI server, UNMODIFIED, with its pathname prefix.
     Handles build_app() and module-level `app`. Returns server or None."""
+    rec = BY_KEY.get(key) or {}
+    mount_cfg = rec.get("mount") or {}
+    module = mount_cfg.get("module") or key
     os.environ["DASH_REQUESTS_PATHNAME_PREFIX"] = f"/app/{key}/"
     try:
-        mod = importlib.import_module(key)
+        mod = importlib.import_module(module)
         if hasattr(mod, "build_app"):
             return mod.build_app().server
         if hasattr(mod, "app") and hasattr(mod.app, "server"):
@@ -567,6 +858,72 @@ def resolve_server(key):
         return None
     finally:
         os.environ.pop("DASH_REQUESTS_PATHNAME_PREFIX", None)
+
+
+def _ensure_proxy(key: str, rec: dict) -> tuple[bool, str | None]:
+    """Start a proxy app process if needed. Returns (ok, error_message)."""
+    mount_cfg = rec.get("mount") or {}
+    port = mount_cfg.get("port") or rec.get("port")
+    cmd = mount_cfg.get("cmd")
+    if not (port and cmd):
+        return False, "proxy mount needs `cmd` and `port`"
+    proc = _PROXY_PROCS.get(key)
+    if proc and proc.poll() is None:
+        return True, None
+    cwd = mount_cfg.get("cwd") or rec.get("root") or str(REG.COLLECTION_ROOT)
+    env = {**os.environ, "PORT": str(port), "CURIATOR_APP": key}
+    try:
+        _PROXY_PROCS[key] = subprocess.Popen(shlex.split(cmd), cwd=cwd, env=env)
+    except OSError as exc:
+        return False, str(exc)
+    return True, None
+
+
+def _proxy_call(key: str, rec: dict, rest: str, environ, start_response):
+    ok, err = _ensure_proxy(key, rec)
+    if not ok:
+        start_response("502 Bad Gateway", [("Content-Type", "text/html; charset=utf-8")])
+        return [f"<div style='font-family:sans-serif;padding:2em;color:#555'>"
+                f"<b>{key}</b> proxy could not start: {_esc(err)}</div>".encode()]
+    mount_cfg = rec.get("mount") or {}
+    port = mount_cfg.get("port") or rec.get("port")
+    path = rest or "/"
+    if not path.startswith("/"):
+        path = "/" + path
+    qs = environ.get("QUERY_STRING") or ""
+    url = f"http://127.0.0.1:{port}{path}" + (f"?{qs}" if qs else "")
+    method = environ.get("REQUEST_METHOD", "GET")
+    length = int(environ.get("CONTENT_LENGTH") or 0)
+    body = environ["wsgi.input"].read(length) if length else None
+    headers = {}
+    for k, v in environ.items():
+        if not k.startswith("HTTP_"):
+            continue
+        h = k[5:].replace("_", "-").title()
+        if h.lower() not in _HOP_HEADERS:
+            headers[h] = v
+    if environ.get("CONTENT_TYPE"):
+        headers["Content-Type"] = environ["CONTENT_TYPE"]
+    req = urllib.request.Request(url, data=body, headers=headers, method=method)
+    last_exc = None
+    for _ in range(20):
+        try:
+            resp = urllib.request.urlopen(req, timeout=30)
+            break
+        except urllib.error.HTTPError as exc:
+            resp = exc
+            break
+        except OSError as exc:
+            last_exc = exc
+            time.sleep(0.1)
+    else:
+        start_response("502 Bad Gateway", [("Content-Type", "text/html; charset=utf-8")])
+        return [f"<div style='font-family:sans-serif;padding:2em;color:#555'>"
+                f"<b>{key}</b> proxy failed: {_esc(str(last_exc))}</div>".encode()]
+    status = f"{resp.status} {getattr(resp, 'reason', 'OK')}"
+    out_headers = [(k, v) for k, v in resp.headers.items() if k.lower() not in _HOP_HEADERS]
+    start_response(status, out_headers)
+    return [resp.read()]
 
 
 class LazyDispatcher:
@@ -591,13 +948,18 @@ class LazyDispatcher:
         if p.startswith(self.prefix):
             key = p[len(self.prefix):].split("/", 1)[0]
             if key:
+                rec = BY_KEY.get(key) or {}
+                mount_cfg = rec.get("mount") or {}
+                mount = self.prefix + key
+                rest = p[len(mount):] or "/"
+                if mount_cfg.get("kind") == "proxy":
+                    return _proxy_call(key, rec, rest, environ, start_response)
                 app = self._get(key)
                 if app is None:
                     start_response("200 OK", [("Content-Type", "text/html")])
                     return [f"<div style='font-family:sans-serif;padding:2em;color:#555'>"
                             f"<b>{key}</b> could not be mounted (no build_app / module app, or a build "
                             f"error). It still runs standalone on its own port.</div>".encode()]
-                mount = self.prefix + key
                 environ["SCRIPT_NAME"] = environ.get("SCRIPT_NAME", "") + mount
                 environ["PATH_INFO"] = p[len(mount):]
                 return app(environ, start_response)
@@ -609,18 +971,43 @@ class LazyDispatcher:
 # built server, so the next view rebuilds from the edited source — the M2 "shell-cache" fix: an edit
 # goes live without restarting the whole shell.
 _DISPATCHER = None
+APP_REVISIONS: dict[str, int] = {}
 
 
 def invalidate_app(key: str) -> bool:
     """Forget a mounted app's cached build AND its imported Python module, so the next /app/<key>/ hit
     re-imports the edited source and rebuilds fresh. Returns True if the module had been imported."""
     importlib.invalidate_caches()
-    was_loaded = sys.modules.pop(key, None) is not None
+    rec = BY_KEY.get(key) or {}
+    module = (rec.get("mount") or {}).get("module") or key
+    was_loaded = sys.modules.pop(module, None) is not None
     d = _DISPATCHER
     if d is not None:
         with d.lock:
             d.cache.pop(key, None)
+    proc = _PROXY_PROCS.pop(key, None)
+    if proc and proc.poll() is None:
+        proc.terminate()
     return was_loaded
+
+
+def reload_app(key: str) -> dict:
+    """Refresh gallery.yaml and invalidate one app. Used by `curiator reply --status done`.
+
+    Refreshing the registry here is what lets agent-created apps appear in the running shell without a
+    manual restart: the agent updates `gallery.yaml`, then `curiator reply` pokes `/reload/<new_app>`.
+    """
+    count = refresh_registry()
+    was_loaded = invalidate_app(key)
+    revision = APP_REVISIONS.get(key, 0) + 1
+    APP_REVISIONS[key] = revision
+    return {
+        "reloaded": key,
+        "module_was_loaded": was_loaded,
+        "registered": key in BY_KEY,
+        "registry_count": count,
+        "revision": revision,
+    }
 
 
 # ============================== shell chrome =================================
@@ -739,20 +1126,37 @@ def build_shell() -> Dash:
     def _shot(fname):
         return send_from_directory(SHOTS, fname)
 
+    @shell.server.route("/feedback-trace/<feedback_id>.md")
+    def _trace_raw(feedback_id):
+        from flask import Response
+        p = _trace_path(feedback_id)
+        if not p or not p.exists():
+            return ("trace not found", 404)
+        return Response(p.read_text(encoding="utf-8", errors="replace"),
+                        mimetype="text/markdown; charset=utf-8")
+
+    @shell.server.route("/feedback-trace/<feedback_id>")
+    def _trace(feedback_id):
+        p = _trace_path(feedback_id)
+        if not p or not p.exists():
+            return _page("Agent trace", "<p style='color:#777;font-size:13px'>No trace file for this feedback.</p>"), 404
+        return _trace_page(feedback_id, p.read_text(encoding="utf-8", errors="replace"))
+
     @shell.server.route("/static-app/<path:fname>")
     def _static_app(fname):
         return send_from_directory(HERE, fname)
 
     @shell.server.route("/general")
     def _general():
-        return render_history()
+        from flask import request
+        return render_history(request.args.get("range"))
 
     @shell.server.route("/reload/<key>", methods=["POST", "GET"])
     def _reload(key):
         # Poked by `curiator reply --status done` after the agent edits an app: drop the cached build so
         # the next view rebuilds from the edited source (refresh the gallery to see the fix).
         from flask import jsonify
-        return jsonify({"reloaded": key, "module_was_loaded": invalidate_app(key)})
+        return jsonify(reload_app(key))
 
     tag_opts = [{"label": t, "value": t} for t, _c in TAG_META]
     controls = html.Div([
@@ -809,6 +1213,8 @@ def build_shell() -> Dash:
         dcc.RadioItems(id="fb-stars", inline=True,
                        options=[{"label": "★" * i, "value": i} for i in range(1, 6)],
                        style={"fontSize": "15px", "color": AMBER, "marginBottom": "6px"}),
+        dcc.Store(id="fb-reply-to"),
+        html.Div(id="fb-reply-context"),
         dcc.Textarea(id="fb-comment", placeholder="What's good / what to change…",
                      style={"width": "100%", "height": "80px", "fontSize": "12px", "marginBottom": "6px",
                             "boxSizing": "border-box"}),
@@ -940,33 +1346,51 @@ def build_shell() -> Dash:
             return data, {**base, "display": "block"}
         return no_update, {**base, "display": "none"}
 
+    @shell.callback(Output("fb-reply-to", "data"),
+                    Input({"type": "fbreply", "key": ALL, "target": ALL}, "n_clicks"),
+                    Input("fb-reply-cancel", "n_clicks"), prevent_initial_call=True)
+    def _set_reply_target(_clicks, _cancel):
+        trig = ctx.triggered_id
+        if trig == "fb-reply-cancel":
+            return None
+        if isinstance(trig, dict) and trig.get("type") == "fbreply":
+            return {"key": trig.get("key"), "id": trig.get("target")}
+        return no_update
+
+    @shell.callback(Output("fb-reply-context", "children"),
+                    Input("fb-reply-to", "data"), Input("selected-app", "data"))
+    def _show_reply_target(target, key):
+        return _reply_context(key, target)
+
     @shell.callback(Output("fb-status", "children"), Output("fb-status", "style"),
                     Output("fb-list", "children", allow_duplicate=True), Output("fb-comment", "value"),
                     Output("fb-stars", "value"), Output("shot-store", "data", allow_duplicate=True),
                     Output("fb-preview", "style", allow_duplicate=True), Output("cat-list", "children", allow_duplicate=True),
+                    Output("fb-reply-to", "data", allow_duplicate=True),
                     Input("fb-save", "n_clicks"), State("selected-app", "data"), State("fb-stars", "value"),
                     State("fb-comment", "value"), State("shot-store", "data"),
                     State("cat-search", "value"), State("cat-sort", "value"), State("cat-tags", "value"),
-                    State("cat-rev", "value"), prevent_initial_call=True)
-    def _save(n, key, stars, comment, shot, search, sortby, tags_sel, rev):
+                    State("cat-rev", "value"), State("fb-reply-to", "data"), prevent_initial_call=True)
+    def _save(n, key, stars, comment, shot, search, sortby, tags_sel, rev, reply_to):
         okstyle = {"fontSize": "11.5px", "color": GREEN}
         errstyle = {"fontSize": "11.5px", "color": "#c0392b"}
         hide = {"display": "none"}
         if not key:
-            return "Select an app first.", errstyle, no_update, no_update, no_update, no_update, no_update, no_update
+            return "Select an app first.", errstyle, no_update, no_update, no_update, no_update, no_update, no_update, no_update
         u = _current_user()
         if auth.login_required(REG.AUTH_CFG) and not u:    # oidc: feedback requires a verified identity
             return ("Sign in to leave feedback.", errstyle, no_update, no_update, no_update,
-                    no_update, no_update, no_update)
+                    no_update, no_update, no_update, no_update)
         if not stars and not (comment or "").strip() and not shot:
             return "Add a rating, comment, or screenshot.", errstyle, no_update, no_update, no_update, \
-                no_update, no_update, no_update
+                no_update, no_update, no_update, no_update
         shot = shot if (isinstance(shot, str) and shot.startswith("data:image")) else None
-        e = save_entry(key, stars, comment, shot, user=u)
+        parent = reply_to.get("id") if isinstance(reply_to, dict) and reply_to.get("key") == key else None
+        e = save_entry(key, stars, comment, shot, user=u, reply_to=[parent] if parent else None)
         who = (e.get("user") or {}).get("name")
         msg = f"✓ saved ({e['id']})" + (f" · {who}" if who else "") + ("  +screenshot" if e["screenshot"] else "")
         return msg, okstyle, feedback_list(key), "", None, None, hide, \
-            catalog_rows(search, sortby, tags_sel, bool(rev))
+            catalog_rows(search, sortby, tags_sel, bool(rev)), None
 
     # ---- live refresh: poll the ledger; update the open thread + catalog badges when it changes ----
     @shell.callback(Output("fb-list", "children", allow_duplicate=True),
@@ -979,7 +1403,7 @@ def build_shell() -> Dash:
     def _live_refresh(_n, sel, sig, search, sortby, tags_sel, rev):
         sig = sig or {}
         try:
-            mtime = FEEDBACK_JSON.stat().st_mtime
+            mtime = ledger.storage_mtime(LEDGER_CFG)
         except OSError:
             mtime = 0
         if mtime == sig.get("mtime"):
@@ -1054,7 +1478,7 @@ def build_shell() -> Dash:
         trig = ctx.triggered_id
         if not trig or not any(clicks or []):
             return no_update, no_update, no_update
-        record_action(trig["key"], trig["value"])
+        record_action(trig["key"], trig["value"], trig.get("reply_to"))
         newlist = feedback_list(trig["key"]) if trig["key"] == sel else no_update
         return newlist, f"✓ recorded “{trig['value']}” — processing shortly", {"fontSize": "11.5px", "color": GREEN}
 
@@ -1063,8 +1487,9 @@ def build_shell() -> Dash:
         from flask import request
         key = request.args.get("key")
         value = request.args.get("value")
+        reply_to = request.args.get("reply_to")
         if key and value is not None:
-            record_action(key, value)
+            record_action(key, value, reply_to)
             return ("ok", 200)
         return ("missing key/value", 400)
 

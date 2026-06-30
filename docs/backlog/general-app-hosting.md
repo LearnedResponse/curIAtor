@@ -1,6 +1,9 @@
 # Backlog — general app hosting (any framework, multi-file apps)
 
-> **Status:** design note. **Reframed 2026-06-29 — this is *not* an expansion past Dash; it *realizes*
+> **Status:** partially landed. App directories, multi-endpoint `mounts:`, and the lightweight same-origin
+> `proxy` mount are in the runner; initial `curiator app create` scaffolds landed for Dash/static/Python;
+> richer framework templates, build/HMR ergonomics, and heavier
+> Docker/Compose orchestration remain backlog. **Reframed 2026-06-29 — this is *not* an expansion past Dash; it *realizes*
 > what the overlay already is.** Near-term: build the **one non-Dash proof** (it's what shows what
 > curiator actually is). v1: full generality + scaffold templates.
 
@@ -64,14 +67,14 @@ as cwd. The agent's **task bundle gets the app directory** (it can edit any file
 
 The instinct to add a "React plugin" / "Svelte wrapper" is the wrong shape. The generic **`proxy` mount +
 a directory + a `cmd`** already hosts *any* framework — there's nothing React-specific to integrate. What's
-actually worth building is **scaffolding templates**, not plugins:
+actually worth building is **scaffolding templates**, not plugins. The initial command is:
 
 ```
-curiator init-app pnl-board --framework svelte    # scaffolds apps/pnl-board/ + the gallery.yaml entry
+curiator app create pnl-board --template dash     # scaffolds apps/pnl-board/ + the gallery.yaml entry
 ```
 
-i.e. a thin `create-vite`-style scaffolder per framework (dash / static / react / svelte / gradio /
-streamlit), each emitting a directory + the right `mount` block. Plugins = lock-in + maintenance; templates
+i.e. a thin `create-vite`-style scaffolder per framework (currently dash / static / python; later
+react / svelte / gradio / streamlit), each emitting a directory + the right `mount` block. Plugins = lock-in + maintenance; templates
 + the generic proxy = leverage. Stay generic at the mount, opinionated only at scaffold time.
 
 ## Honest scoping & sequencing
@@ -105,9 +108,9 @@ streamlit), each emitting a directory + the right `mount` block. Plugins = lock-
 
 ## Recommended path (when the time comes)
 
-1. **Directories-per-app first** (cheap, no toolchain; unblocks everything).
-2. **The `proxy` mount + same-origin reverse-proxy** (the framework-agnostic substrate; also proves the
-   "any framework" claim with one non-Dash example).
+1. **Directories-per-app first** (landed).
+2. **The `proxy` mount + same-origin reverse-proxy** (landed as a lightweight localhost proxy; still needs
+   framework-specific templates/build ergonomics).
 3. **Scaffold templates** (`curiator init-app --framework …`) — the ergonomic layer, generic not plugin.
 4. JS-specific niceties (HMR base-path, build smoke-test) per framework as demand warrants.
 

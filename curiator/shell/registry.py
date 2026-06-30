@@ -18,7 +18,7 @@ from pathlib import Path
 try:
     import yaml
 except ImportError as e:  # pragma: no cover
-    raise SystemExit("CurIAtor needs PyYAML — `pip install pyyaml` (or `pip install curiator`).") from e
+    raise SystemExit("curIAtor needs PyYAML — `pip install pyyaml` (or `pip install curiator`).") from e
 
 PACKAGE_ROOT = Path(__file__).resolve().parents[2]   # the curiator package/checkout root (NOT the collection)
 GALLERY_YAML = Path(os.environ.get("CURIATOR_GALLERY", PACKAGE_ROOT / "gallery.yaml"))
@@ -33,7 +33,7 @@ _DEFAULT_PORT_BASE = 8201   # reference IDs only (mounts are in-process, no real
 
 def _load_yaml() -> dict:
     if not GALLERY_YAML.exists():
-        raise SystemExit(f"CurIAtor: no gallery config at {GALLERY_YAML} "
+        raise SystemExit(f"curIAtor: no gallery config at {GALLERY_YAML} "
                          f"(set $CURIATOR_GALLERY or create gallery.yaml — see docs/DESIGN.md).")
     return yaml.safe_load(GALLERY_YAML.read_text()) or {}
 
@@ -50,28 +50,76 @@ AUTH_CFG["users_file"] = str(COLLECTION_ROOT / AUTH_CFG.get("users_file", ".curi
 APP_SOURCE_DIRS: list[Path] = []
 
 
+def _resolve_path(base: Path, value: str | None) -> Path | None:
+    if not value:
+        return None
+    p = Path(value)
+    return p if p.is_absolute() else (base / p).resolve()
+
+
+def _mount_entries(app_cfg: dict) -> list[tuple[str, dict]]:
+    """A config item can be one endpoint (`mount:`) or several endpoints (`mounts:`) sharing a root."""
+    if app_cfg.get("mounts"):
+        out = []
+        for m in app_cfg.get("mounts") or []:
+            mount = dict(m.get("mount") or m)
+            if m.get("mount"):
+                for k in ("source", "title", "tags", "color", "smoke", "cwd", "port", "cmd"):
+                    if k in m and k not in mount:
+                        mount[k] = m[k]
+            name = m.get("name") or mount.get("name") or app_cfg["name"]
+            out.append((name, mount))
+        return out
+    return [(app_cfg["name"], dict(app_cfg.get("mount") or {}))]
+
+
 def _build_all_apps() -> list[dict]:
     apps = []
-    for i, a in enumerate(CONFIG.get("apps", []) or []):
-        name = a["name"]
-        mount = a.get("mount", {}) or {}
-        source = a.get("source")
-        src_path = (COLLECTION_ROOT / source).resolve() if source else None
-        if src_path and src_path.parent not in APP_SOURCE_DIRS:
-            APP_SOURCE_DIRS.append(src_path.parent)
-        apps.append({
-            # the shell reads these keys (see app_shell.load_registry):
-            "key": mount.get("module", name),            # the import name for dash-inproc mount
-            "file": str(src_path) if src_path else None,  # absolute source path (M1: shell must resolve abs paths)
-            "port": a.get("port", _DEFAULT_PORT_BASE + i),  # reference id only
-            "title": a.get("title", name.replace("_", " ")),
-            "tags": list(a.get("tags") or []),
-            "color": a.get("color", "#888"),
-            # extra (CurIAtor-native) fields the generalized shell/loop use:
-            "name": name,
-            "mount": mount,
-            "source": str(src_path) if src_path else None,
-        })
+    ordinal = 0
+    for a in CONFIG.get("apps", []) or []:
+        base_name = a["name"]
+        root = _resolve_path(COLLECTION_ROOT, a.get("root")) or COLLECTION_ROOT
+        for name, mount in _mount_entries(a):
+            source = mount.get("source", a.get("source", "." if a.get("root") else None))
+            source_base = root if a.get("root") else COLLECTION_ROOT
+            src_path = _resolve_path(source_base, source)
+            if src_path:
+                syspath = src_path if src_path.is_dir() else src_path.parent
+                if syspath not in APP_SOURCE_DIRS:
+                    APP_SOURCE_DIRS.append(syspath)
+            if root not in APP_SOURCE_DIRS:
+                APP_SOURCE_DIRS.append(root)
+            port = mount.get("port", a.get("port", _DEFAULT_PORT_BASE + ordinal))
+            title = mount.get("title", a.get("title", name.replace("_", " ")))
+            tags = list(mount.get("tags", a.get("tags") or []))
+            color = mount.get("color", a.get("color", "#888"))
+            key = name
+            ordinal += 1
+            smoke = mount.get("smoke", a.get("smoke"))
+            cmd = mount.get("cmd")
+            if cmd and port is not None:
+                mount["cmd"] = str(cmd).format(port=port, root=str(root), app=key)
+            mount.setdefault("kind", "dash-inproc")
+            if mount.get("kind") == "dash-inproc":
+                mount.setdefault("module", key)
+            if port is not None:
+                mount["port"] = port
+            apps.append({
+                # the shell reads these keys (see app_shell.load_registry):
+                "key": key,
+                "file": str(src_path) if src_path else None,  # absolute source path
+                "port": port,  # reference id for dash-inproc; real target for proxy
+                "title": title,
+                "tags": tags,
+                "color": color,
+                # extra (curIAtor-native) fields the generalized shell/loop use:
+                "name": key,
+                "base_name": base_name,
+                "mount": mount,
+                "root": str(root),
+                "source": str(src_path) if src_path else None,
+                "smoke": smoke,
+            })
     # make demo apps importable for the in-process Dash mount
     for d in APP_SOURCE_DIRS:
         if str(d) not in sys.path:
@@ -84,6 +132,6 @@ ALL_APPS = _build_all_apps()
 # tag → color, for the catalog chips (optional; app_shell does getattr(REG, "TAG_META", []))
 TAG_META = list((CONFIG.get("tags") or {}).items())
 
-# CurIAtor-native exports the generalized shell + loop consume:
+# curIAtor-native exports the generalized shell + loop consume:
 APPS_ROOT = APP_SOURCE_DIRS[0] if APP_SOURCE_DIRS else REPO_ROOT   # primary source dir
 BY_NAME = {a["name"]: a for a in ALL_APPS}

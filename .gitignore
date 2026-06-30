@@ -8,9 +8,13 @@ dist/
 .pytest_cache/
 .DS_Store
 
-# feedback artifacts: keep the ledger, ignore shots + generated task files
+# feedback artifacts: keep the ledger, ignore shots + generated task/output files
 feedback/shots/
 feedback/task_*.md
+feedback/tasks/
+feedback/replies/
+feedback/app_feedback.sqlite*
+feedback/app_feedback.json
 docs/demo.gif
 
 # local-login user store (password hashes) — never commit

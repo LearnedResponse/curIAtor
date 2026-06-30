@@ -22,6 +22,8 @@ import shutil
 import subprocess
 from pathlib import Path
 
+from .. import runlog
+
 _SANDBOXES = ("read-only", "workspace-write", "danger-full-access")
 
 
@@ -63,13 +65,13 @@ def run(task) -> None:
     try:
         # stdin=DEVNULL: codex exec reads stdin even with a positional prompt ("Reading additional input
         # from stdin…") — give it immediate EOF so it can't block the loop waiting on a non-existent TTY.
-        proc = subprocess.run(cmd, cwd=repo_root, capture_output=True, text=True,
-                              stdin=subprocess.DEVNULL, timeout=int(agent.get("timeout", 900)))
+        proc = runlog.run_streamed(task, cmd, cwd=repo_root, timeout=int(agent.get("timeout", 900)),
+                                   label="codex exec", display_cmd=["codex", "exec", "<task bundle>", "..."],
+                                   stdin=subprocess.DEVNULL)
     except subprocess.TimeoutExpired as exc:
         raise RuntimeError(f"codex exec timed out after {agent.get('timeout', 900)}s") from exc
 
-    out, err = (proc.stdout or "").strip(), (proc.stderr or "").strip()
-    if out:
-        print(f"[codex] {task.key}/{task.entry.get('id')}:\n{out[-2000:]}")
+    if proc.tail.strip():
+        print(f"[codex] {task.key}/{task.entry.get('id')}:\n{proc.tail[-2000:]}")
     if proc.returncode != 0:
-        raise RuntimeError(f"codex exec exited {proc.returncode}: {(err or out)[-800:]}")
+        raise RuntimeError(f"codex exec exited {proc.returncode}: {proc.tail[-800:]}")

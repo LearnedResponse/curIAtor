@@ -11,16 +11,18 @@ from pathlib import Path
 try:
     import yaml
 except ImportError as e:  # pragma: no cover
-    raise SystemExit("CurIAtor needs PyYAML — `pip install pyyaml`.") from e
+    raise SystemExit("curIAtor needs PyYAML — `pip install pyyaml`.") from e
 
 
 def find_gallery() -> Path:
     env = os.environ.get("CURIATOR_GALLERY")
     if env:
         return Path(env)
-    cwd = Path.cwd() / "gallery.yaml"
-    if cwd.exists():
-        return cwd
+    cwd = Path.cwd().resolve()
+    for base in (cwd, *cwd.parents):
+        candidate = base / "gallery.yaml"
+        if candidate.exists():
+            return candidate
     # repo-root fallback (this file is curiator/config.py)
     return Path(__file__).resolve().parents[1] / "gallery.yaml"
 
@@ -28,7 +30,7 @@ def find_gallery() -> Path:
 def load_config() -> dict:
     p = find_gallery()
     if not p.exists():
-        raise SystemExit(f"CurIAtor: no gallery.yaml found (looked at {p}). See docs/DESIGN.md.")
+        raise SystemExit(f"curIAtor: no gallery.yaml found (looked at {p}). See docs/DESIGN.md.")
     cfg = yaml.safe_load(p.read_text()) or {}
     cfg["repo_root"] = str(p.resolve().parent)   # everything (feedback/, sources) is relative to here
     cfg["gallery_path"] = str(p.resolve())
@@ -43,7 +45,7 @@ def load_config() -> dict:
     git.setdefault("commit", False)              # false = leave uncommitted | true = git-as-memory
     git.setdefault("branch", "curiator/auto")    # sandbox/env branch (empty/null ⇒ current HEAD)
     git.setdefault("signoff", True)              # add Signed-off-by (DCO) via `git commit -s`
-    git.setdefault("include_ledger", True)       # bundle the feedback ledger in the same commit
+    git.setdefault("include_ledger", False)      # opt in to bundling the SQLite ledger in commits
     cfg["git"] = git
     # Identity / provenance (docs: who gave each piece of feedback). Additive: absent ⇒ mode none
     # (a fixed default_user — provenance even solo, today's anonymous single-tenant behavior).

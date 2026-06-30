@@ -13,9 +13,12 @@ reads; loop/task_template.md is the standing protocol (triage / smoke-test / rep
 from __future__ import annotations
 
 import re
+import shlex
 from dataclasses import dataclass
 from pathlib import Path
 
+from ... import ledger
+from .. import runlog
 from . import headless_cc, codex, api as api_adapter, command as command_adapter
 
 # The library/shell-wide feedback bucket (mirrors app_shell.GENERAL_KEY). Most General feedback is
@@ -24,10 +27,15 @@ from . import headless_cc, codex, api as api_adapter, command as command_adapter
 GENERAL_KEY = "__general__"
 
 _COLLECTION_GENERAL_RE = re.compile(
-    r"\b(create|add|build|scaffold|implement|make)\b"
+    r"\b(create|add|build|scaffold|implement|make|do)\b"
     r"(?:(?!\brunner\b|\bshell\b|\bcuriator itself\b).){0,80}"
     r"\b(new\s+)?(curiator\s+)?(app|dashboard|explainer|overview)\b",
     re.I | re.S,
+)
+
+_GENERAL_APPROVAL_REPLY_RE = re.compile(
+    r"\b(ok(?:ay)?|yes|approved?|go ahead|do it|proceed|please do|sounds good)\b",
+    re.I,
 )
 
 
@@ -37,6 +45,7 @@ class Task:
     entry: dict
     source: str | None
     task_file: str
+    reply_file: str
     cfg: dict
     agent: dict | None = None        # the EFFECTIVE agent profile for this item (base, or elevated)
 
@@ -65,16 +74,58 @@ _ADAPTERS = {
 def get(cfg: dict):
     name = (cfg.get("agent", {}) or {}).get("adapter", "headless-cc")
     if name not in _ADAPTERS:
-        raise SystemExit(f"CurIAtor: unknown agent.adapter '{name}' "
+        raise SystemExit(f"curIAtor: unknown agent.adapter '{name}' "
                          f"(choose: {', '.join(_ADAPTERS)})")
     return _ADAPTERS[name]
 
 
 def _source_for(cfg: dict, key: str) -> str | None:
+    spec = _app_spec(cfg, key)
+    if spec:
+        return spec.get("source")
+    return None
+
+
+def _resolve(base: Path, value: str | None) -> Path | None:
+    if not value:
+        return None
+    p = Path(value)
+    return p if p.is_absolute() else (base / p).resolve()
+
+
+def _app_spec(cfg: dict, key: str) -> dict | None:
+    """Return normalized endpoint metadata for a configured app or mount entry."""
+    repo = Path(cfg["repo_root"]).resolve()
     for a in (cfg.get("apps") or []):
-        if a.get("name") == key or (a.get("mount", {}) or {}).get("module") == key:
-            src = a.get("source")
-            return str(Path(cfg["repo_root"]) / src) if src else None
+        root = _resolve(repo, a.get("root")) or repo
+        mounts = a.get("mounts")
+        if mounts:
+            candidates = []
+            for m in mounts:
+                mount = dict(m.get("mount") or m)
+                if m.get("mount"):
+                    for k in ("source", "title", "tags", "color", "smoke", "cwd", "port", "cmd"):
+                        if k in m and k not in mount:
+                            mount[k] = m[k]
+                name = m.get("name") or mount.get("name") or a.get("name")
+                candidates.append((name, mount))
+        else:
+            candidates = [(a.get("name"), dict(a.get("mount") or {}))]
+        for name, mount in candidates:
+            aliases = {name, a.get("name"), mount.get("module")}
+            if key not in aliases:
+                continue
+            source = mount.get("source", a.get("source", "." if a.get("root") else None))
+            source_base = root if a.get("root") else repo
+            source_path = _resolve(source_base, source) or root
+            smoke = mount.get("smoke", a.get("smoke"))
+            return {
+                "name": name,
+                "root": str(root),
+                "source": str(source_path),
+                "smoke": smoke,
+                "mount": mount,
+            }
     return None
 
 
@@ -98,6 +149,96 @@ def _shot_path(cfg: dict, entry: dict) -> str | None:
     return str(Path(cfg["repo_root"]) / fb_dir / shot)
 
 
+def _entry_label(entry: dict) -> str:
+    who = "agent" if entry.get("kind") == "system" or entry.get("author") == "claude" else "user"
+    status = entry.get("status") or "?"
+    ts = entry.get("ts") or "?"
+    return f"{entry.get('id')} · {who} · {status} · {ts}"
+
+
+def _related_thread_entries(cfg: dict, key: str, entry: dict, limit: int = 10) -> list[dict]:
+    """Prior thread entries relevant to this wake."""
+    items = ledger.load(cfg).get(key, [])
+    if not items:
+        return []
+    current = entry.get("id")
+    related = {current} if current else set()
+    related.update(entry.get("reply_to") or [])
+    changed = True
+    while changed:
+        changed = False
+        for item in items:
+            iid = item.get("id")
+            links = set(item.get("reply_to") or [])
+            if iid in related or (links & related):
+                before = len(related)
+                if iid:
+                    related.add(iid)
+                related.update(links)
+                changed = changed or len(related) != before
+    selected = [e for e in items if e.get("id") in related and e.get("id") != current]
+    short_unlinked = not entry.get("reply_to") and len((entry.get("comment") or "").strip()) <= 12
+    if len(selected) <= 1 or short_unlinked:
+        idx = next((i for i, e in enumerate(items) if e.get("id") == current), len(items))
+        recent = items[max(0, idx - limit):idx]
+        seen = {e.get("id") for e in recent}
+        selected = [*recent, *[e for e in selected if e.get("id") not in seen]]
+    selected = selected[-limit:]
+    return selected
+
+
+def _thread_context(cfg: dict, key: str, entry: dict, limit: int = 10) -> str:
+    """Relevant prior context for this wake.
+
+    Primary path: traverse explicit reply links (`reply_to`) so quick-approval replies see the plan,
+    original user request, and screenshot. Fallback: include recent entries for short unlinked replies
+    (older ledgers did not link action buttons).
+    """
+    selected = _related_thread_entries(cfg, key, entry, limit=limit)
+    if not selected:
+        return ""
+    lines = ["## Feedback thread context", "",
+             "The current item may be an approval/reply. Use this context before deciding what to edit."]
+    for item in selected:
+        lines.append("")
+        lines.append(f"- {_entry_label(item)}")
+        if item.get("reply_to"):
+            lines.append(f"  replies to: {', '.join(item.get('reply_to') or [])}")
+        if item.get("stars"):
+            lines.append(f"  stars: {item.get('stars')}")
+        comment = (item.get("comment") or "").strip()
+        if comment:
+            lines.append(f"  comment: {comment!r}")
+        shot = _shot_path(cfg, item)
+        if shot:
+            lines.append(f"  screenshot: `{shot}`")
+    return "\n".join(lines)
+
+
+def _feedback_tooling(cfg: dict, key: str) -> str:
+    db = ledger.db_path(cfg)
+    fb_key = key or GENERAL_KEY
+    return "\n".join([
+        "## Feedback ledger and tooling",
+        "",
+        f"- SQLite source of truth: `{db}`",
+        f"- inspect recent history: `{_curiator_cmd(cfg, 'feedback', 'show', fb_key, '--limit', '20')}`",
+        f"- dump history as JSON to stdout: `{_curiator_cmd(cfg, 'feedback', 'dump', fb_key)}`",
+        "- Do not edit the SQLite file directly. Use `curiator reply` to add notes/status updates.",
+        "- `feedback/app_feedback.json` is legacy import-only; any future web cache belongs under `feedback/cache/`.",
+    ])
+
+
+def _curiator_cmd(cfg: dict, *parts: str) -> str:
+    gallery = shlex.quote(str(Path(cfg["gallery_path"]).resolve()))
+    args = " ".join(shlex.quote(str(part)) for part in parts)
+    return f"CURIATOR_GALLERY={gallery} curiator {args}"
+
+
+def _reply_cmd(cfg: dict, key: str, eid: str, message: str, status: str) -> str:
+    return f"{_curiator_cmd(cfg, 'reply', key, eid)} \"{message}\" --status {status}"
+
+
 def _runner_root(cfg: dict) -> str:
     """Where the runner (curiator) source lives, for checkout-mode patching: `runner.path` if set,
     else the package's own checkout root (works for an editable `pip install -e`)."""
@@ -108,9 +249,17 @@ def _runner_root(cfg: dict) -> str:
     return str(Path(curiator.__file__).resolve().parent.parent)
 
 
-def general_targets_collection(entry: dict) -> bool:
+def general_targets_collection(entry: dict, cfg: dict | None = None) -> bool:
     """Whether a ◆ General item is asking to change the collection, not the runner package."""
-    return bool(_COLLECTION_GENERAL_RE.search(entry.get("comment") or ""))
+    comment = entry.get("comment") or ""
+    if _COLLECTION_GENERAL_RE.search(comment):
+        return True
+    if not cfg or not _GENERAL_APPROVAL_REPLY_RE.search(comment):
+        return False
+    return any(
+        _COLLECTION_GENERAL_RE.search(item.get("comment") or "")
+        for item in _related_thread_entries(cfg, GENERAL_KEY, entry)
+    )
 
 
 def _collection_bundle(cfg: dict, entry: dict, eid: str, shot_path: str | None, agent: dict) -> tuple[str, str]:
@@ -118,11 +267,13 @@ def _collection_bundle(cfg: dict, entry: dict, eid: str, shot_path: str | None, 
     root = str(Path(cfg["repo_root"]).resolve())
     autonomy = agent.get("autonomy", "auto-small")
     elevated = agent.get("elevated")
+    approval_followup = bool(_GENERAL_APPROVAL_REPLY_RE.search(entry.get("comment") or "")
+                             and _related_thread_entries(cfg, GENERAL_KEY, entry))
     body = [
-        "# CurIAtor — General collection feedback",
+        "# curIAtor — General collection feedback",
         "",
         "This feedback came through **◆ General**, but it asks for gallery/app work in this collection,",
-        "not a patch to the CurIAtor runner package. You are non-interactive, in the collection repo.",
+        "not a patch to the curIAtor runner package. You are non-interactive, in the collection repo.",
         "",
         f"- collection root: `{root}`",
         f"- autonomy mode: **{autonomy}**" + ("  ·  ELEVATED run (trusted group)" if elevated else ""),
@@ -135,14 +286,25 @@ def _collection_bundle(cfg: dict, entry: dict, eid: str, shot_path: str | None, 
         "- Work inside the collection repo only: add/edit `apps/`, update `gallery.yaml`, and update",
         "  dependency manifests when needed.",
         "- Do NOT edit the runner checkout for this item.",
+        "- If this is an approval/follow-up, execute the underlying collection request from the thread",
+        "  context now. Do not spend this run improving curIAtor routing/classification.",
+        "- For new apps, start with `curiator app create <app_key> --template dash|static|python` so",
+        "  app directories and `gallery.yaml` stay consistent; then edit the generated files.",
         "- Smoke-test changed or newly added apps before replying.",
         "",
         "## Ready-to-run (fill in the message text)",
+        f"- create an app scaffold: `{_curiator_cmd(cfg, 'app', 'create', '<app_key>', '--template', 'dash', '--title', '<title>', '--tags', 'dash')}`",
         "- quick smoke option: `python -m compileall -q apps`",
-        f"- reply after a fix:  `curiator reply {GENERAL_KEY} {eid} \"<what changed + why>\" --status done`",
-        f"- reply with a plan:  `curiator reply {GENERAL_KEY} {eid} \"<plan + recommendation>\" --status awaiting_approval`",
+        f"- reply after a fix:  `{_reply_cmd(cfg, GENERAL_KEY, eid, '<what changed + why>', 'done')}`",
+        f"- reply with a plan:  `{_reply_cmd(cfg, GENERAL_KEY, eid, '<plan + recommendation>', 'awaiting_approval')}`",
     ]
-    if elevated:
+    if approval_followup:
+        body.append(
+            "\n**APPROVAL/FOLLOW-UP RUN** — the user has replied to a prior collection/app request. "
+            "Use the feedback thread context as the request of record and perform that app work now. "
+            "A new app is allowed: use `curiator app create`, then customize the scaffold, smoke-test, "
+            "and reply `--status done`.")
+    elif elevated:
         deny = ", ".join(f"`{d}`" for d in (agent.get("disallowed_tools") or [])) \
             or "the runner's own config, `git push`/history rewrites, destructive commands"
         body.append(
@@ -153,18 +315,22 @@ def _collection_bundle(cfg: dict, entry: dict, eid: str, shot_path: str | None, 
         body.append(
             "\nIf the request needs a new app, new dependencies, or broad multi-file work, reply with "
             "`--status awaiting_approval` and a concise plan; otherwise keep the edit small and smoke-test it.")
+    context = _thread_context(cfg, GENERAL_KEY, entry)
+    if context:
+        body.append("\n" + context)
+    body.append("\n" + _feedback_tooling(cfg, GENERAL_KEY))
     return "\n".join(body) + "\n", root
 
 
 def _runner_bundle(cfg: dict, entry: dict, eid: str, shot_path: str | None) -> tuple[str, str | None]:
-    """Bundle for ◆ General (runner) feedback — feedback on CurIAtor itself. The action keys off
+    """Bundle for ◆ General (runner) feedback — feedback on curIAtor itself. The action keys off
     `runner.mode`: checkout ⇒ patch the runner locally (tracked, PR-able); pinned ⇒ draft an upstream
     issue/PR (never edit site-packages, which is untracked + blown away on upgrade)."""
     mode = (cfg.get("runner") or {}).get("mode", "pinned")
     head = [
-        "# CurIAtor — feedback on the RUNNER itself (the ◆ General channel)",
+        "# curIAtor — feedback on the RUNNER itself (the ◆ General channel)",
         "",
-        "This feedback is about **CurIAtor (the runner / shell), not one of your apps**. You are",
+        "This feedback is about **curIAtor (the runner / shell), not one of your apps**. You are",
         f"non-interactive, in the repo. Reply to feedback id `{eid}`.",
         "",
         f"- comment: {entry.get('comment')!r}",
@@ -182,10 +348,14 @@ def _runner_bundle(cfg: dict, entry: dict, eid: str, shot_path: str | None) -> t
             "   CLI = `curiator/cli.py`, config = `curiator/config.py`).",
             "2. Edit it, then smoke-test what you touched (import it / run a quick check).",
             "3. Reply (leave the diff UNCOMMITTED for a human to PR):",
-            f"   `curiator reply {GENERAL_KEY} {eid} \"<what you changed + why>\" --status done`",
+            f"   `{_reply_cmd(cfg, GENERAL_KEY, eid, '<what you changed + why>', 'done')}`",
             "",
             "Edit ONLY within the runner checkout. **Do NOT git commit** — a human reviews + PRs the diff.",
         ]
+        context = _thread_context(cfg, GENERAL_KEY, entry)
+        if context:
+            body.append("\n" + context)
+        body.append("\n" + _feedback_tooling(cfg, GENERAL_KEY))
         return "\n".join(body) + "\n", root
     # pinned (default)
     body = head + [
@@ -195,23 +365,32 @@ def _runner_bundle(cfg: dict, entry: dict, eid: str, shot_path: str | None) -> t
         "1. Draft a crisp upstream **issue / PR**: a one-line title, the problem, the proposed change,",
         "   and the likely area in curiator (shell / loop / cli / docs).",
         "2. Post the draft as your reply (a human files it upstream):",
-        f"   `curiator reply {GENERAL_KEY} {eid} \"<title + problem + proposed change>\" --status awaiting_approval`",
+        f"   `{_reply_cmd(cfg, GENERAL_KEY, eid, '<title + problem + proposed change>', 'awaiting_approval')}`",
         "",
         "Make **no code edits**. The deliverable is the drafted contribution text.",
     ]
+    context = _thread_context(cfg, GENERAL_KEY, entry)
+    if context:
+        body.append("\n" + context)
+    body.append("\n" + _feedback_tooling(cfg, GENERAL_KEY))
     return "\n".join(body) + "\n", None
 
 
 def _app_bundle(cfg: dict, key: str, entry: dict, eid: str, shot_path: str | None, agent: dict) -> tuple[str, str | None]:
     """Bundle for app feedback — the standing protocol + this item + ready-to-run smoke-test/reply."""
     template = (Path(__file__).resolve().parents[1] / "task_template.md").read_text()
-    source = _source_for(cfg, key)
+    spec = _app_spec(cfg, key) or {}
+    source = spec.get("source")
+    root = spec.get("root") or cfg["repo_root"]
+    smoke = spec.get("smoke")
+    source_is_dir = bool(source and Path(source).is_dir())
     autonomy = agent.get("autonomy", "auto-small")
     elevated = agent.get("elevated")
     body = [
         template, "\n\n---\n\n# This wake — the new feedback to act on\n",
         f"- app: **{key}**",
-        f"- source to edit: `{source}`" if source else "- source: (none registered — propose only)",
+        f"- app root: `{root}`",
+        f"- source scope to edit: `{source}`" if source else "- source: (none registered — propose only)",
         f"- autonomy mode: **{autonomy}**" + ("  ·  ELEVATED run (trusted group)" if elevated else ""),
         f"- stars: {entry.get('stars')}",
         f"- comment: {entry.get('comment')!r}",
@@ -221,17 +400,25 @@ def _app_bundle(cfg: dict, key: str, entry: dict, eid: str, shot_path: str | Non
     lessons = _lessons_for(cfg, key)
     if lessons:
         body.append(f"\n## Prior lessons for `{key}` (curator git history — what stuck / got reverted)\n{lessons}")
+    context = _thread_context(cfg, key, entry)
+    if context:
+        body.append("\n" + context)
+    body.append("\n" + _feedback_tooling(cfg, key))
     body.append("\n## Ready-to-run (fill in the message text)")
-    if source:
+    if smoke:
+        body.append(f"- smoke-test the edit: `{smoke}`  (run from `{root}`)")
+    elif source and not source_is_dir:
         body.append(
             "- smoke-test the edit: "
             f"`python -c \"import importlib.util as u; s=u.spec_from_file_location('m', r'{source}'); "
             "m=u.module_from_spec(s); s.loader.exec_module(m); "
             "(m.build_app() if hasattr(m,'build_app') else m.app); print('SMOKE OK')\"`"
         )
+    elif source_is_dir:
+        body.append("- smoke-test the edit: no smoke command configured; run the narrowest available build/import check")
     body += [
-        f"- reply after a fix:  `curiator reply {key} {eid} \"<what changed + why>\" --status done`",
-        f"- reply with a plan:  `curiator reply {key} {eid} \"<plan + recommendation>\" --status awaiting_approval`",
+        f"- reply after a fix:  `{_reply_cmd(cfg, key, eid, '<what changed + why>', 'done')}`",
+        f"- reply with a plan:  `{_reply_cmd(cfg, key, eid, '<plan + recommendation>', 'awaiting_approval')}`",
     ]
     if elevated:
         deny = ", ".join(f"`{d}`" for d in (agent.get("disallowed_tools") or [])) \
@@ -243,8 +430,9 @@ def _app_bundle(cfg: dict, key: str, entry: dict, eid: str, shot_path: str | Non
             "reply `--status done` so the gallery hot-reload doesn't crash. Smoke-test before `done`. "
             f"Off-limits: {deny}. Still don't run git yourself — the runner commits.")
     else:
+        scope = "files under the source above" if source_is_dir else "the source above"
         body.append(
-            "\nEdit ONLY the source above, smoke-test before `done`; the runner handles git — don't run git yourself.")
+            f"\nEdit ONLY {scope}, smoke-test before `done`; the runner handles git — don't run git yourself.")
     return "\n".join(body), source
 
 
@@ -255,13 +443,16 @@ def build_task(cfg: dict, key: str, entry: dict) -> Task:
     shot_path = _shot_path(cfg, entry)
     agent = effective_agent(cfg, entry)
     if key == GENERAL_KEY:
-        if general_targets_collection(entry):
+        if general_targets_collection(entry, cfg):
             text, source = _collection_bundle(cfg, entry, eid, shot_path, agent)
         else:
             text, source = _runner_bundle(cfg, entry, eid, shot_path)
     else:
         text, source = _app_bundle(cfg, key, entry, eid, shot_path, agent)
-    tf = Path(cfg["repo_root"]) / cfg.get("feedback", {}).get("dir", "feedback") / f"task_{eid}.md"
+    tf = runlog.task_path(cfg, eid)
+    rf = runlog.reply_path(cfg, eid)
     tf.parent.mkdir(parents=True, exist_ok=True)
     tf.write_text(text)
-    return Task(key=key, entry=entry, source=source, task_file=str(tf), cfg=cfg, agent=agent)
+    rf.parent.mkdir(parents=True, exist_ok=True)
+    return Task(key=key, entry=entry, source=source, task_file=str(tf), reply_file=str(rf),
+                cfg=cfg, agent=agent)

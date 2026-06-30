@@ -6,6 +6,7 @@ from pathlib import Path
 
 from curiator.loop import adapters
 from curiator.loop.adapters import GENERAL_KEY, Task, build_task, command
+from curiator import ledger
 
 
 def _entry(**kw):
@@ -19,9 +20,11 @@ def test_app_bundle_paths_and_commands(cfg, collection):
     t = build_task(cfg, "sample", _entry(screenshot="shots/sample_f1.png"))
     body = Path(t.task_file).read_text()
     assert t.source == str((collection / "apps" / "sample.py").resolve())
+    assert Path(t.task_file) == collection / "feedback" / "tasks" / "f1.md"
+    assert Path(t.reply_file) == collection / "feedback" / "replies" / "f1.md"
     assert "feedback/shots/sample_f1.png" in body          # screenshot path joined ONCE
     assert "shots/shots/" not in body                       # M2 double-join regression guard
-    assert "curiator reply sample f1" in body               # ready-to-run reply
+    assert "CURIATOR_GALLERY=" in body and "curiator reply sample f1" in body  # ready-to-run reply
     assert "SMOKE OK" in body                               # smoke-test recipe
 
 
@@ -43,9 +46,68 @@ def test_general_new_app_request_routes_to_collection(cfg, collection):
     assert t.source == str(collection.resolve())
     assert "General collection feedback" in body
     assert "Do NOT edit the runner checkout" in body
+    assert "CURIATOR_GALLERY=" in body and "curiator app create" in body
     assert "gallery.yaml" in body and "curiator reply __general__ g3" in body
     assert adapters.general_targets_collection(entry)
     assert not adapters.general_targets_collection(_entry(comment="make the shell chrome clearer"))
+
+
+def test_general_example_dash_app_request_routes_to_collection(cfg, collection):
+    entry = _entry(
+        id="g4",
+        comment=(
+            "let's do an example dash app like this one:\n"
+            "https://dash.gallery/dash-image-segmentation/\n"
+            "https://github.com/plotly/dash-sample-apps/tree/main/apps/dash-image-segmentation\n\n"
+            "but instead of cells, do an example picking out oranges from photos of orange trees"
+        ),
+    )
+    t = build_task(cfg, GENERAL_KEY, entry)
+    body = Path(t.task_file).read_text()
+    assert t.source == str(collection.resolve())
+    assert "General collection feedback" in body
+    assert "Do NOT edit the runner checkout" in body
+    assert "CURIATOR_GALLERY=" in body and "curiator app create" in body
+    assert adapters.general_targets_collection(entry)
+
+
+def test_general_approval_reply_inherits_collection_request_context(cfg, collection):
+    fid = ledger.save_entry(
+        cfg,
+        GENERAL_KEY,
+        comment=(
+            "let's do an example dash app like this one:\n"
+            "https://dash.gallery/dash-image-segmentation/\n"
+            "but instead of cells, do an example picking out oranges from photos of orange trees"
+        ),
+        ts="t0",
+    )
+    nid = ledger.add_system_note(
+        cfg,
+        GENERAL_KEY,
+        "This should route to collection app work.",
+        reply_to=[fid],
+        ts="t1",
+    )
+    aid = ledger.save_entry(
+        cfg,
+        GENERAL_KEY,
+        comment="ok, go ahead",
+        ts="t2",
+        extra={"reply_to": [nid]},
+    )
+    entry = next(e for e in ledger.load(cfg)[GENERAL_KEY] if e["id"] == aid)
+
+    t = build_task(cfg, GENERAL_KEY, entry)
+    body = Path(t.task_file).read_text()
+    assert t.source == str(collection.resolve())
+    assert "General collection feedback" in body
+    assert "APPROVAL/FOLLOW-UP RUN" in body
+    assert "perform that app work now" in body
+    assert "curiator app create" in body
+    assert "orange" in body
+    assert adapters.general_targets_collection(entry, cfg)
+    assert not adapters.general_targets_collection(entry)
 
 
 def test_bundle_loads_lessons_when_present(cfg, collection):
@@ -54,12 +116,46 @@ def test_bundle_loads_lessons_when_present(cfg, collection):
     assert "Prior lessons for `sample`" in body and "abc1234" in body
 
 
+def test_bundle_includes_feedback_thread_for_action_reply(cfg, collection):
+    fid = ledger.save_entry(cfg, "sample", comment="getting this error on the react app",
+                            screenshot="shots/sample_f1.png", ts="t0")
+    nid = ledger.add_system_note(cfg, "sample", "Option A: install dependencies. Option B: simplify.",
+                                 reply_to=[fid], ts="t1", actions=["A", "B"])
+    aid = ledger.save_entry(cfg, "sample", comment="A", ts="t2", extra={"reply_to": [nid]})
+    entry = next(e for e in ledger.load(cfg)["sample"] if e["id"] == aid)
+
+    body = Path(build_task(cfg, "sample", entry).task_file).read_text()
+    assert "Feedback thread context" in body
+    assert "getting this error on the react app" in body
+    assert "Option A: install dependencies" in body
+    assert "feedback/shots/sample_f1.png" in body
+    assert "Feedback ledger and tooling" in body
+    assert "curiator feedback show sample --limit 20" in body
+    assert "SQLite source of truth" in body
+
+
+def test_short_unlinked_action_reply_gets_recent_thread_context(cfg, collection):
+    ledger.save_entry(cfg, "sample", comment="getting this error on the react app",
+                      screenshot="shots/sample_f1.png", ts="t0")
+    ledger.add_system_note(cfg, "sample", "Option A: install dependencies. Option B: simplify.", ts="t1",
+                           actions=["A", "B"])
+    aid = ledger.save_entry(cfg, "sample", comment="A", ts="t2")
+    entry = next(e for e in ledger.load(cfg)["sample"] if e["id"] == aid)
+
+    body = Path(build_task(cfg, "sample", entry).task_file).read_text()
+    assert "Feedback thread context" in body
+    assert "getting this error on the react app" in body
+    assert "Option A: install dependencies" in body
+    assert "feedback/shots/sample_f1.png" in body
+
+
 def test_command_adapter_substitutes(cfg, monkeypatch):
     captured = {}
-    monkeypatch.setattr(command.subprocess, "run", lambda c, **k: captured.update(cmd=c))
+    monkeypatch.setattr(command.runlog, "run_streamed",
+                        lambda task, c, **k: captured.update(cmd=c) or command.runlog.RunResult(0, ""))
     cfg2 = {**cfg, "agent": {"adapter": "command", "cmd": "mytool {task_file} {source}"}}
     command.run(Task(key="sample", entry={"id": "x"}, source="apps/sample.py",
-                     task_file="/tmp/task.md", cfg=cfg2))
+                     task_file="/tmp/task.md", reply_file="/tmp/reply.md", cfg=cfg2))
     assert captured["cmd"] == ["mytool", "/tmp/task.md", "apps/sample.py"]
 
 
@@ -79,17 +175,18 @@ def test_codex_adapter_maps_profile_to_exec_flags(monkeypatch, tmp_path):
     class _Proc:
         returncode, stdout, stderr = 0, "ok", ""
 
-    def fake_run(c, **k):
+    def fake_run(task, c, **k):
         cap["cmd"] = c
-        return _Proc()
+        return codex.runlog.RunResult(_Proc.returncode, _Proc.stdout)
 
     monkeypatch.setattr(codex, "available", lambda: True)
-    monkeypatch.setattr(codex.subprocess, "run", fake_run)
+    monkeypatch.setattr(codex.runlog, "run_streamed", fake_run)
     tf = tmp_path / "task.md"
     tf.write_text("the bundle")
 
     # normal profile → sandboxed workspace-write, model passed, prompt last after --
     codex.run(Task(key="sample", entry={"id": "x"}, source="apps/sample.py", task_file=str(tf),
+                   reply_file=str(tmp_path / "reply.md"),
                    cfg={"repo_root": str(tmp_path)},
                    agent={"model": "gpt-5-codex", "permission_mode": "acceptEdits"}))
     cmd = cap["cmd"]
@@ -101,6 +198,7 @@ def test_codex_adapter_maps_profile_to_exec_flags(monkeypatch, tmp_path):
 
     # elevated → full-trust bypass, no -s sandbox flag
     codex.run(Task(key="sample", entry={"id": "y"}, source="apps/sample.py", task_file=str(tf),
+                   reply_file=str(tmp_path / "reply.md"),
                    cfg={"repo_root": str(tmp_path)},
                    agent={"permission_mode": "bypassPermissions", "elevated": True}))
     cmd2 = cap["cmd"]

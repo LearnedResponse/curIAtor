@@ -17,7 +17,9 @@
 from __future__ import annotations
 
 import argparse
+import json
 import os
+import re
 import subprocess
 import sys
 from datetime import datetime, timezone
@@ -27,8 +29,11 @@ from .config import agent_label, load_config
 from . import ledger
 
 
-def _shell_path() -> Path:
-    return Path(__file__).resolve().parent / "shell" / "app_shell.py"
+def _shell_path(kind: str | None = None) -> Path:
+    """The overlay shell entrypoint. React/Flask is the default; Dash remains as a legacy fallback."""
+    selected = (kind or os.environ.get("CURIATOR_SHELL") or "react").lower()
+    name = "app_shell.py" if selected in {"dash", "legacy", "legacy-dash"} else "web_shell.py"
+    return Path(__file__).resolve().parent / "shell" / name
 
 
 def _child_env(cfg: dict) -> dict:
@@ -56,8 +61,8 @@ def cmd_up(args) -> int:
     cfg = load_config()
     port = (cfg.get("shell", {}) or {}).get("port", 8200)
     print(f"curiator: serving the gallery at http://127.0.0.1:{port}  (Ctrl-C to stop)")
-    # running the script directly puts shell/ on sys.path[0], so `import registry` resolves.
-    return subprocess.run([sys.executable, str(_shell_path())], cwd=cfg["repo_root"],
+    kind = "legacy-dash" if getattr(args, "legacy_dash_shell", False) else None
+    return subprocess.run([sys.executable, str(_shell_path(kind))], cwd=cfg["repo_root"],
                           env=_child_env(cfg)).returncode
 
 
@@ -67,7 +72,7 @@ def cmd_watch(args) -> int:
     return 0
 
 
-def _serve(cfg: dict, *, reset: bool = False) -> int:
+def _serve(cfg: dict, *, reset: bool = False, shell_kind: str | None = None) -> int:
     """Run the gallery (foreground) + the fix loop (background) together. Ctrl-C / SIGTERM stops both.
     Used by `curiator serve` (the container entrypoint) and `curiator demo-up` (reset=True)."""
     if reset:
@@ -91,7 +96,7 @@ def _serve(cfg: dict, *, reset: bool = False) -> int:
     print(f"    stop    : Ctrl-C\n{bar}\n")
     sys.stdout.flush()   # the shell child writes straight to fd1; flush so our banner isn't buffered behind it
     try:
-        return subprocess.run([sys.executable, str(_shell_path())], cwd=cfg["repo_root"], env=env).returncode
+        return subprocess.run([sys.executable, str(_shell_path(shell_kind))], cwd=cfg["repo_root"], env=env).returncode
     finally:
         watcher.terminate()
         try:
@@ -101,11 +106,13 @@ def _serve(cfg: dict, *, reset: bool = False) -> int:
 
 
 def cmd_serve(args) -> int:
-    return _serve(load_config(), reset=False)
+    kind = "legacy-dash" if getattr(args, "legacy_dash_shell", False) else None
+    return _serve(load_config(), reset=False, shell_kind=kind)
 
 
 def cmd_demo_up(args) -> int:
-    return _serve(load_config(), reset=True)
+    kind = "legacy-dash" if getattr(args, "legacy_dash_shell", False) else None
+    return _serve(load_config(), reset=True, shell_kind=kind)
 
 
 def _parse_actions_arg(s):
@@ -171,14 +178,26 @@ def _reset_demo(cfg: dict) -> None:
         if r.returncode != 0:
             print(f"curiator: reset-demo: skipped git checkout ({(r.stderr or '').strip() or 'not a git repo?'})")
     fb = repo / (cfg.get("feedback", {}).get("dir", "feedback"))
-    (fb / "app_feedback.json").write_text("{}\n")
+    ledger.replace_all(cfg, {})
+    for name in ("app_feedback.sqlite", "app_feedback.sqlite-wal", "app_feedback.sqlite-shm"):
+        p = fb / name
+        if p.exists():
+            p.unlink()
+    legacy = fb / "app_feedback.json"
+    if legacy.exists():
+        legacy.unlink()
     shots = fb / "shots"
     if shots.is_dir():
         for f in shots.iterdir():
             if f.is_file() and not f.name.startswith("."):   # keep .gitignore / .gitkeep
                 f.unlink()
-    for t in fb.glob("task_*.md"):
+    for t in fb.glob("task_*.md"):                         # legacy pre-feedback/tasks layout
         t.unlink()
+    for subdir in ("tasks", "replies"):
+        d = fb / subdir
+        if d.is_dir():
+            for f in d.glob("*.md"):
+                f.unlink()
 
 
 def cmd_revert(args) -> int:
@@ -229,6 +248,39 @@ def cmd_seed(args) -> int:
         n += 1
     who = (default_user or {}).get("name") or "—"
     print(f"curiator: seeded {n} feedback item(s) from {args.file} (author: {who}) — `curiator watch` to build.")
+    return 0
+
+
+def cmd_feedback(args) -> int:
+    """Inspect the SQLite feedback ledger. This is intentionally CLI-level tooling so headless agents can
+    inspect history without treating the SQLite file format as a private API."""
+    import json
+    from .loop import runlog
+    cfg = load_config()
+    data = ledger.load(cfg)
+    if args.app:
+        data = {args.app: data.get(args.app, [])}
+    if args.action == "dump":
+        print(json.dumps(data if args.app is None else data.get(args.app, []), indent=2))
+        return 0
+    for app, items in data.items():
+        shown = items[-args.limit:] if args.limit else items
+        if not shown:
+            continue
+        print(f"{app}:")
+        for e in shown:
+            who = e.get("agent") if e.get("author") == "claude" else ((e.get("user") or {}).get("name") or "user")
+            flags = []
+            if e.get("reply_to"):
+                flags.append("reply_to=" + ",".join(e.get("reply_to") or []))
+            if e.get("screenshot"):
+                flags.append("screenshot=" + e.get("screenshot"))
+            trace = runlog.reply_path(cfg, e.get("id"))
+            if trace.exists():
+                flags.append("trace=" + str(trace.relative_to(Path(cfg["repo_root"]))))
+            extra = f" [{' · '.join(flags)}]" if flags else ""
+            comment = " ".join((e.get("comment") or "").split())
+            print(f"  {e.get('id')} {e.get('status')} {e.get('kind')} {who}: {comment[:160]}{extra}")
     return 0
 
 
@@ -333,31 +385,212 @@ def cmd_init(args) -> int:
     return 0
 
 
+_APP_NAME_RE = re.compile(r"^[A-Za-z][A-Za-z0-9_]*$")
+_TOP_LEVEL_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_-]*:\s*(?:#.*)?$")
+
+
+def _app_names(cfg: dict) -> set[str]:
+    names: set[str] = set()
+    for app in cfg.get("apps") or []:
+        if app.get("name"):
+            names.add(str(app["name"]))
+        for mount in app.get("mounts") or []:
+            name = mount.get("name") or (mount.get("mount") or {}).get("name")
+            if name:
+                names.add(str(name))
+    return names
+
+
+def _title_from_name(name: str) -> str:
+    return name.replace("_", " ").strip().title() or name
+
+
+def _tags_arg(raw: str | None, default: str) -> list[str]:
+    tags = [t.strip() for t in (raw or "").split(",") if t.strip()]
+    return tags or [default]
+
+
+def _yaml_list(items: list[str]) -> str:
+    return "[" + ", ".join(json.dumps(str(item)) for item in items) + "]"
+
+
+def _next_proxy_port(cfg: dict, start: int = 8700) -> int:
+    ports: set[int] = set()
+    for app in cfg.get("apps") or []:
+        if app.get("port"):
+            ports.add(int(app["port"]))
+        mount = app.get("mount") or {}
+        if mount.get("port"):
+            ports.add(int(mount["port"]))
+        for child in app.get("mounts") or []:
+            cmount = child.get("mount") or child
+            if child.get("port"):
+                ports.add(int(child["port"]))
+            if cmount.get("port"):
+                ports.add(int(cmount["port"]))
+    port = start
+    while port in ports:
+        port += 1
+    return port
+
+
+def _append_app_entry(text: str, entry: str) -> str:
+    """Append an app item under the top-level `apps:` block while preserving the rest of gallery.yaml."""
+    lines = text.splitlines()
+    for i, line in enumerate(lines):
+        if re.match(r"^apps:\s*\[\s*\]\s*(?:#.*)?$", line):
+            lines[i:i + 1] = ["apps:", *entry.rstrip().splitlines()]
+            return "\n".join(lines) + "\n"
+        if re.match(r"^apps:\s*(?:#.*)?$", line):
+            j = i + 1
+            while j < len(lines):
+                if lines[j] and not lines[j].startswith((" ", "\t", "#")) and _TOP_LEVEL_RE.match(lines[j]):
+                    break
+                j += 1
+            insert = entry.rstrip().splitlines()
+            if j > i + 1 and lines[j - 1].strip():
+                insert = ["", *insert]
+            lines[j:j] = insert
+            return "\n".join(lines) + "\n"
+    prefix = ["apps:", *entry.rstrip().splitlines(), ""]
+    return "\n".join(prefix + lines) + ("\n" if text.endswith("\n") else "")
+
+
+def _gallery_entry(name: str, template: str, title: str, tags: list[str], port: int | None) -> str:
+    root = f"apps/{name}"
+    if template == "dash":
+        return (
+            f"  - name: {name}\n"
+            f"    title: {json.dumps(title)}\n"
+            f"    root: {root}\n"
+            f"    source: .\n"
+            f"    smoke: python -m compileall -q .\n"
+            f"    mount: {{ kind: dash-inproc, module: {name} }}\n"
+            f"    tags: {_yaml_list(tags)}\n"
+        )
+    if template == "static":
+        return (
+            f"  - name: {name}\n"
+            f"    title: {json.dumps(title)}\n"
+            f"    root: {root}\n"
+            f"    source: .\n"
+            f"    smoke: python -m compileall -q .\n"
+            f"    mount: {{ kind: proxy, cmd: \"python -m http.server {port} --bind 127.0.0.1\", port: {port} }}\n"
+            f"    tags: {_yaml_list(tags)}\n"
+        )
+    return (
+        f"  - name: {name}\n"
+        f"    title: {json.dumps(title)}\n"
+        f"    root: {root}\n"
+        f"    source: .\n"
+        f"    smoke: python -m py_compile server.py\n"
+        f"    mount: {{ kind: proxy, cmd: \"python server.py\", port: {port} }}\n"
+        f"    tags: {_yaml_list(tags)}\n"
+    )
+
+
+def _app_template_files(name: str, template: str, title: str) -> dict[str, str]:
+    if template == "dash":
+        return {f"{name}.py": _APP_DASH_TEMPLATE.format(name=name, title=title)}
+    if template == "static":
+        return {"index.html": _APP_STATIC_TEMPLATE.format(name=name, title=title)}
+    return {"server.py": _APP_PYTHON_TEMPLATE.format(name=name, title=title)}
+
+
+def cmd_app_create(args) -> int:
+    """Create an app directory and register it in gallery.yaml."""
+    cfg = load_config()
+    name = args.name.strip()
+    if not _APP_NAME_RE.match(name):
+        print("curiator: app name must be a Python-safe identifier: letters, numbers, underscores; start with a letter")
+        return 1
+    if name in _app_names(cfg):
+        print(f"curiator: app '{name}' already exists in gallery.yaml")
+        return 1
+    template = args.template
+    repo = Path(cfg["repo_root"])
+    root = repo / "apps" / name
+    if root.exists() and not args.force:
+        print(f"curiator: {root} already exists; pass --force to add missing scaffold files")
+        return 1
+    title = args.title or _title_from_name(name)
+    tags = _tags_arg(args.tags, template)
+    port = args.port if args.port is not None else (_next_proxy_port(cfg) if template in {"static", "python"} else None)
+
+    created, skipped = [], []
+    root.mkdir(parents=True, exist_ok=True)
+    for rel, content in _app_template_files(name, template, title).items():
+        p = root / rel
+        if p.exists():
+            skipped.append(str(p.relative_to(repo)))
+            continue
+        p.write_text(content)
+        created.append(str(p.relative_to(repo)))
+
+    gallery = Path(cfg["gallery_path"])
+    entry = _gallery_entry(name, template, title, tags, port)
+    gallery.write_text(_append_app_entry(gallery.read_text(), entry))
+    created.append(str(gallery.relative_to(repo)))
+
+    print(f"curiator: created {template} app '{name}' in {root.relative_to(repo)}")
+    for f in created:
+        print(f"  + {f}")
+    for f in skipped:
+        print(f"  · {f} (exists — left as-is)")
+    print("next:")
+    print(f"  curiator reload {name}   # if the shell is already running")
+    print(f"  open /app/{name}/")
+    return 0
+
+
 def _scaffold_files() -> dict[str, str]:
     return {
         "gallery.yaml": _SCAFFOLD_GALLERY,
         "apps/sample.py": _SCAFFOLD_SAMPLE_APP,
         "requirements.txt": _SCAFFOLD_REQUIREMENTS,
         "README.md": _SCAFFOLD_README,
-        "feedback/app_feedback.json": "{}\n",
         ".gitignore": _SCAFFOLD_GITIGNORE,
     }
 
 
 def main(argv=None) -> int:
-    p = argparse.ArgumentParser(prog="curiator", description="CurIAtor — an AI-maintained app gallery.")
+    p = argparse.ArgumentParser(prog="curiator", description="curIAtor — an AI-maintained app gallery.")
     sub = p.add_subparsers(dest="cmd", required=True)
-    sub.add_parser("up", help="serve the gallery").set_defaults(func=cmd_up)
+    up = sub.add_parser("up", help="serve the gallery")
+    up.add_argument("--legacy-dash-shell", action="store_true", help="serve the old Dash overlay shell")
+    up.set_defaults(func=cmd_up)
     sub.add_parser("watch", help="arm the feedback→fix loop").set_defaults(func=cmd_watch)
-    sub.add_parser("serve", help="gallery + fix loop together (one process; the container entrypoint)"
-                   ).set_defaults(func=cmd_serve)
+    serve = sub.add_parser("serve", help="gallery + fix loop together (one process; the container entrypoint)")
+    serve.add_argument("--legacy-dash-shell", action="store_true", help="serve the old Dash overlay shell")
+    serve.set_defaults(func=cmd_serve)
     sub.add_parser("demo", help="print the demo walkthrough").set_defaults(func=cmd_demo)
     sub.add_parser("reset-demo", help="rewind the demo: re-break aviato, clear the ledger"
                    ).set_defaults(func=cmd_reset_demo)
-    sub.add_parser("demo-up", help="reset-demo, then serve — one command, record-ready"
-                   ).set_defaults(func=cmd_demo_up)
+    demo_up = sub.add_parser("demo-up", help="reset-demo, then serve — one command, record-ready")
+    demo_up.add_argument("--legacy-dash-shell", action="store_true", help="serve the old Dash overlay shell")
+    demo_up.set_defaults(func=cmd_demo_up)
     ip = sub.add_parser("init", help="scaffold a new collection repo in <dir>")
     ip.add_argument("dir"); ip.set_defaults(func=cmd_init)
+    app = sub.add_parser("app", help="manage apps in this collection")
+    app_sub = app.add_subparsers(dest="action", required=True)
+    ac = app_sub.add_parser("create", help="scaffold an app directory and add it to gallery.yaml")
+    ac.add_argument("name", help="app key, e.g. orange_picker")
+    ac.add_argument("--template", choices=["dash", "static", "python"], default="dash",
+                    help="scaffold template (default: dash)")
+    ac.add_argument("--title", help="display title")
+    ac.add_argument("--tags", help="comma-separated tags; default is the template name")
+    ac.add_argument("--port", type=int, help="proxy port for static/python templates")
+    ac.add_argument("--force", action="store_true", help="allow an existing apps/<name> directory")
+    ac.set_defaults(func=cmd_app_create)
+    ia = sub.add_parser("init-app", help="alias for `curiator app create`")
+    ia.add_argument("name", help="app key, e.g. orange_picker")
+    ia.add_argument("--template", choices=["dash", "static", "python"], default="dash",
+                    help="scaffold template (default: dash)")
+    ia.add_argument("--title", help="display title")
+    ia.add_argument("--tags", help="comma-separated tags; default is the template name")
+    ia.add_argument("--port", type=int, help="proxy port for static/python templates")
+    ia.add_argument("--force", action="store_true", help="allow an existing apps/<name> directory")
+    ia.set_defaults(func=cmd_app_create)
     r = sub.add_parser("reply", help="(agent) post a ⚙ note + set status")
     r.add_argument("app"); r.add_argument("feedback_id"); r.add_argument("text")
     r.add_argument("--status", choices=["done", "awaiting_approval", "working", "new"])
@@ -367,6 +600,11 @@ def main(argv=None) -> int:
     rl.add_argument("app"); rl.set_defaults(func=cmd_reload)
     sd = sub.add_parser("seed", help="load canned feedback (YAML) into the ledger — a self-building demo queue")
     sd.add_argument("file"); sd.set_defaults(func=cmd_seed)
+    fb = sub.add_parser("feedback", help="inspect the SQLite feedback ledger")
+    fb.add_argument("action", choices=["show", "dump"], nargs="?", default="show")
+    fb.add_argument("app", nargs="?")
+    fb.add_argument("--limit", type=int, default=20)
+    fb.set_defaults(func=cmd_feedback)
     us = sub.add_parser("user", help="manage local-login users (auth.mode: local)")
     us.add_argument("action", choices=["add", "passwd", "list", "remove"],
                     help="add (upsert, keeps name/groups) · passwd (change only the password) · list · remove")
@@ -390,7 +628,7 @@ def main(argv=None) -> int:
 # ───────────────────────── collection scaffold templates (curiator init) ─────────────────────────
 
 _SCAFFOLD_GALLERY = """\
-# CurIAtor collection — your apps (apps/) + how the curator runs.
+# curIAtor collection — your apps (apps/) + how the curator runs.
 # Add one entry per app; the curator edits each app's `source` when you give feedback on it.
 
 apps:
@@ -399,6 +637,17 @@ apps:
     mount: { kind: dash-inproc, module: sample }   # import & mount in-process (Dash); or kind: proxy {cmd, port}
     source: apps/sample.py                          # what the curator edits
     tags: [demo]
+
+  # App-directory shape: one folder can expose multiple endpoints that share the same source scope.
+  # - name: lab_suite
+  #   root: apps/lab_suite
+  #   source: .
+  #   smoke: python -m compileall -q .
+  #   mounts:
+  #     - name: overview
+  #       mount: { kind: dash-inproc, module: overview, source: overview.py }
+  #     - name: node_ssr
+  #       mount: { kind: proxy, cmd: "npm start -- --port {port}", port: 8710 }
 
 agent:
   adapter: headless-cc        # headless-cc (your Claude sub) | api (teams) | command (BYO)
@@ -411,7 +660,7 @@ runner:
   # path: ../curiator
 
 feedback:
-  dir: feedback               # JSON ledger + shots/ live here
+  dir: feedback               # SQLite ledger source of truth + shots/ live here
   screenshots: true
 
 shell:
@@ -421,7 +670,7 @@ shell:
 _SCAFFOLD_SAMPLE_APP = '''\
 """sample.py — a starter Dash app. Star/comment/screenshot it in the gallery and the curator edits THIS file.
 
-Every CurIAtor app exposes `build_app()` returning a `dash.Dash`, plus a module-level `app` so the
+Every curIAtor app exposes `build_app()` returning a `dash.Dash`, plus a module-level `app` so the
 shell can mount it either way.
 """
 from __future__ import annotations
@@ -459,9 +708,9 @@ curiator>=0.1.0   # pin exact (curiator==X.Y.Z) for a reproducible collection
 """
 
 _SCAFFOLD_README = """\
-# My CurIAtor collection
+# My curIAtor collection
 
-Apps live in `apps/`; `gallery.yaml` is the registry. CurIAtor serves every app in one gallery and an
+Apps live in `apps/`; `gallery.yaml` is the registry. curIAtor serves every app in one gallery and an
 AI curator fixes them from in-browser feedback (star / comment / screenshot).
 
 ## Run
@@ -475,18 +724,178 @@ Open the gallery, star/comment/screenshot an app, and watch the curator reply in
 
 ## Add an app
 
-Drop `apps/<name>.py` (exposing `build_app()`), add an entry to `gallery.yaml`, reload the gallery.
+Use the scaffold command; it creates `apps/<name>/` and updates `gallery.yaml`:
+
+    curiator app create revenue --template dash --title "Revenue dashboard"
+
+Templates: `dash`, `static`, `python`. You can still edit `gallery.yaml` manually for existing apps.
 
 See the consumer guide: https://github.com/LearnedResponse/curiator/blob/main/docs/USING_CURIATOR.md
 """
 
 _SCAFFOLD_GITIGNORE = """\
 feedback/shots/
-feedback/task_*.md
+feedback/tasks/
+feedback/replies/
+feedback/app_feedback.sqlite*
+feedback/app_feedback.json
 .curiator-users.json
 __pycache__/
 *.pyc
 """
+
+_APP_DASH_TEMPLATE = '''\
+"""Dash app scaffold generated by `curiator app create {name}`."""
+from __future__ import annotations
+
+import dash
+from dash import dcc, html
+import plotly.graph_objects as go
+
+
+def build_app() -> dash.Dash:
+    app = dash.Dash(__name__)
+    app.title = "{title}"
+
+    fig = go.Figure(
+        go.Bar(
+            x=["alpha", "beta", "gamma", "delta"],
+            y=[12, 19, 8, 15],
+            marker_color="#8e44ad",
+        )
+    )
+    fig.update_layout(
+        margin=dict(l=48, r=20, t=28, b=42),
+        plot_bgcolor="white",
+        paper_bgcolor="white",
+        height=360,
+        xaxis_title="category",
+        yaxis_title="value",
+    )
+
+    app.layout = html.Div(
+        style={{"fontFamily": "system-ui, sans-serif", "padding": "24px", "maxWidth": "860px"}},
+        children=[
+            html.H2("{title}", style={{"margin": "0 0 8px", "color": "#333"}}),
+            html.P(
+                "This app was scaffolded by curIAtor. Use feedback in the right rail to shape it.",
+                style={{"color": "#666", "margin": "0 0 18px"}},
+            ),
+            dcc.Graph(figure=fig, config={{"displayModeBar": False}}),
+        ],
+    )
+    return app
+
+
+app = build_app()
+
+
+if __name__ == "__main__":
+    app.run(debug=False, port=8050)
+'''
+
+_APP_STATIC_TEMPLATE = """\
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{title}</title>
+    <style>
+      body {{
+        margin: 0;
+        font-family: system-ui, sans-serif;
+        color: #2f3337;
+        background: #f7f7f5;
+      }}
+      main {{
+        max-width: 860px;
+        padding: 32px;
+      }}
+      h1 {{
+        margin: 0 0 8px;
+        color: #8e44ad;
+      }}
+      p {{
+        color: #5f666d;
+        line-height: 1.5;
+      }}
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>{title}</h1>
+      <p>This static app was scaffolded by curIAtor. Use feedback in the right rail to shape it.</p>
+    </main>
+  </body>
+</html>
+"""
+
+_APP_PYTHON_TEMPLATE = '''\
+"""Tiny Python web server scaffold generated by `curiator app create {name} --template python`."""
+from __future__ import annotations
+
+import os
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+HTML = """<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{title}</title>
+    <style>
+      body {{
+        margin: 0;
+        font-family: system-ui, sans-serif;
+        color: #2f3337;
+        background: #f7f7f5;
+      }}
+      main {{
+        max-width: 860px;
+        padding: 32px;
+      }}
+      h1 {{
+        margin: 0 0 8px;
+        color: #8e44ad;
+      }}
+      p {{
+        color: #5f666d;
+        line-height: 1.5;
+      }}
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>{title}</h1>
+      <p>This Python server app was scaffolded by curIAtor. Use feedback in the right rail to shape it.</p>
+    </main>
+  </body>
+</html>
+"""
+
+
+class Handler(BaseHTTPRequestHandler):
+    def do_GET(self) -> None:
+        body = HTML.encode("utf-8")
+        self.send_response(200)
+        self.send_header("content-type", "text/html; charset=utf-8")
+        self.send_header("content-length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def log_message(self, fmt: str, *args) -> None:
+        return
+
+
+def main() -> None:
+    port = int(os.environ.get("PORT", "8700"))
+    ThreadingHTTPServer(("127.0.0.1", port), Handler).serve_forever()
+
+
+if __name__ == "__main__":
+    main()
+'''
 
 
 if __name__ == "__main__":

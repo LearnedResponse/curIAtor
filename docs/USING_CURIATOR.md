@@ -1,6 +1,6 @@
-# Using CurIAtor — the consumer guide
+# Using curIAtor — the consumer guide
 
-CurIAtor is a **runner** (this package) that serves *your* apps and runs an AI curator over them.
+curIAtor is a **runner** (this package) that serves *your* apps and runs an AI curator over them.
 Your apps live in a separate **collection** repo: a `gallery.yaml` + an `apps/` dir + a pinned
 `curiator`. This guide is task-oriented — commands, not prose. (For the *why*, see
 [`DESIGN.md` → "How a collection consumes the runner"](DESIGN.md#how-a-collection-consumes-the-runner).)
@@ -22,12 +22,25 @@ my-collection/
   gallery.yaml          # the registry: your apps + how the curator runs
   apps/sample.py        # a starter Dash app (exposes build_app())
   requirements.txt      # pins curiator
-  feedback/             # the JSON ledger + screenshots (history; survives restarts)
+  feedback/             # SQLite ledger source of truth + generated run artifacts
+    shots/              # captured screenshots
+    tasks/              # per-feedback task bundles: <feedback_id>.md
+    replies/            # live agent stdout/stderr traces: <feedback_id>.md
   README.md
 ```
 
-**Add an app:** drop `apps/<name>.py` (exposing `build_app() -> dash.Dash`, plus a module-level
-`app`), then add an entry to `gallery.yaml`:
+**Add an app with the CLI:** this creates an app directory and updates `gallery.yaml`:
+
+```bash
+curiator app create revenue --template dash --title "Revenue dashboard" --tags finance
+# alias: curiator init-app revenue --template dash
+```
+
+Templates today: `dash` (in-process Dash), `static` (same-origin proxy using `http.server`), and
+`python` (tiny proxy-served Python HTTP app).
+
+You can also register an existing app manually: drop `apps/<name>.py` (exposing
+`build_app() -> dash.Dash`, plus a module-level `app`), then add an entry to `gallery.yaml`:
 
 ```yaml
 apps:
@@ -37,6 +50,26 @@ apps:
     source: apps/revenue.py                          # what the curator edits
     tags: [finance]
 ```
+
+**App directories and multiple endpoints:** use `root:` when an app is a folder. `source:` is the
+editable scope the curator may touch. `mounts:` lets one folder expose several gallery endpoints:
+
+```yaml
+apps:
+  - name: lab_suite
+    root: apps/lab_suite
+    source: .
+    smoke: python -m compileall -q .
+    mounts:
+      - name: overview
+        mount: { kind: dash-inproc, module: overview, source: overview.py }
+      - name: node_ssr
+        mount: { kind: proxy, cmd: "npm start -- --port {port}", port: 8710 }
+```
+
+`proxy` mounts are still same-origin: the iframe opens `/app/<name>/...`, and curIAtor forwards that
+path to the local app process. For heavier deployments you can still put nginx/Kong/Compose in front;
+the curIAtor contract stays the same.
 
 ## 2. Run it
 
@@ -125,7 +158,7 @@ docker compose up                # gallery at http://127.0.0.1:8300, watcher arm
 What the provided `docker-compose.yml` wires:
 
 - **`./collection` → `/collection`** — a persistent, host-editable mount: your apps, `gallery.yaml`,
-  the `feedback/` ledger (history survives restarts), and a `LESSONS.md` the agent accumulates about
+  the `feedback/` ledger/snapshot (history survives restarts), and a `LESSONS.md` the agent accumulates about
   *your* apps. Because it's on the host, the curator's diffs stay reviewable / committable / PR-able.
 - **creds** — for the default `headless-cc` adapter, your host Claude login is mounted read-only
   (`~/.claude`). For the `api` adapter, drop that mount and set `ANTHROPIC_API_KEY` instead.
@@ -151,7 +184,7 @@ See the [README](../README.md#the-agent-and-where-it-runs) for the full adapter 
 
 ## 7. Providers & local models
 
-CurIAtor doesn't manage models or API keys — **your agent CLI does**. The provider lives in that CLI's
+curIAtor doesn't manage models or API keys — **your agent CLI does**. The provider lives in that CLI's
 own config, so any setup it supports works here unchanged. (Env-var names below are illustrative — they
 drift, so follow each tool's own docs, linked, rather than treating these as gospel.)
 
@@ -166,4 +199,4 @@ drift, so follow each tool's own docs, linked, rather than treating these as gos
 - **Future `api` adapter** (M4 — no CLI in the loop): target an OpenAI- or Anthropic-compatible gateway
   (LiteLLM / a vendor proxy) to stay provider-agnostic.
 
-**Rule of thumb: CurIAtor is the harness; you bring the brain.**
+**Rule of thumb: curIAtor is the harness; you bring the brain.**

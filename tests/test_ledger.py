@@ -76,3 +76,26 @@ def test_ts_defaults_to_utc_when_omitted(cfg):
     assert note["ts"] and note["ts"].endswith("+00:00")
     assert ledger.save_entry(cfg, "sample", comment="x", ts="t9") and \
         next(e for e in ledger.load(cfg)["sample"] if e["comment"] == "x")["ts"] == "t9"  # explicit wins
+
+
+def test_sqlite_is_primary_and_json_snapshot_is_not_exported(cfg):
+    fid = ledger.save_entry(cfg, "sample", comment="sqlite-backed", ts="t0")
+    assert ledger.db_path(cfg).exists()
+    assert not ledger.json_path(cfg).exists()
+    assert ledger.load(cfg)["sample"][0]["id"] == fid
+
+
+def test_legacy_json_ledger_migrates_into_sqlite(cfg):
+    import json
+
+    ledger.db_path(cfg).unlink(missing_ok=True)
+    ledger.json_path(cfg).write_text(json.dumps({"sample": [
+        {"id": "old1", "author": "user", "kind": "comment", "comment": "from json",
+         "status": "new", "ts": "t0"}
+    ]}))
+    data = ledger.load(cfg)
+    assert data["sample"][0]["id"] == "old1"
+    assert ledger.db_path(cfg).exists()
+    ledger.save_entry(cfg, "sample", comment="after migration", ts="t1")
+    legacy = json.loads(ledger.json_path(cfg).read_text())
+    assert len(legacy["sample"]) == 1

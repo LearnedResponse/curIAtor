@@ -21,6 +21,8 @@ import shutil
 import subprocess
 from pathlib import Path
 
+from .. import runlog
+
 # Enough to edit one app, smoke-test it, and run `curiator reply` — but not the whole toolbox.
 _DEFAULT_TOOLS = ["Read", "Edit", "Write", "Bash", "Glob", "Grep"]
 
@@ -47,13 +49,12 @@ def run(task) -> None:
     cmd += ["--allowedTools", *allowed]               # variadic — keep LAST (consumes args until the next flag)
 
     try:
-        proc = subprocess.run(cmd, cwd=task.cfg["repo_root"], capture_output=True, text=True,
-                              timeout=int(agent.get("timeout", 900)))
+        proc = runlog.run_streamed(task, cmd, cwd=task.cfg["repo_root"], timeout=int(agent.get("timeout", 900)),
+                                   label="claude -p", display_cmd=["claude", "-p", "<task bundle>", "..."])
     except subprocess.TimeoutExpired as exc:
         raise RuntimeError(f"claude -p timed out after {agent.get('timeout', 900)}s") from exc
 
-    out, err = (proc.stdout or "").strip(), (proc.stderr or "").strip()
-    if out:
-        print(f"[headless-cc] {task.key}/{task.entry.get('id')}:\n{out[-2000:]}")
+    if proc.tail.strip():
+        print(f"[headless-cc] {task.key}/{task.entry.get('id')}:\n{proc.tail[-2000:]}")
     if proc.returncode != 0:
-        raise RuntimeError(f"claude -p exited {proc.returncode}: {(err or out)[-800:]}")
+        raise RuntimeError(f"claude -p exited {proc.returncode}: {proc.tail[-800:]}")

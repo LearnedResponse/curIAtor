@@ -6,6 +6,22 @@ All notable changes to curIAtor are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+- Flask + React overlay shell (`web_shell.py`) served by default, with the legacy Dash shell still
+  available via `--legacy-dash-shell`. Dash remains supported as `dash-inproc`; the overlay itself is
+  now framework-neutral.
+- SQLite-backed feedback ledger (`feedback/app_feedback.sqlite`) as the single runtime source of
+  truth, with one-time import from legacy `feedback/app_feedback.json` and a `curiator feedback`
+  inspection CLI for agents and humans.
+- App-directory source scopes via `root:` / directory-valued `source:`, plus `mounts:` so one folder can
+  expose multiple gallery endpoints.
+- Same-origin `proxy` mount support for local web servers under `/app/<name>/...`, with process restart
+  on curIAtor reload.
+- `curiator app create` / `curiator init-app` to scaffold app directories and register them in
+  `gallery.yaml` using Dash, static, or tiny Python-server templates.
+- Per-feedback run artifacts: task bundles live under `feedback/tasks/<id>.md`, agent stdout/stderr
+  streams live to `feedback/replies/<id>.md`, and feedback status badges link to a scrollable trace view.
+
 ## [0.1.0] — 2026-06-29
 
 First public release — the full feedback→fix loop, end-to-end, Dash-first.

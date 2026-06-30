@@ -1,4 +1,4 @@
-# CurIAtor — one container per collection.
+# curIAtor — one container per collection.
 #
 # The container is the blast-radius boundary: the curator auto-EDITS and RUNS your app code, so each
 # collection gets its own sandbox. The collection (apps + gallery.yaml + the feedback ledger) is a

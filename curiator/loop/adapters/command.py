@@ -10,7 +10,8 @@ with the path to the task bundle. The command is responsible for editing + reply
 from __future__ import annotations
 
 import shlex
-import subprocess
+
+from .. import runlog
 
 
 def available() -> bool:
@@ -22,4 +23,8 @@ def run(task) -> None:
     if not tmpl:
         raise RuntimeError("agent.adapter is 'command' but agent.cmd is unset in gallery.yaml")
     cmd = tmpl.format(task_file=task.task_file, source=task.source or "")
-    subprocess.run(shlex.split(cmd), cwd=task.cfg["repo_root"], check=False)
+    agent = getattr(task, "agent", None) or task.cfg.get("agent", {}) or {}
+    proc = runlog.run_streamed(task, shlex.split(cmd), cwd=task.cfg["repo_root"],
+                               timeout=int(agent.get("timeout", 900)), label="command adapter")
+    if proc.returncode != 0:
+        raise RuntimeError(f"command adapter exited {proc.returncode}: {proc.tail[-800:]}")

@@ -1,7 +1,7 @@
 """loop.py — the feedback → fix loop (standalone).
 
 In the research prototype, `feedback_watch.sh` polled the ledger and EXITED on new feedback so
-the *live* Claude Code session would be re-invoked. CurIAtor is self-contained: this watcher
+the *live* Claude Code session would be re-invoked. curIAtor is self-contained: this watcher
 polls the ledger and, on new feedback, **invokes a headless agent itself** via the configured
 adapter — no live session required.
 
@@ -19,7 +19,7 @@ from __future__ import annotations
 import time
 from pathlib import Path
 
-from . import adapters
+from . import adapters, runlog
 from .. import ledger      # tiny ledger read/write (status, replies) — see curiator/ledger.py
 
 POLL_SECONDS = 5
@@ -84,19 +84,26 @@ def run_once(cfg: dict) -> int:
         who = (entry.get("user") or {}).get("name") or "anonymous"
         snippet = " ".join((entry.get("comment") or "").split())[:80] or f"★{entry.get('stars')}"
         print(f"curiator: ● new feedback on {_label(key)} by {who} — {snippet!r}", flush=True)
-        ledger.set_status(cfg, key, [eid], "working")
         task = adapters.build_task(cfg, key, entry)     # writes a task file, returns its path + bundle
         prof = task.agent or {}
         elevated = "  ⚡ELEVATED" if prof.get("elevated") else ""
+        runlog.init_trace(task, adapter_name)
+        runlog.note(task, "task bundle written; setting status to working")
+        ledger.set_status(cfg, key, [eid], "working")
         print(f"curiator:   ▶ launching {adapter_name} on {key}/{eid} "
               f"(autonomy={prof.get('autonomy', 'auto-small')}){elevated}", flush=True)
+        runlog.note(task, f"status set to working; launching {adapter_name}")
         try:
             adapter.run(task)                            # the agent edits + smoke-tests + replies
             st, reply = _outcome(cfg, key, eid)
             tail = f' · "{reply[:72]}"' if reply else ""
+            runlog.note(task, f"ledger status after run: {st}")
+            if reply:
+                runlog.note(task, f"agent reply: {reply}")
             print(f"curiator:   {'✓' if st != 'working' else '⚠'} {key}/{eid} → {st}{tail}", flush=True)
         except Exception as exc:                          # never leave an item stuck on 'working'
             print(f"curiator:   ✗ {key}/{eid} failed: {exc}", flush=True)
+            runlog.note(task, f"loop error: {exc}")
             ledger.add_system_note(cfg, key, f"⚙ loop error: {exc}", reply_to=[eid])
             ledger.set_status(cfg, key, [eid], "new")
     return len(items)

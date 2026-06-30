@@ -1,4 +1,4 @@
-# CurIAtor — gallery config (the registry the shell + loop read).
+# curIAtor — gallery config (the registry the shell + loop read).
 # Add an entry per app; the curator edits each app's `source` when you give feedback on it.
 # Full schema + rationale: docs/DESIGN.md.
 
@@ -56,7 +56,7 @@ runner:
   path: .                       # the curiator checkout to edit (here: this repo root)
 
 feedback:
-  dir: feedback                 # JSON ledger + shots/ live here
+  dir: feedback                 # SQLite ledger source of truth + shots/ live here
   screenshots: true
 
 # Who gave each piece of feedback. curiator RESOLVES + RECORDS identity. Additive: omit this block
@@ -82,7 +82,7 @@ git:
   commit: false                 # false (default) = leave uncommitted | true = git-as-memory (per-run commits)
   branch: curiator/auto         # the sandbox/env branch commits land on (empty/null = current HEAD)
   signoff: true                 # add Signed-off-by (DCO)
-  include_ledger: true          # commit feedback/app_feedback.json in the same commit
+  include_ledger: false         # opt in to commit feedback/app_feedback.sqlite in the same commit
   # also_commit: dependency manifests an ELEVATED run may touch (pip install → requirements.txt) ride in
   # the SAME atomic commit, not left dangling. Defaults to the common manifests below; set [] to disable.
   # also_commit: [requirements.txt, pyproject.toml, package.json, poetry.lock, package-lock.json]

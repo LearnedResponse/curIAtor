@@ -7,12 +7,18 @@ re-exec the module per test against the current tmp gallery (and keep `curiator/
 `import registry` + Flask's asset root_path both resolve)."""
 from __future__ import annotations
 
-import json
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
 
 SHELL_DIR = Path(__file__).resolve().parents[1] / "curiator" / "shell"
+
+
+def _seed_feedback(data: dict) -> None:
+    from curiator import ledger
+    from curiator.config import load_config
+    ledger.replace_all(load_config(), data)
 
 
 @pytest.fixture
@@ -55,18 +61,122 @@ def test_index_and_general_serve(client):
 
 def test_general_survives_null_ts(collection, client):
     """A loop-error note with ts:null must not crash render_history's sort (the reported /general 500)."""
-    led = collection / "feedback" / "app_feedback.json"
-    led.write_text(json.dumps({"sample": [
+    _seed_feedback({"sample": [
         {"id": "n1", "author": "claude", "kind": "system", "comment": "⚙ loop error: 529",
          "status": "update", "ts": None, "reply_to": []},
         {"id": "u1", "author": "user", "kind": "comment", "comment": "hi", "stars": 3,
          "status": "new", "ts": "2026-06-29T16:00:00+00:00"},
-    ]}))
+    ]})
     r = client.get("/general")
     assert r.status_code == 200
     body = r.get_data(as_text=True)
     assert "class='ts'" in body and "/assets/localtime.js" in body   # localized timestamps + the converter
     assert "data-ts='None'" not in body                              # the null row emits no broken marker
+
+
+def test_general_history_supports_one_and_five_minute_ranges(collection, client):
+    now = datetime.now(timezone.utc)
+    recent = (now - timedelta(seconds=30)).isoformat(timespec="seconds")
+    three_min = (now - timedelta(minutes=3)).isoformat(timespec="seconds")
+    ten_min = (now - timedelta(minutes=10)).isoformat(timespec="seconds")
+    _seed_feedback({
+        "__general__": [
+            {"id": "old", "author": "user", "kind": "comment", "comment": "ten-minute item",
+             "status": "done", "ts": ten_min},
+            {"id": "mid", "author": "user", "kind": "comment", "comment": "three-minute item",
+             "status": "done", "ts": three_min},
+            {"id": "new", "author": "user", "kind": "comment", "comment": "thirty-second item",
+             "status": "new", "ts": recent},
+        ],
+    })
+
+    all_body = client.get("/general").get_data(as_text=True)
+    assert "1 minute" in all_body and "5 minutes" in all_body
+    assert "ten-minute item" in all_body and "three-minute item" in all_body and "thirty-second item" in all_body
+
+    one_min_body = client.get("/general?range=1m").get_data(as_text=True)
+    assert "thirty-second item" in one_min_body
+    assert "three-minute item" not in one_min_body and "ten-minute item" not in one_min_body
+
+    five_min_body = client.get("/general?range=5m").get_data(as_text=True)
+    assert "thirty-second item" in five_min_body and "three-minute item" in five_min_body
+    assert "ten-minute item" not in five_min_body
+
+
+def test_trace_route_and_status_badge_link(collection, shell_mod, client):
+    _seed_feedback({"sample": [
+        {"id": "u1", "author": "user", "kind": "comment", "comment": "fix it",
+         "status": "working", "ts": "2026-06-29T16:00:00+00:00"},
+    ]})
+    trace = collection / "feedback" / "replies" / "u1.md"
+    trace.parent.mkdir(parents=True, exist_ok=True)
+    trace.write_text("# curIAtor Agent Trace\n\nline one\n")
+
+    body = client.get("/general").get_data(as_text=True)
+    assert "/feedback-trace/u1" in body and "open agent trace" in body
+    raw = client.get("/feedback-trace/u1.md")
+    assert raw.status_code == 200 and "line one" in raw.get_data(as_text=True)
+    page = client.get("/feedback-trace/u1")
+    assert page.status_code == 200 and "setInterval(refresh" in page.get_data(as_text=True)
+
+    panel = shell_mod.feedback_list("sample")
+    hrefs = []
+
+    def walk(c):
+        href = getattr(c, "href", None)
+        if href:
+            hrefs.append(href)
+        ch = getattr(c, "children", None)
+        if isinstance(ch, (list, tuple)):
+            for x in ch:
+                walk(x)
+        elif ch is not None and hasattr(ch, "_prop_names"):
+            walk(ch)
+
+    walk(panel)
+    assert "/feedback-trace/u1" in hrefs
+
+
+def test_feedback_threads_are_nested_and_replyable(collection, shell_mod, client):
+    _seed_feedback({"sample": [
+        {"id": "u1", "author": "user", "kind": "comment", "comment": "original request",
+         "status": "awaiting_approval", "ts": "2026-06-29T16:00:00+00:00"},
+        {"id": "n1", "author": "claude", "kind": "system", "comment": "agent option",
+         "status": "update", "reply_to": ["u1"], "ts": "2026-06-29T16:01:00+00:00", "agent": "Codex"},
+        {"id": "u2", "author": "user", "kind": "comment", "comment": "clarifying reply",
+         "status": "new", "reply_to": ["n1"], "ts": "2026-06-29T16:02:00+00:00"},
+    ]})
+
+    body = client.get("/general").get_data(as_text=True)
+    assert "original request" in body and "agent option" in body and "clarifying reply" in body
+    assert "margin:4px 0 4px 40px" in body          # agent note nested under the original user item
+    assert "margin:4px 0 4px 36px" in body          # user reply nested under the agent note
+    assert "set_props(&#x27;fb-reply-to&#x27;" in body
+
+    panel = shell_mod.feedback_list("sample")
+    reply_ids = []
+    margins = []
+
+    def walk(c):
+        cid = getattr(c, "id", None)
+        if isinstance(cid, dict) and cid.get("type") == "fbreply":
+            reply_ids.append(cid)
+        style = getattr(c, "style", None)
+        if isinstance(style, dict) and style.get("marginLeft"):
+            margins.append(style.get("marginLeft"))
+        ch = getattr(c, "children", None)
+        if isinstance(ch, (list, tuple)):
+            for x in ch:
+                walk(x)
+        elif ch is not None and hasattr(ch, "_prop_names"):
+            walk(ch)
+
+    walk(panel)
+    assert {"type": "fbreply", "key": "sample", "target": "n1"} in reply_ids
+    assert "14px" in margins and "28px" in margins
+
+    saved = shell_mod.save_entry("sample", None, "typed follow-up", None, reply_to=["n1"])
+    assert saved["reply_to"] == ["n1"]
 
 
 # ── the router: one writer, defaults to General, deep-links, click wins ───────
@@ -121,13 +231,12 @@ def test_catalog_has_share_buttons_and_general_row(shell_mod):
 
 def test_agent_label_attributes_the_reply(collection, client):
     """An agent note carries `agent` (the provider) → the panel shows '⚙ Codex', not a hardcoded Claude."""
-    led = collection / "feedback" / "app_feedback.json"
-    led.write_text(json.dumps({"sample": [
+    _seed_feedback({"sample": [
         {"id": "u1", "author": "user", "kind": "comment", "comment": "fix it", "status": "new",
          "ts": "2026-06-29T16:00:00+00:00"},
         {"id": "n1", "author": "claude", "kind": "system", "comment": "fixed it", "status": "update",
          "reply_to": ["u1"], "ts": "2026-06-29T16:05:00+00:00", "agent": "Codex"},
-    ]}))
+    ]})
     body = client.get("/general").get_data(as_text=True)
     assert "⚙ Codex" in body and "⚙ Claude" not in body
 
@@ -161,3 +270,10 @@ def test_share_and_fbshare_callbacks_are_clientside(shell_mod):
     blob = " ".join(cs_outputs)
     assert "share-toast.children" in blob       # per-row 🔗 copy-link
     assert "fb-share-msg.children" in blob       # panel "🔗 Share" button
+
+
+def test_record_action_links_to_system_note(shell_mod):
+    shell_mod.record_action("sample", "A", reply_to="n1")
+    item = shell_mod.load_feedback()["sample"][0]
+    assert item["comment"] == "A"
+    assert item["reply_to"] == ["n1"]

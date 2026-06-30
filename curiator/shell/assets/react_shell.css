@@ -1,0 +1,459 @@
+html, body, #react-entry-point {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  font-family: system-ui, sans-serif;
+  color: #333;
+  background: #fff;
+}
+
+.rshell {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+}
+
+.rshell-main {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
+.rshell-catalog {
+  width: 270px;
+  flex: 0 0 270px;
+  border-right: 1px solid #ddd;
+  background: #fcfcfc;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  transition: width .18s ease, flex-basis .18s ease;
+}
+
+.rshell-brand {
+  padding: 10px 9px 5px;
+  font-weight: 800;
+  font-size: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.rshell-brand .ia {
+  color: #8e44ad;
+}
+
+.rshell-controls {
+  padding: 8px 9px;
+  border-bottom: 1px solid #ddd;
+}
+
+.rshell-input,
+.rshell-select,
+.rshell-textarea {
+  width: 100%;
+  box-sizing: border-box;
+  font: inherit;
+  font-size: 12px;
+  border: 1px solid #ccc;
+  border-radius: 5px;
+  background: #fff;
+}
+
+.rshell-input,
+.rshell-select {
+  padding: 5px 6px;
+}
+
+.rshell-textarea {
+  height: 80px;
+  padding: 7px;
+  resize: vertical;
+}
+
+.rshell-row {
+  padding: 7px 8px;
+  cursor: pointer;
+  border-bottom: 1px solid #eee;
+}
+
+.rshell-row:hover,
+.rshell-row.active {
+  background: #f3f0fb;
+}
+
+.rshell-general-row {
+  background: #f6f1fb;
+  border-bottom: 2px solid #ddd;
+}
+
+.rshell-app-count {
+  padding: 4px 9px;
+  border-bottom: 1px solid #eee;
+  color: #777;
+  font-size: 10.5px;
+}
+
+.rshell-row-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: #333;
+}
+
+.rshell-row-meta {
+  margin-top: 2px;
+  font-size: 10px;
+  color: #777;
+}
+
+.rshell-tag {
+  display: inline-block;
+  color: #fff;
+  border-radius: 8px;
+  padding: 0 5px;
+  font-size: 9px;
+  margin: 3px 3px 0 0;
+}
+
+.rshell-frame {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  height: 100%;
+}
+
+.rshell-feedback {
+  width: 320px;
+  flex: 0 0 320px;
+  border-left: 1px solid #ddd;
+  background: #fcfcfc;
+  padding: 12px;
+  box-sizing: border-box;
+  overflow: auto;
+  transition: width .18s ease, flex-basis .18s ease, padding .18s ease;
+}
+
+.rshell-catalog.collapsed,
+.rshell-feedback.collapsed {
+  width: 0;
+  flex-basis: 0;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  overflow: hidden;
+}
+
+.rshell-collapse-btn {
+  width: 22px;
+  height: 22px;
+  flex: 0 0 22px;
+  border: 1px solid #ddd;
+  border-radius: 5px;
+  background: #fff;
+  color: #666;
+  cursor: pointer;
+  font: 700 15px/1 system-ui, sans-serif;
+  padding: 0;
+}
+
+.rshell-collapse-btn:hover,
+.rshell-edge-tab:hover {
+  background: #f3f0fb;
+  color: #333;
+}
+
+.rshell-edge-tab {
+  flex: 0 0 28px;
+  width: 28px;
+  border: 0;
+  background: #fcfcfc;
+  color: #555;
+  cursor: pointer;
+  font: 700 11px system-ui, sans-serif;
+  writing-mode: vertical-rl;
+  text-orientation: mixed;
+  letter-spacing: 0;
+}
+
+.rshell-edge-tab.left {
+  border-right: 1px solid #ddd;
+}
+
+.rshell-edge-tab.right {
+  border-left: 1px solid #ddd;
+}
+
+.rshell-feedback-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.rshell-auth {
+  position: relative;
+  min-height: 18px;
+  margin-bottom: 3px;
+  text-align: right;
+  font-size: 11px;
+}
+
+.rshell-auth-trigger {
+  position: relative;
+  z-index: 92;
+  border: none;
+  background: transparent;
+  border-radius: 5px;
+  color: #777;
+  cursor: pointer;
+  font: inherit;
+  padding: 1px 5px;
+  user-select: none;
+}
+
+.rshell-auth-trigger:hover {
+  background: #f3f0fb;
+}
+
+.rshell-auth-dot {
+  color: #999;
+  margin-right: 4px;
+}
+
+.rshell-auth-dot.on {
+  color: #1f9d55;
+}
+
+.rshell-auth-caret {
+  color: #999;
+  font-size: 9px;
+  margin-left: 3px;
+}
+
+.rshell-auth-menu {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  z-index: 91;
+  min-width: 132px;
+  overflow: hidden;
+  text-align: left;
+  background: #fff;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, .13);
+}
+
+.rshell-auth-menu .auth-menu-item {
+  display: block;
+  padding: 7px 14px;
+  color: #333;
+  font-size: 12.5px;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.rshell-auth-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  border: none;
+  background: transparent;
+  cursor: default;
+}
+
+.rshell-feedback h4 {
+  margin: 0 0 2px;
+  font-size: 14px;
+}
+
+.rshell-button {
+  border: none;
+  border-radius: 6px;
+  padding: 7px 10px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.rshell-button.primary {
+  width: 100%;
+  background: #1f9d55;
+  color: #fff;
+}
+
+.rshell-button.secondary {
+  background: #fff;
+  border: 1px solid #ddd;
+  color: #777;
+}
+
+.rshell-msg {
+  min-height: 16px;
+  font-size: 11px;
+  color: #1f9d55;
+  margin: 5px 0 8px;
+}
+
+.rshell-thread {
+  margin-bottom: 6px;
+}
+
+.rshell-entry {
+  padding: 5px 8px;
+  margin-bottom: 6px;
+  border-radius: 3px;
+}
+
+.rshell-entry.system {
+  border-left: 3px solid #2980b9;
+  background: #eef5fb;
+}
+
+.rshell-entry.user {
+  background: #fafafa;
+}
+
+.rshell-entry-head {
+  font-size: 10px;
+  color: #777;
+}
+
+.rshell-entry-body {
+  margin-top: 2px;
+  font-size: 12px;
+  white-space: pre-wrap;
+}
+
+.rshell-status {
+  color: #fff;
+  border-radius: 8px;
+  padding: 1px 6px;
+  font-size: 9.5px;
+  text-decoration: none;
+}
+
+.rshell-reply {
+  border: none;
+  background: transparent;
+  color: #2980b9;
+  font-weight: 700;
+  font-size: 10px;
+  padding: 0 0 0 6px;
+  cursor: pointer;
+}
+
+.rshell-reply-context {
+  border-left: 3px solid #2980b9;
+  background: #eef5fb;
+  padding: 5px 7px;
+  border-radius: 3px;
+  margin-bottom: 6px;
+}
+
+.rshell-preview {
+  max-width: 100%;
+  margin: 4px 0 8px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+}
+
+.rshell-shot {
+  max-width: 100%;
+  margin-top: 4px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+}
+
+.rshell-mobilebar {
+  display: none;
+}
+
+@media (max-width: 860px) {
+  .rshell-edge-tab {
+    display: none;
+  }
+
+  .rshell-collapse-btn {
+    display: none;
+  }
+
+  .rshell-mobilebar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 9px 12px;
+    border-bottom: 1px solid #ddd;
+    background: #fafafa;
+  }
+
+  .rshell-main {
+    position: relative;
+  }
+
+  .rshell-catalog,
+  .rshell-feedback {
+    position: fixed;
+    top: 0;
+    bottom: 0;
+    z-index: 70;
+    width: 86%;
+    max-width: 360px;
+    height: 100vh;
+    box-shadow: 0 0 24px rgba(0, 0, 0, .30);
+    transition: transform .25s ease;
+  }
+
+  .rshell-catalog.collapsed,
+  .rshell-feedback.collapsed {
+    width: 86%;
+    max-width: 360px;
+    height: 100vh;
+    flex-basis: auto;
+    border: none;
+    overflow: auto;
+  }
+
+  .rshell-catalog.collapsed {
+    padding: 0;
+    border-right: 1px solid #ddd;
+  }
+
+  .rshell-feedback.collapsed {
+    padding: 12px;
+    border-left: 1px solid #ddd;
+  }
+
+  .rshell-catalog {
+    left: 0;
+    transform: translateX(-106%);
+  }
+
+  .rshell-catalog.open {
+    transform: translateX(0);
+  }
+
+  .rshell-feedback {
+    right: 0;
+    transform: translateX(106%);
+  }
+
+  .rshell-feedback.open {
+    transform: translateX(0);
+  }
+
+  .rshell-scrim {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,.25);
+    z-index: 65;
+  }
+
+  .rshell-scrim.open {
+    display: block;
+  }
+}

@@ -24,7 +24,7 @@ again (or just `curiator reset-demo` while it's running) — it's idempotent.
 | 0:09–0:13 | **The curator wakes.** Badge flips **`new` → `working`**. (Optional tiny corner overlay: `curiator · claude -p · editing aviato.py`.) | the magic moment |
 | 0:13–0:22 | **The reply.** A ⚙ note appears in the panel — concrete and specific, e.g. *"Added axis titles (Month / Amount $k), moved the legend out to a horizontal bar above the chart, and widened the margins. Smoke-tested clean."* Badge → **`done`**. | proof it understood + acted |
 | 0:22–0:27 | **Refresh.** The reply already reloaded the app server-side; refresh the browser (or re-select `aviato`) and the iframe renders clean — labeled axes, tidy legend above the bars, breathing room. A subtle before/after wipe if you can. | the payoff |
-| 0:27–0:30 | **Card.** `CurIAtor — your Dash apps have a curator now.` · `pip install curiator` | the close |
+| 0:27–0:30 | **Card.** `curIAtor — your Dash apps have a curator now.` · `pip install curiator` | the close |
 
 **Notes for the take:**
 - The *screenshot* step is the signature gesture — make it visible (a flash / shutter). It's the

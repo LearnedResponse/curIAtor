@@ -9,7 +9,7 @@ Policy comes from gallery.yaml `git:` (config.py fills defaults):
     commit          # false (default) = leave-uncommitted (today's behavior) | true = git-as-memory
     branch          # the sandbox/env branch commits land on (null/empty = current HEAD)
     signoff         # add Signed-off-by (DCO) via `git commit -s`
-    include_ledger  # bundle feedback/app_feedback.json in the same commit
+    include_ledger  # optionally bundle feedback/app_feedback.sqlite in the same commit
 
 Binding practices (enforced here + in task_template.md): one item → one atomic commit; smoke-test
 before commit (fail ⇒ revert + report, no commit); structured message + trailers; commit only —
@@ -22,6 +22,7 @@ import fcntl
 import fnmatch
 import importlib.util
 import re
+import shlex
 import subprocess
 from pathlib import Path
 
@@ -41,7 +42,7 @@ _DEFAULT_ALSO_COMMIT = [
     "package.json", "package-lock.json", "pnpm-lock.yaml", "yarn.lock",
 ]
 _GENERAL_COLLECTION_GLOBS = [
-    "apps/*.py", "apps/**/*.py",
+    "apps/**",
     "assets/**", "data/**",
 ]
 
@@ -88,15 +89,72 @@ def ensure_branch(cfg: dict, branch: str | None) -> None:
 
 # ───────────────────────────── helpers ─────────────────────────────
 def source_for(cfg: dict, app: str) -> str | None:
-    """The app's `source:` path (relative to repo root — a git pathspec), or None."""
+    """The app's source scope (relative to repo root — a git pathspec), or None."""
+    spec = _app_spec(cfg, app)
+    return spec.get("source_rel") if spec else None
+
+
+def _resolve(base: Path, value: str | None) -> Path | None:
+    if not value:
+        return None
+    p = Path(value)
+    return p if p.is_absolute() else (base / p).resolve()
+
+
+def _rel_to_repo(cfg: dict, path: Path | None) -> str | None:
+    if not path:
+        return None
+    try:
+        return str(path.resolve().relative_to(Path(cfg["repo_root"]).resolve()))
+    except ValueError:
+        return None
+
+
+def _app_spec(cfg: dict, app: str) -> dict | None:
+    repo = Path(cfg["repo_root"]).resolve()
     for a in (cfg.get("apps") or []):
-        if a.get("name") == app or (a.get("mount", {}) or {}).get("module") == app:
-            return a.get("source")
+        root = _resolve(repo, a.get("root")) or repo
+        mounts = a.get("mounts")
+        if mounts:
+            candidates = []
+            for m in mounts:
+                mount = dict(m.get("mount") or m)
+                if m.get("mount"):
+                    for k in ("source", "title", "tags", "color", "smoke", "cwd", "port", "cmd"):
+                        if k in m and k not in mount:
+                            mount[k] = m[k]
+                name = m.get("name") or mount.get("name") or a.get("name")
+                candidates.append((name, mount))
+        else:
+            candidates = [(a.get("name"), dict(a.get("mount") or {}))]
+        for name, mount in candidates:
+            if app not in {name, a.get("name"), mount.get("module")}:
+                continue
+            source = mount.get("source", a.get("source", "." if a.get("root") else None))
+            source_base = root if a.get("root") else repo
+            source_path = _resolve(source_base, source) or root
+            return {
+                "root": root,
+                "root_rel": _rel_to_repo(cfg, root),
+                "source": source_path,
+                "source_rel": _rel_to_repo(cfg, source_path),
+                "smoke": mount.get("smoke", a.get("smoke")),
+            }
     return None
 
 
 def _ledger_relpath(cfg: dict) -> str:
-    return f"{(cfg.get('feedback', {}) or {}).get('dir', 'feedback')}/app_feedback.json"
+    return f"{(cfg.get('feedback', {}) or {}).get('dir', 'feedback')}/app_feedback.sqlite"
+
+
+def _add_paths(cfg: dict, paths: list[str], ledger_rel: str | None = None) -> None:
+    """Stage normal paths normally, and the ignored SQLite ledger only when explicitly requested."""
+    normal = [p for p in paths if p and p != ledger_rel]
+    if normal:
+        _git(cfg, "add", "--", *normal)
+    if ledger_rel and ledger_rel in paths:
+        ledger.checkpoint(cfg)
+        _git(cfg, "add", "-f", "--", ledger_rel)
 
 
 def _gallery_relpath(cfg: dict) -> str | None:
@@ -124,8 +182,31 @@ def smoke_source(path: Path) -> tuple[bool, str]:
         return False, f"{type(exc).__name__}: {exc}"
 
 
+def smoke_app(cfg: dict, app: str, src: str | None) -> tuple[bool, str]:
+    spec = _app_spec(cfg, app) or {}
+    cmd = spec.get("smoke")
+    if cmd:
+        root = spec.get("root") or Path(cfg["repo_root"])
+        source = spec.get("source") or (Path(cfg["repo_root"]) / src if src else root)
+        rendered = str(cmd).format(root=str(root), source=str(source), app=app)
+        r = subprocess.run(shlex.split(rendered), cwd=root, capture_output=True, text=True)
+        if r.returncode == 0:
+            return True, "passed"
+        return False, (r.stderr or r.stdout or f"exit {r.returncode}").strip()[:500]
+    if src:
+        p = Path(cfg["repo_root"]) / src
+        if p.is_file() and p.suffix == ".py":
+            return smoke_source(p)
+        if p.is_dir():
+            return True, "n/a (no smoke configured for directory source)"
+    return True, "n/a (no smoke configured)"
+
+
 def _path_changed(cfg: dict, rel: str) -> bool:
-    return _git(cfg, "diff", "--quiet", "HEAD", "--", rel, check=False).returncode != 0
+    if _git(cfg, "diff", "--quiet", "HEAD", "--", rel, check=False).returncode != 0:
+        return True
+    prefix = rel.rstrip("/") + "/"
+    return any(p == rel or p.startswith(prefix) for p in _dirty_paths(cfg))
 
 
 def _dirty_paths(cfg: dict) -> list[str]:
@@ -214,11 +295,11 @@ def commit_run(cfg: dict, app: str, feedback_id: str, *, status: str, note_text:
         changed = bool(src) and _path_changed(cfg, src)
         smoke = "n/a (no source change)"
         if changed:
-            ok, msg = smoke_source(Path(cfg["repo_root"]) / src)
+            ok, msg = smoke_app(cfg, app, src)
             if not ok:
                 _git(cfg, "checkout", "--", src)             # never commit a broken app
                 return {"committed": False, "reason": f"smoke-test failed, reverted edit: {msg}"}
-            smoke = "passed"
+            smoke = msg
         changed_desc = f"edited {src}" if changed else ("plan only" if status == "awaiting_approval" else "ack / no source change")
 
         ledger_rel = _ledger_relpath(cfg)
@@ -230,9 +311,9 @@ def commit_run(cfg: dict, app: str, feedback_id: str, *, status: str, note_text:
             changed_desc += f" (+{', '.join(extra)})"     # dependency manifests captured in the same commit
 
         ensure_branch(cfg, git.get("branch"))
-        paths = ([src] if changed else []) + ([ledger_rel] if git.get("include_ledger", True) else []) + extra
+        paths = ([src] if changed else []) + ([ledger_rel] if git.get("include_ledger", False) else []) + extra
         if paths:
-            _git(cfg, "add", "--", *paths)
+            _add_paths(cfg, paths, ledger_rel)
         if _git(cfg, "diff", "--cached", "--quiet", check=False).returncode == 0:
             return {"committed": False, "reason": "nothing staged to commit"}
 
@@ -278,7 +359,7 @@ def revert_feedback(cfg: dict, target: str, reason: str = "manual revert") -> di
         reverted_source = False
         if src and src in files:
             _git(cfg, "checkout", f"{sha}~1", "--", src)     # source as it was BEFORE the fix
-            ok, msg = smoke_source(Path(cfg["repo_root"]) / src)
+            ok, msg = smoke_app(cfg, app, src)
             if not ok:
                 _git(cfg, "checkout", "--", src)             # abort: restore working copy
                 return {"ok": False, "reason": f"reverted source fails smoke-test: {msg}"}
@@ -290,8 +371,9 @@ def revert_feedback(cfg: dict, target: str, reason: str = "manual revert") -> di
             ledger.set_status(cfg, app, [fid], "reverted")
 
         ensure_branch(cfg, git.get("branch"))
-        paths = ([src] if reverted_source else []) + [_ledger_relpath(cfg)]
-        _git(cfg, "add", "--", *paths)
+        ledger_rel = _ledger_relpath(cfg)
+        paths = ([src] if reverted_source else []) + ([ledger_rel] if git.get("include_ledger", False) else [])
+        _add_paths(cfg, paths, ledger_rel)
         if _git(cfg, "diff", "--cached", "--quiet", check=False).returncode == 0:
             return {"ok": False, "reason": "nothing to revert/commit"}
         msg = (f"curator({app}): revert {short}\n\n"

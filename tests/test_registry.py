@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import importlib
 import sys
+import textwrap
 from pathlib import Path
 
 
@@ -43,5 +44,40 @@ def test_tag_meta_exposed(collection):
         reg = _fresh_registry()
         assert isinstance(reg.ALL_APPS, list) and reg.ALL_APPS
         assert hasattr(reg, "TAG_META")
+    finally:
+        sys.path[:] = saved
+
+
+def test_app_root_can_expand_to_multiple_mounts(collection):
+    (collection / "apps" / "suite").mkdir()
+    (collection / "apps" / "suite" / "sales.py").write_text("x = 1\n")
+    (collection / "apps" / "suite" / "ops.py").write_text("x = 2\n")
+    (collection / "gallery.yaml").write_text(textwrap.dedent('''\
+        apps:
+          - name: suite
+            root: apps/suite
+            tags: [demo]
+            mounts:
+              - name: suite_sales
+                title: Suite sales
+                source: sales.py
+                mount: { kind: dash-inproc, module: sales }
+              - name: suite_ops
+                title: Suite ops
+                source: ops.py
+                mount: { kind: proxy, cmd: "python server.py --port {port}", port: 8811 }
+        feedback: { dir: feedback }
+    '''))
+    saved = list(sys.path)
+    try:
+        reg = _fresh_registry()
+        by = {a["name"]: a for a in reg.ALL_APPS}
+        assert set(by) == {"suite_sales", "suite_ops"}
+        assert by["suite_sales"]["root"].endswith("apps/suite")
+        assert by["suite_sales"]["source"].endswith("apps/suite/sales.py")
+        assert by["suite_sales"]["mount"]["module"] == "sales"
+        assert by["suite_ops"]["mount"]["kind"] == "proxy"
+        assert "8811" in by["suite_ops"]["mount"]["cmd"]
+        assert str((collection / "apps" / "suite").resolve()) in sys.path
     finally:
         sys.path[:] = saved

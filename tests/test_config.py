@@ -13,6 +13,14 @@ def test_loads_gallery_under_collection(cfg, collection):
     assert [a["name"] for a in cfg["apps"]] == ["sample"]
 
 
+def test_load_config_searches_parent_directories(collection, monkeypatch):
+    monkeypatch.delenv("CURIATOR_GALLERY", raising=False)
+    monkeypatch.chdir(collection / "apps")
+    cfg = load_config()
+    assert cfg["repo_root"] == str(collection.resolve())
+    assert cfg["gallery_path"] == str((collection / "gallery.yaml").resolve())
+
+
 def test_explicit_runner_and_git_from_gallery(cfg):
     assert cfg["runner"] == {"mode": "checkout", "path": "."}
     assert cfg["git"]["commit"] is True
@@ -34,6 +42,7 @@ def test_defaults_when_blocks_absent(tmp_path, monkeypatch):
     assert cfg["git"]["commit"] is False          # leave-uncommitted default
     assert cfg["git"]["branch"] == "curiator/auto"
     assert cfg["git"]["signoff"] is True
+    assert cfg["git"]["include_ledger"] is False
     assert cfg["auth"]["admin_groups"] == ["admin"]   # who may change agent settings (mode != none)
 
 

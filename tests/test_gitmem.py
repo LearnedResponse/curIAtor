@@ -31,7 +31,7 @@ def test_commit_bundles_source_and_ledger_with_trailers(cfg, collection):
     files = subprocess.run(["git", "show", "--name-only", "--format=", "HEAD"],
                            cwd=collection, capture_output=True, text=True).stdout.split()
     assert "apps/sample.py" in files                       # the source edit
-    assert "feedback/app_feedback.json" in files           # …and the ledger, in ONE commit
+    assert "feedback/app_feedback.sqlite" in files         # …and the ledger, in ONE commit
     body = _log(collection, "-1", "--format=%B")
     assert body.startswith("curator(sample):")
     assert "Smoke-test: passed" in body
@@ -104,7 +104,7 @@ def test_ledger_only_commit_for_no_source_change(cfg, collection):
     assert res["committed"]
     files = subprocess.run(["git", "show", "--name-only", "--format=", "HEAD"],
                            cwd=collection, capture_output=True, text=True).stdout.split()
-    assert files == ["feedback/app_feedback.json"]         # ledger only, no source
+    assert files == ["feedback/app_feedback.sqlite"]       # ledger only, no source
     assert "ack / no source change" in _log(collection, "-1", "--format=%B")
 
 
@@ -121,7 +121,7 @@ def test_general_collection_commit_captures_app_and_gallery(cfg, collection):
     res = gitmem.commit_run(cfg, "__general__", fid, status="done", note_text="Added the model overview app.")
     assert res["committed"], res
     files = _names_at_head(collection)
-    assert "apps/models.py" in files and "gallery.yaml" in files and "feedback/app_feedback.json" in files
+    assert "apps/models.py" in files and "gallery.yaml" in files and "feedback/app_feedback.sqlite" in files
     body = _log(collection, "-1", "--format=%B")
     assert "apps/models.py" in body and "gallery.yaml" in body
 
@@ -133,7 +133,7 @@ def test_general_runner_feedback_does_not_sweep_collection_changes(cfg, collecti
     ledger.set_status(cfg, "__general__", [fid], "done")
     res = gitmem.commit_run(cfg, "__general__", fid, status="done", note_text="Patched the runner shell.")
     assert res["committed"], res
-    assert _names_at_head(collection) == ["feedback/app_feedback.json"]
+    assert _names_at_head(collection) == ["feedback/app_feedback.sqlite"]
     porcelain = subprocess.run(["git", "status", "--porcelain"], cwd=collection,
                                capture_output=True, text=True).stdout
     assert "gallery.yaml" in porcelain
@@ -173,7 +173,7 @@ def test_commit_includes_dependency_manifest(cfg, collection):
     res = gitmem.commit_run(cfg, "sample", fid, status="done", note_text="Added live data.")
     assert res["committed"], res
     files = _names_at_head(collection)
-    assert "apps/sample.py" in files and "feedback/app_feedback.json" in files
+    assert "apps/sample.py" in files and "feedback/app_feedback.sqlite" in files
     assert "requirements.txt" in files                     # the dep manifest, in the SAME commit
     assert "requirements.txt" in _log(collection, "-1", "--format=%B")      # and noted in the message
     porcelain = subprocess.run(["git", "status", "--porcelain"], cwd=collection,
@@ -204,3 +204,31 @@ def test_also_commit_can_be_disabled(cfg, collection):
     ledger.set_status(cfg, "sample", [fid], "done")
     gitmem.commit_run(cfg, "sample", fid, status="done", note_text="y")
     assert "requirements.txt" not in _names_at_head(collection)   # opt-out honored
+
+
+def test_directory_source_commit_uses_configured_smoke(cfg, collection):
+    appdir = collection / "apps" / "suite"
+    appdir.mkdir()
+    (appdir / "server.py").write_text("print('ok')\n")
+    (appdir / "README.md").write_text("before\n")
+    cfg["apps"] = [{
+        "name": "suite",
+        "root": "apps/suite",
+        "source": ".",
+        "mount": {"kind": "proxy", "cmd": "python server.py --port {port}", "port": 8811},
+        "smoke": "python server.py",
+    }]
+    subprocess.run(["git", "add", "apps/suite/server.py", "apps/suite/README.md"],
+                   cwd=collection, check=True, capture_output=True)
+    subprocess.run(["git", "commit", "-q", "-m", "add suite"],
+                   cwd=collection, check=True, capture_output=True)
+
+    (appdir / "README.md").write_text("after\n")
+    fid = ledger.save_entry(cfg, "suite", comment="touch suite", ts="t0")
+    ledger.add_system_note(cfg, "suite", "Updated suite.", reply_to=[fid], ts="t1")
+    ledger.set_status(cfg, "suite", [fid], "done")
+    res = gitmem.commit_run(cfg, "suite", fid, status="done", note_text="Updated suite.")
+    assert res["committed"], res
+    files = _names_at_head(collection)
+    assert "apps/suite/README.md" in files and "feedback/app_feedback.sqlite" in files
+    assert "Smoke-test: passed" in _log(collection, "-1", "--format=%B")

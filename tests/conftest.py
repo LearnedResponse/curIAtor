@@ -59,7 +59,6 @@ def collection(tmp_path: Path, monkeypatch) -> Path:
     (tmp_path / "feedback" / "shots").mkdir(parents=True)
     (tmp_path / "apps" / "sample.py").write_text(SAMPLE_APP)
     (tmp_path / "gallery.yaml").write_text(GALLERY)
-    (tmp_path / "feedback" / "app_feedback.json").write_text("{}\n")
     _git(tmp_path, "init", "-q")
     _git(tmp_path, "config", "user.name", "Test Curator")
     _git(tmp_path, "config", "user.email", "curator@test.local")

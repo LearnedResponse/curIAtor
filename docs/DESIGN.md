@@ -1,6 +1,6 @@
-# CurIAtor — AI-maintained app gallery (OSS design sketch)
+# curIAtor — AI-maintained app gallery (OSS design sketch)
 
-> **Name LOCKED 2026-06-28: `CurIAtor`** (curator + IA; also *creator + curator*) · repo `LearnedResponse/curiator` · `pip install curiator` · skill `/curiator`. Extraction plan: `AI_GALLERY_OSS_EXTRACTION_SCOPE.md`.
+> **Name LOCKED 2026-06-28: `curIAtor`** (curator + IA; also *creator + curator*) · repo `LearnedResponse/curiator` · `pip install curiator` · skill `/curiator`. Extraction plan: `AI_GALLERY_OSS_EXTRACTION_SCOPE.md`.
 
 > ⚠️ **Orthogonal to the math program.** This is a design note for extracting the viewer
 > shell + feedback + loop we built this session into a standalone open-source project. It has
@@ -31,14 +31,15 @@ to whatever agent you already have* — thin to maintain, thin to adopt.
 
 ## Architecture (generalized from what we built)
 
-1. **Shell / mount.** Serve every app at one origin under `/app/<name>`. Our shortcut is a lazy
-   Dash `DispatcherMiddleware` + the `DASH_REQUESTS_PATHNAME_PREFIX` env trick (edit-free); the
+1. **Shell / mount.** Serve every app at one origin under `/app/<name>`. The overlay shell is
+   Flask + React; `dash-inproc` is just one mount adapter using the `DASH_REQUESTS_PATHNAME_PREFIX`
+   env trick (edit-free), while `proxy` is the framework-neutral path.
    *generic* version is a reverse-proxy (or iframe) to an arbitrary port/command — framework-agnostic.
 2. **Catalog.** A registry → a sortable/filterable list (by tag · rating · recency · open-feedback).
 3. **Feedback in the SHELL CHROME, not the app.** The key framework-agnostic insight: the
    ★/comment/**same-origin screenshot** panel wraps *around* the app in the iframe, so you never
    touch an app's source to collect feedback on it. Works for Dash / Streamlit / Gradio / React /
-   a notebook / anything. Persist to a JSON ledger (+ screenshots).
+   a notebook / anything. Persist to a SQLite ledger (+ screenshots, task bundles, and run traces).
 4. **Watcher → agent adapter.** A file-watcher fires when new feedback lands and invokes a
    **configured agent command** with a task template: read the feedback (text + screenshot + which
    app + its source dir) → propose-or-fix → smoke-test → reply in-panel → leave a diff. The only

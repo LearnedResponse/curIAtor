@@ -1,11 +1,11 @@
-# CurIAtor OSS — extraction scope (hack → shippable v0)
+# curIAtor OSS — extraction scope (hack → shippable v0)
 
 > Companion to `AI_GALLERY_OSS_DESIGN.md` (the *what/why*). This is the *how/sequence*: a
 > concrete plan to lift the shell + feedback + loop out of this research repo into a minimal
 > standalone OSS project. Grounded in an inventory of the actual files (2026-06-28).
 
-> **Name — LOCKED 2026-06-28: `CurIAtor`** (curator + IA; also reads as *creator + curator* — the IA
-> both *creates* the fix and *curates* the collection). Identifiers: brand **CurIAtor** · repo
+> **Name — LOCKED 2026-06-28: `curIAtor`** (curator + IA; also reads as *creator + curator* — the IA
+> both *creates* the fix and *curates* the collection). Identifiers: brand **curIAtor** · repo
 > `LearnedResponse/curiator` · PyPI `pip install curiator` (free) · CLI `curiator` · skill `/curiator`.
 > Easter egg: the deliberately-broken demo app the curator has to rescue is named **`aviato`**.
 
@@ -32,7 +32,7 @@ Inventory confirms the heavy lifting is done and **generic**:
 | same-origin **screenshot capture** (the moat) | `shell_assets/capture.js` + `html2canvas.min.js` | ~199 KB | none | lift verbatim |
 | shell CSS + mobile collapse | `shell_assets/shell.css`, `assets/mobile_responsive.js` | small | none | lift verbatim |
 | **feedback API** (the agent-adapter surface) | `app_shell.py`: `load_feedback / save_entry / add_system_note / set_status / record_action / _parse_actions` | — | none | keep; it's already the contract |
-| status state machine + ledger | `feedback/app_feedback.json` schema (`new → awaiting_approval → done`) | — | content only | keep schema, ship empty ledger |
+| status state machine + ledger | SQLite ledger payload schema (`new → awaiting_approval → done`) | — | content only | keep schema, ship empty ledger |
 | **task template / guardrails** | `feedback_loop_task.md` | 54 | references `feedback_watch.sh` only | keep content; the loop refs move to the adapter |
 
 ## What we CHANGE / ADD (the real work — 4 items)
@@ -106,7 +106,7 @@ stay in this repo. The shell never needed to know what it displays (0 coupling),
 
 ## Decisions — RESOLVED 2026-06-28
 
-1. ~~Name~~ → **CurIAtor** (`curiator`). **License** → still open; recommend **MIT** (max adoption). ← only remaining decision.
+1. ~~Name~~ → **curIAtor** (`curiator`). **License** → still open; recommend **MIT** (max adoption). ← only remaining decision.
 2. ~~Dash-first vs framework-agnostic~~ → **Dash-first** (own the niche; `proxy` mount kind keeps the door open).
 3. ~~Where it lives~~ → **fresh public repo `LearnedResponse/curiator`**, separate from Kwisatz.
 4. ~~Distribution~~ → **both** — standalone repo (the shell) **and** a Claude Code / Codex **skill** `/curiator` (the loop), per the Graphify channel.
