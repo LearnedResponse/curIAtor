@@ -18,9 +18,17 @@ from pathlib import Path
 
 from . import headless_cc, codex, api as api_adapter, command as command_adapter
 
-# The library/shell-wide feedback bucket (mirrors app_shell.GENERAL_KEY) — feedback on the RUNNER
-# itself, routed by `runner.mode` rather than to an app source.
+# The library/shell-wide feedback bucket (mirrors app_shell.GENERAL_KEY). Most General feedback is
+# runner/shell feedback, but collection-level asks like "create a new app" need to stay in the
+# collection repo instead of being misrouted to the runner checkout.
 GENERAL_KEY = "__general__"
+
+_COLLECTION_GENERAL_RE = re.compile(
+    r"\b(create|add|build|scaffold|implement|make)\b"
+    r"(?:(?!\brunner\b|\bshell\b|\bcuriator itself\b).){0,80}"
+    r"\b(new\s+)?(curiator\s+)?(app|dashboard|explainer|overview)\b",
+    re.I | re.S,
+)
 
 
 @dataclass
@@ -98,6 +106,54 @@ def _runner_root(cfg: dict) -> str:
         return str((Path(cfg["repo_root"]) / rpath).resolve())
     import curiator
     return str(Path(curiator.__file__).resolve().parent.parent)
+
+
+def general_targets_collection(entry: dict) -> bool:
+    """Whether a ◆ General item is asking to change the collection, not the runner package."""
+    return bool(_COLLECTION_GENERAL_RE.search(entry.get("comment") or ""))
+
+
+def _collection_bundle(cfg: dict, entry: dict, eid: str, shot_path: str | None, agent: dict) -> tuple[str, str]:
+    """Bundle for ◆ General feedback that asks for collection-level work, such as adding a new app."""
+    root = str(Path(cfg["repo_root"]).resolve())
+    autonomy = agent.get("autonomy", "auto-small")
+    elevated = agent.get("elevated")
+    body = [
+        "# CurIAtor — General collection feedback",
+        "",
+        "This feedback came through **◆ General**, but it asks for gallery/app work in this collection,",
+        "not a patch to the CurIAtor runner package. You are non-interactive, in the collection repo.",
+        "",
+        f"- collection root: `{root}`",
+        f"- autonomy mode: **{autonomy}**" + ("  ·  ELEVATED run (trusted group)" if elevated else ""),
+        f"- comment: {entry.get('comment')!r}",
+        f"- stars: {entry.get('stars')}",
+        (f"- screenshot (Read this PNG): `{shot_path}`" if shot_path else "- screenshot: (none)"),
+        f"- feedback id (reply_to this): `{eid}`",
+        "",
+        "## Scope",
+        "- Work inside the collection repo only: add/edit `apps/`, update `gallery.yaml`, and update",
+        "  dependency manifests when needed.",
+        "- Do NOT edit the runner checkout for this item.",
+        "- Smoke-test changed or newly added apps before replying.",
+        "",
+        "## Ready-to-run (fill in the message text)",
+        "- quick smoke option: `python -m compileall -q apps`",
+        f"- reply after a fix:  `curiator reply {GENERAL_KEY} {eid} \"<what changed + why>\" --status done`",
+        f"- reply with a plan:  `curiator reply {GENERAL_KEY} {eid} \"<plan + recommendation>\" --status awaiting_approval`",
+    ]
+    if elevated:
+        deny = ", ".join(f"`{d}`" for d in (agent.get("disallowed_tools") or [])) \
+            or "the runner's own config, `git push`/history rewrites, destructive commands"
+        body.append(
+            "\n**ELEVATED run** — the feedback author is in a trusted group, so you may add files, "
+            "edit `gallery.yaml`, and add/install dependencies needed by the new app or gallery change. "
+            f"Off-limits: {deny}. Still don't run git yourself — the runner commits.")
+    else:
+        body.append(
+            "\nIf the request needs a new app, new dependencies, or broad multi-file work, reply with "
+            "`--status awaiting_approval` and a concise plan; otherwise keep the edit small and smoke-test it.")
+    return "\n".join(body) + "\n", root
 
 
 def _runner_bundle(cfg: dict, entry: dict, eid: str, shot_path: str | None) -> tuple[str, str | None]:
@@ -199,7 +255,10 @@ def build_task(cfg: dict, key: str, entry: dict) -> Task:
     shot_path = _shot_path(cfg, entry)
     agent = effective_agent(cfg, entry)
     if key == GENERAL_KEY:
-        text, source = _runner_bundle(cfg, entry, eid, shot_path)
+        if general_targets_collection(entry):
+            text, source = _collection_bundle(cfg, entry, eid, shot_path, agent)
+        else:
+            text, source = _runner_bundle(cfg, entry, eid, shot_path)
     else:
         text, source = _app_bundle(cfg, key, entry, eid, shot_path, agent)
     tf = Path(cfg["repo_root"]) / cfg.get("feedback", {}).get("dir", "feedback") / f"task_{eid}.md"

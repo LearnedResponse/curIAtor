@@ -29,6 +29,7 @@ from . import ledger
 
 _FEEDBACK_TRAILER = "Curiator-Feedback"
 _APP_TRAILER = "Curiator-App"
+_GENERAL_KEY = "__general__"
 
 # Files that ride in the SAME atomic commit as a source edit when an agent changed them — dependency
 # manifests, so an elevated run that `pip install`s a package + adds it here isn't left dangling outside
@@ -38,6 +39,10 @@ _DEFAULT_ALSO_COMMIT = [
     "pyproject.toml", "setup.cfg", "setup.py",
     "Pipfile", "Pipfile.lock", "poetry.lock",
     "package.json", "package-lock.json", "pnpm-lock.yaml", "yarn.lock",
+]
+_GENERAL_COLLECTION_GLOBS = [
+    "apps/*.py", "apps/**/*.py",
+    "assets/**", "data/**",
 ]
 
 
@@ -94,6 +99,16 @@ def _ledger_relpath(cfg: dict) -> str:
     return f"{(cfg.get('feedback', {}) or {}).get('dir', 'feedback')}/app_feedback.json"
 
 
+def _gallery_relpath(cfg: dict) -> str | None:
+    gp = cfg.get("gallery_path")
+    if not gp:
+        return "gallery.yaml"
+    try:
+        return str(Path(gp).resolve().relative_to(Path(cfg["repo_root"]).resolve()))
+    except ValueError:
+        return None
+
+
 def smoke_source(path: Path) -> tuple[bool, str]:
     """Import the source and build its app — the same gate the agent runs. (ok, message)."""
     try:
@@ -139,6 +154,20 @@ def _extra_paths(cfg: dict, globs: list[str], exclude: set[str]) -> list[str]:
         if any(fnmatch.fnmatch(rel, g) for g in globs):
             out.append(rel)
     return out
+
+
+def _general_collection_paths(cfg: dict, fb: dict | None, exclude: set[str]) -> list[str]:
+    """Dirty collection files that should ride with a collection-level ◆ General app/gallery run."""
+    if not fb:
+        return []
+    from .loop import adapters
+    if not adapters.general_targets_collection(fb):
+        return []
+    globs = list(_GENERAL_COLLECTION_GLOBS)
+    gallery = _gallery_relpath(cfg)
+    if gallery:
+        globs.append(gallery)
+    return _extra_paths(cfg, globs, exclude)
 
 
 def _trailers(cfg: dict, sha: str) -> dict:
@@ -193,7 +222,10 @@ def commit_run(cfg: dict, app: str, feedback_id: str, *, status: str, note_text:
         changed_desc = f"edited {src}" if changed else ("plan only" if status == "awaiting_approval" else "ack / no source change")
 
         ledger_rel = _ledger_relpath(cfg)
-        extra = _extra_paths(cfg, git.get("also_commit", _DEFAULT_ALSO_COMMIT), {src or "", ledger_rel})
+        exclude = {src or "", ledger_rel}
+        general_extra = _general_collection_paths(cfg, fb, exclude) if app == _GENERAL_KEY else []
+        exclude.update(general_extra)
+        extra = general_extra + _extra_paths(cfg, git.get("also_commit", _DEFAULT_ALSO_COMMIT), exclude)
         if extra:
             changed_desc += f" (+{', '.join(extra)})"     # dependency manifests captured in the same commit
 

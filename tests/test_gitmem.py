@@ -108,6 +108,37 @@ def test_ledger_only_commit_for_no_source_change(cfg, collection):
     assert "ack / no source change" in _log(collection, "-1", "--format=%B")
 
 
+def test_general_collection_commit_captures_app_and_gallery(cfg, collection):
+    app = collection / "apps" / "models.py"
+    app.write_text("import dash\nfrom dash import html\n\ndef build_app():\n    a = dash.Dash(__name__)\n    a.layout = html.Div('models')\n    return a\n")
+    (collection / "gallery.yaml").write_text(
+        (collection / "gallery.yaml").read_text()
+        + "\n  - name: models\n    title: Models\n    mount: { kind: dash-inproc, module: models }\n    source: apps/models.py\n"
+    )
+    fid = ledger.save_entry(cfg, "__general__", comment="create a new curiator app as an overview", ts="t0")
+    ledger.add_system_note(cfg, "__general__", "Added the model overview app.", reply_to=[fid], ts="t1")
+    ledger.set_status(cfg, "__general__", [fid], "done")
+    res = gitmem.commit_run(cfg, "__general__", fid, status="done", note_text="Added the model overview app.")
+    assert res["committed"], res
+    files = _names_at_head(collection)
+    assert "apps/models.py" in files and "gallery.yaml" in files and "feedback/app_feedback.json" in files
+    body = _log(collection, "-1", "--format=%B")
+    assert "apps/models.py" in body and "gallery.yaml" in body
+
+
+def test_general_runner_feedback_does_not_sweep_collection_changes(cfg, collection):
+    (collection / "gallery.yaml").write_text((collection / "gallery.yaml").read_text() + "\n# local draft\n")
+    fid = ledger.save_entry(cfg, "__general__", comment="make the shell chrome clearer", ts="t0")
+    ledger.add_system_note(cfg, "__general__", "Patched the runner shell.", reply_to=[fid], ts="t1")
+    ledger.set_status(cfg, "__general__", [fid], "done")
+    res = gitmem.commit_run(cfg, "__general__", fid, status="done", note_text="Patched the runner shell.")
+    assert res["committed"], res
+    assert _names_at_head(collection) == ["feedback/app_feedback.json"]
+    porcelain = subprocess.run(["git", "status", "--porcelain"], cwd=collection,
+                               capture_output=True, text=True).stdout
+    assert "gallery.yaml" in porcelain
+
+
 def test_feedback_from_trailer_carries_provenance(cfg, collection):
     src = collection / "apps" / "sample.py"
     src.write_text(src.read_text().replace('"sample"', '"sample (fixed)"'))

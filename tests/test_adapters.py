@@ -36,6 +36,18 @@ def test_runner_routing_checkout_vs_pinned(cfg):
     assert "pinned" in pbody.lower() and "upstream" in pbody.lower() and p.source is None
 
 
+def test_general_new_app_request_routes_to_collection(cfg, collection):
+    entry = _entry(id="g3", comment="create a new curiator app as an explainer/overview")
+    t = build_task(cfg, GENERAL_KEY, entry)
+    body = Path(t.task_file).read_text()
+    assert t.source == str(collection.resolve())
+    assert "General collection feedback" in body
+    assert "Do NOT edit the runner checkout" in body
+    assert "gallery.yaml" in body and "curiator reply __general__ g3" in body
+    assert adapters.general_targets_collection(entry)
+    assert not adapters.general_targets_collection(_entry(comment="make the shell chrome clearer"))
+
+
 def test_bundle_loads_lessons_when_present(cfg, collection):
     (collection / "LESSONS.md").write_text("# LESSONS.md\n\n## sample\n- ✓ stuck · `abc1234` · curator(sample): tidy\n")
     body = Path(build_task(cfg, "sample", _entry()).task_file).read_text()
