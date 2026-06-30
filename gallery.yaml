@@ -26,12 +26,15 @@ apps:
 
 # how the curator runs (see docs/DESIGN.md → "Agent adapter / deployment modes")
 agent:
-  adapter: headless-cc          # headless-cc (default, your Claude sub) | api (teams) | command (BYO)
+  adapter: headless-cc          # headless-cc (Claude sub, default) | codex (OpenAI Codex sub) | api | command
   autonomy: auto-small          # auto-small (fix small things) | propose-only (plan first)
-  # headless-cc (`claude -p`) knobs — all optional, sensible defaults shown:
-  model: null                   # claude --model (null = your CLI default; e.g. sonnet, opus)
+  # provider knobs — all optional, sensible defaults shown:
+  model: null                   # --model (null = the provider CLI default; e.g. sonnet/opus, or gpt-5-codex)
   permission_mode: acceptEdits  # acceptEdits (auto-apply edits) | bypassPermissions (zero prompts) | default
-  allowed_tools: [Read, Edit, Write, Bash, Glob, Grep]   # pre-approved without a prompt (Bash runs the reply)
+  allowed_tools: [Read, Edit, Write, Bash, Glob, Grep]   # headless-cc: pre-approved without a prompt
+  # codex (`codex exec`) only — maps the same profile onto Codex flags:
+  sandbox: workspace-write      # read-only | workspace-write (default) | danger-full-access
+  #   (permission_mode: bypassPermissions ⇒ codex --dangerously-bypass-approvals-and-sandbox, full trust)
   timeout: 900                  # seconds before the one-shot agent is killed
   cmd: "claude -p {task_file}"  # used only by adapter: command
   context:

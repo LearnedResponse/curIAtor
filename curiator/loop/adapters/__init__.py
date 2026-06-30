@@ -2,8 +2,9 @@
 
 `get(cfg)` returns the adapter selected by `gallery.yaml: agent.adapter`:
   - headless-cc : `claude -p` one-shot (subscription billing, full project context). DEFAULT.
+  - codex       : `codex exec` one-shot (your OpenAI Codex subscription — same one-shot model).
   - api         : Anthropic API / Agent SDK (per-token, scales to teams). v1 — stub for now.
-  - command     : run an arbitrary `agent.cmd` (BYO: aider / Codex / a script).
+  - command     : run an arbitrary `agent.cmd` (BYO: aider / a script).
 
 `build_task(cfg, key, entry)` writes a task file (the template + this feedback + the app's source
 path + the screenshot path) and returns a Task the adapter runs. The task file is what the agent
@@ -15,7 +16,7 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
-from . import headless_cc, api as api_adapter, command as command_adapter
+from . import headless_cc, codex, api as api_adapter, command as command_adapter
 
 # The library/shell-wide feedback bucket (mirrors app_shell.GENERAL_KEY) — feedback on the RUNNER
 # itself, routed by `runner.mode` rather than to an app source.
@@ -47,6 +48,7 @@ def effective_agent(cfg: dict, entry: dict) -> dict:
 
 _ADAPTERS = {
     "headless-cc": headless_cc,
+    "codex": codex,
     "api": api_adapter,
     "command": command_adapter,
 }

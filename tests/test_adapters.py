@@ -54,6 +54,45 @@ def test_command_adapter_substitutes(cfg, monkeypatch):
 def test_get_adapter_by_name(cfg):
     assert adapters.get(cfg) is adapters.headless_cc           # gallery's agent.adapter == headless-cc
     assert adapters.get({**cfg, "agent": {"adapter": "command"}}) is command
+    assert adapters.get({**cfg, "agent": {"adapter": "codex"}}) is adapters.codex
+
+
+def test_codex_adapter_maps_profile_to_exec_flags(monkeypatch, tmp_path):
+    """The codex adapter maps the unified agent profile onto `codex exec` flags — model, sandbox, and the
+    full-trust bypass for elevated — with the bundle passed as the prompt after `--`."""
+    from curiator.loop.adapters import Task, codex
+
+    cap = {}
+
+    class _Proc:
+        returncode, stdout, stderr = 0, "ok", ""
+
+    def fake_run(c, **k):
+        cap["cmd"] = c
+        return _Proc()
+
+    monkeypatch.setattr(codex, "available", lambda: True)
+    monkeypatch.setattr(codex.subprocess, "run", fake_run)
+    tf = tmp_path / "task.md"
+    tf.write_text("the bundle")
+
+    # normal profile → sandboxed workspace-write, model passed, prompt last after --
+    codex.run(Task(key="sample", entry={"id": "x"}, source="apps/sample.py", task_file=str(tf),
+                   cfg={"repo_root": str(tmp_path)},
+                   agent={"model": "gpt-5-codex", "permission_mode": "acceptEdits"}))
+    cmd = cap["cmd"]
+    assert cmd[:2] == ["codex", "exec"]
+    assert cmd[cmd.index("-m") + 1] == "gpt-5-codex"
+    assert cmd[cmd.index("-s") + 1] == "workspace-write"
+    assert "--dangerously-bypass-approvals-and-sandbox" not in cmd
+    assert cmd[-2] == "--" and cmd[-1] == "the bundle"
+
+    # elevated → full-trust bypass, no -s sandbox flag
+    codex.run(Task(key="sample", entry={"id": "y"}, source="apps/sample.py", task_file=str(tf),
+                   cfg={"repo_root": str(tmp_path)},
+                   agent={"permission_mode": "bypassPermissions", "elevated": True}))
+    cmd2 = cap["cmd"]
+    assert "--dangerously-bypass-approvals-and-sandbox" in cmd2 and "-s" not in cmd2
 
 
 # ── elevated (trusted-group) agent profile ─────────────────────────────────
