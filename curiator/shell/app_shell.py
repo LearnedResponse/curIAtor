@@ -1079,7 +1079,13 @@ def build_application():
 
 if __name__ == "__main__":
     application, _shell = build_application()
+    import logging
+
     from werkzeug.serving import run_simple
+    # Quiet werkzeug's per-request access log — the live-poll Interval makes `POST /_dash-update-component`
+    # spam that buries the watcher's feedback/agent lines. Set CURIATOR_HTTP_LOG=1 to restore it.
+    if os.environ.get("CURIATOR_HTTP_LOG") != "1":
+        logging.getLogger("werkzeug").setLevel(logging.WARNING)
     # 0.0.0.0 so the shell is reachable over the Tailscale tailnet (phone-on-the-go).
     # NB this also exposes it on the LAN; it's an internal dev tool on a private tailnet.
     host = os.environ.get("SHELL_HOST", "0.0.0.0")

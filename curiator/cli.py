@@ -76,7 +76,10 @@ def _serve(cfg: dict, *, reset: bool = False) -> int:
     url = f"http://127.0.0.1:{port}"
     # the watcher is its own process so the foreground shell owns the terminal; we reap it on exit.
     env = _child_env(cfg)
-    watcher = subprocess.Popen([sys.executable, "-m", "curiator.cli", "watch"], cwd=cfg["repo_root"], env=env)
+    # -u: unbuffered, so the watcher's ●/▶/✓ feedback+agent lines stream out immediately (not block-buffered
+    # behind the shell when serve's stdout isn't a TTY).
+    watcher = subprocess.Popen([sys.executable, "-u", "-m", "curiator.cli", "watch"],
+                               cwd=cfg["repo_root"], env=env)
     bar = "─" * 56
     print(f"\n{bar}\n  ◆ curIAtor is up")
     print(f"    gallery : {url}")

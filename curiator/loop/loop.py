@@ -57,6 +57,19 @@ def _new_items(led: dict) -> list[tuple[str, dict]]:
     return out
 
 
+def _label(key: str) -> str:
+    return "◆ General" if key == adapters.GENERAL_KEY else key
+
+
+def _outcome(cfg: dict, key: str, eid: str) -> tuple[str, str]:
+    """The item's status + the first line of the agent's reply, after a run (for the ✓ line)."""
+    items = ledger.load(cfg).get(key, [])
+    st = next((e.get("status") for e in items if e.get("id") == eid), "?")
+    notes = [e for e in items if e.get("author") == "claude" and eid in (e.get("reply_to") or [])]
+    reply = (notes[-1].get("comment") or "").strip().splitlines()[0] if notes else ""
+    return st, reply
+
+
 def run_once(cfg: dict) -> int:
     """One pass: handle every new feedback item, one at a time. Returns how many were dispatched.
 
@@ -65,13 +78,25 @@ def run_once(cfg: dict) -> int:
     led = ledger.load(cfg)
     items = _new_items(led)
     adapter = adapters.get(cfg)
+    adapter_name = (cfg.get("agent", {}) or {}).get("adapter", "headless-cc")
     for key, entry in items:
         eid = entry.get("id")
+        who = (entry.get("user") or {}).get("name") or "anonymous"
+        snippet = " ".join((entry.get("comment") or "").split())[:80] or f"★{entry.get('stars')}"
+        print(f"curiator: ● new feedback on {_label(key)} by {who} — {snippet!r}", flush=True)
         ledger.set_status(cfg, key, [eid], "working")
         task = adapters.build_task(cfg, key, entry)     # writes a task file, returns its path + bundle
+        prof = task.agent or {}
+        elevated = "  ⚡ELEVATED" if prof.get("elevated") else ""
+        print(f"curiator:   ▶ launching {adapter_name} on {key}/{eid} "
+              f"(autonomy={prof.get('autonomy', 'auto-small')}){elevated}", flush=True)
         try:
             adapter.run(task)                            # the agent edits + smoke-tests + replies
+            st, reply = _outcome(cfg, key, eid)
+            tail = f' · "{reply[:72]}"' if reply else ""
+            print(f"curiator:   {'✓' if st != 'working' else '⚠'} {key}/{eid} → {st}{tail}", flush=True)
         except Exception as exc:                          # never leave an item stuck on 'working'
+            print(f"curiator:   ✗ {key}/{eid} failed: {exc}", flush=True)
             ledger.add_system_note(cfg, key, f"⚙ loop error: {exc}", reply_to=[eid])
             ledger.set_status(cfg, key, [eid], "new")
     return len(items)
@@ -82,19 +107,17 @@ def watch(cfg: dict) -> None:
     (autonomy, `agent.elevated`, …) apply live — no restart needed."""
     print(f"curiator: watching {ledger.path(cfg)} every {POLL_SECONDS}s "
           f"(adapter={cfg.get('agent', {}).get('adapter')}, "
-          f"autonomy={cfg.get('agent', {}).get('autonomy')}) — Ctrl-C to stop")
+          f"autonomy={cfg.get('agent', {}).get('autonomy')}) — Ctrl-C to stop", flush=True)
     mtime = _gallery_mtime(cfg)
     while True:
         try:
             cfg, mtime, reloaded = reload_if_changed(cfg, mtime)
             if reloaded:
-                print(f"curiator: reloaded gallery.yaml (autonomy={cfg.get('agent', {}).get('autonomy')}, "
-                      f"elevated={'yes' if (cfg.get('agent', {}) or {}).get('elevated') else 'no'})")
-            n = run_once(cfg)
-            if n:
-                print(f"curiator: dispatched {n} feedback item(s)")
+                print(f"curiator: ⟳ reloaded gallery.yaml (autonomy={cfg.get('agent', {}).get('autonomy')}, "
+                      f"elevated={'yes' if (cfg.get('agent', {}) or {}).get('elevated') else 'no'})", flush=True)
+            run_once(cfg)                                 # prints ● new / ▶ launching / ✓ outcome per item
         except Exception as exc:
-            print(f"curiator: poll error (continuing): {exc}")
+            print(f"curiator: poll error (continuing): {exc}", flush=True)
         time.sleep(POLL_SECONDS)
 
 

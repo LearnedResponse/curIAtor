@@ -22,7 +22,7 @@ def test_new_items_only_user_new(cfg):
     _ = f1
 
 
-def test_run_once_dispatches_serially_in_order(cfg, monkeypatch):
+def test_run_once_dispatches_serially_in_order(cfg, monkeypatch, capsys):
     ledger.save_entry(cfg, "sample", comment="first", ts="t")
     ledger.save_entry(cfg, "sample", comment="second", ts="t")
     seen = []
@@ -38,6 +38,10 @@ def test_run_once_dispatches_serially_in_order(cfg, monkeypatch):
     assert seen == ["first", "second"]                              # serial, in order
     # each item flipped new → working before dispatch
     assert all(e["status"] == "working" for e in ledger.load(cfg)["sample"] if e["author"] == "user")
+    # the run is visible on stdout: a ● new-feedback + ▶ launching line per item (what `serve` streams)
+    out = capsys.readouterr().out
+    assert out.count("● new feedback on sample") == 2 and out.count("▶ launching") == 2
+    assert "first" in out and "second" in out
 
 
 def test_run_once_resets_item_on_adapter_error(cfg, monkeypatch):
