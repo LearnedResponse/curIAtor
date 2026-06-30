@@ -1,7 +1,27 @@
 # Backlog — general app hosting (any framework, multi-file apps)
 
-> **Status:** design note, not started. A **post-v0 / v1** direction — it deliberately broadens the
-> Dash-first stance, so it waits until the Dash v0 ships and demand shows. Captured 2026-06-29.
+> **Status:** design note. **Reframed 2026-06-29 — this is *not* an expansion past Dash; it *realizes*
+> what the overlay already is.** Near-term: build the **one non-Dash proof** (it's what shows what
+> curiator actually is). v1: full generality + scaffold templates.
+
+## The reframe: the overlay *is* the product
+
+The **feedback overlay** — the gallery chrome that wraps an app in a same-origin iframe and collects
+★/comment/**screenshot** + drives the loop — **doesn't care what's inside the iframe.** It already works
+for Dash, React, Svelte, static HTML — anything served same-origin. So "works for designing *any* app"
+isn't a feature to add; it's what the overlay **already is.** *Dash is content, not the product.*
+
+That leaves exactly **one framework-specific seam: the mount** (how an app is served under the shell's
+origin). `dash-inproc` is a convenience for one content type; **`proxy` is the universal mount.** Design
+guardrail: **keep the overlay / feedback / loop 100% framework-agnostic; isolate every framework-specific
+line in the mount.** (Mostly already true — the shell is generic; the Dash-coupling lives in the in-process
+mount.)
+
+And **Dash is a *ceiling*** for general app design: server round-trips for interaction, the Plotly/Dash
+component library (custom UI ⇒ writing React anyway), constrained styling, no full web platform. Great for
+data/HMI dashboards; a hard ceiling for *designed, interactive* apps, where React/Svelte blow past it. So a
+Dash-only product **undersells what curiator is** ("AI-maintained *Dash* gallery" vs "AI-maintained *app*
+gallery, any framework").
 
 ## The goal
 
@@ -56,9 +76,11 @@ streamlit), each emitting a directory + the right `mount` block. Plugins = lock-
 
 ## Honest scoping & sequencing
 
-- **This broadens past Dash-first** — so it's **post-v0**, after the niche v0 ships and someone actually
-  asks for non-Dash. Don't pre-build the generality; let demand (likely surfaced *by the example demos* —
-  finance/OT) prioritize it.
+- **This realizes the thesis; it doesn't expand it.** The overlay is already general — so the *one
+  non-Dash proof* (a Svelte/static app in the frame) is a **near-term fast-follow**, not far-backlog,
+  because it's what demonstrates what curiator actually *is* (a Dash-only demo undersells it). *Full*
+  generality (all frameworks + templates) is v1, demand-paced — the example demos (finance/OT) will
+  surface the asks.
 - **Directories-per-app can land earlier and cheaper** than full JS support — even Dash apps benefit from a
   multi-file dir (helpers, assets, data). That's a small registry/mount/task-bundle change with no new
   toolchain, and it's the prerequisite for everything else. Reasonable to do *first*, independent of
@@ -89,4 +111,6 @@ streamlit), each emitting a directory + the right `mount` block. Plugins = lock-
 3. **Scaffold templates** (`curiator init-app --framework …`) — the ergonomic layer, generic not plugin.
 4. JS-specific niceties (HMR base-path, build smoke-test) per framework as demand warrants.
 
-Stay Dash-first until v0 has shipped and a real ask appears; then this is the order of operations.
+Dash-first is the *launch wedge* (ship fast, own the data/HMI audience), **not the identity** — keep the
+overlay framework-agnostic from day one and treat the non-Dash proof (steps 1–2) as a near-term
+fast-follow once v0 ships, since it's what shows curiator is an *app* gallery, not a Dash gallery.
