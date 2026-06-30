@@ -23,7 +23,7 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
-from .config import load_config
+from .config import agent_label, load_config
 from . import ledger
 
 
@@ -126,7 +126,8 @@ def cmd_reply(args) -> int:
     cfg = load_config()
     ts = datetime.now(timezone.utc).isoformat()
     nid = ledger.add_system_note(cfg, args.app, args.text, reply_to=[args.feedback_id],
-                                 status="update", ts=ts, actions=_parse_actions_arg(args.actions))
+                                 status="update", ts=ts, actions=_parse_actions_arg(args.actions),
+                                 agent=agent_label(cfg))   # WHICH provider answered (Codex / Claude / …)
     if args.status:
         ledger.set_status(cfg, args.app, [args.feedback_id], args.status)
     print(f"curiator: replied on {args.app}/{args.feedback_id} (status={args.status or 'unchanged'})")

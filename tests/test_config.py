@@ -37,6 +37,15 @@ def test_defaults_when_blocks_absent(tmp_path, monkeypatch):
     assert cfg["auth"]["admin_groups"] == ["admin"]   # who may change agent settings (mode != none)
 
 
+def test_agent_label_names_the_provider():
+    from curiator.config import agent_label
+    assert agent_label({"agent": {"adapter": "headless-cc"}}) == "Claude"
+    assert agent_label({"agent": {"adapter": "codex"}}) == "Codex"
+    assert agent_label({"agent": {"adapter": "codex", "model": "gpt-5-codex"}}) == "Codex (gpt-5-codex)"
+    assert agent_label({"agent": {"adapter": "command", "cmd": "/usr/local/bin/aider {task_file}"}}) == "aider"
+    assert agent_label({}) == "Claude"            # default adapter
+
+
 def test_set_block_key_updates_inserts_appends():
     t = "agent:\n  adapter: headless-cc   # provider\n  autonomy: auto-small\n"
     # update in place, KEEP the inline comment + the other keys

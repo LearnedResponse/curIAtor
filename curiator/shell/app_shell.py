@@ -403,7 +403,7 @@ def render_history():
                             f"optional — or type a reply</span></div>")
                 out.append(f"<div style='margin:4px 0 4px 22px;border-left:3px solid #2980b9;"
                            f"background:#eef5fb;padding:5px 9px;border-radius:3px'>"
-                           f"<b style='color:#2980b9'>⚙ Claude</b> {tsh}"
+                           f"<b style='color:#2980b9'>⚙ {_esc(e.get('agent') or 'Claude')}</b> {tsh}"
                            f"<div style='font-size:12.5px;color:#1a3a5a;white-space:pre-wrap;margin-top:2px'>"
                            f"{_esc(e.get('comment', ''))}</div>{btns}</div>")
             else:
@@ -436,7 +436,8 @@ def feedback_list(key):
     rows = []
     for e in reversed(items):
         if e.get("kind") == "system" or e.get("author") == "claude":
-            kids = [html.Div([html.Span("⚙ Claude", style={"fontWeight": 700, "color": BLUE}),
+            kids = [html.Div([html.Span(f"⚙ {e.get('agent') or 'Claude'}",
+                                        style={"fontWeight": 700, "color": BLUE}),
                               html.Span(["  update · ", _ts_span(e.get("ts"))],
                                         style={"color": GREY, "fontSize": "10px"})]),
                     html.Div(e.get("comment", ""), style={"fontSize": "12px", "color": "#1a3a5a",

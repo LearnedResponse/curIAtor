@@ -62,17 +62,20 @@ def amend_note(cfg: dict, key: str, note_id: str, suffix: str) -> None:
 
 
 def add_system_note(cfg: dict, key: str, text: str, reply_to: list[str] | None = None,
-                    status: str = "update", ts: str | None = None, actions=None) -> str:
+                    status: str = "update", ts: str | None = None, actions=None,
+                    agent: str | None = None) -> str:
     """Append an agent/⚙ note. `ts` defaults to UTC-now when omitted (so loop/revert notes are never
-    timestamp-less — a null ts otherwise breaks the history sort). `actions` is an optional list of
-    quick-approval buttons — bare strings or [label, value] pairs — rendered verbatim in the feedback
-    UI (so the buttons match the offered options instead of being guessed from the text)."""
+    timestamp-less — a null ts otherwise breaks the history sort). `agent` records WHICH provider produced
+    the reply (e.g. 'Codex', 'Claude') so the panel attributes it correctly instead of always saying
+    'Claude'. `actions` is an optional list of quick-approval buttons — bare strings or [label, value]
+    pairs — rendered verbatim in the feedback UI (so the buttons match the offered options)."""
     norm = [[a, a] if isinstance(a, str) else list(a) for a in actions] if actions else None
     data = load(cfg)
     nid = uuid.uuid4().hex[:8]
     data.setdefault(key, []).append({
         "id": nid, "author": "claude", "kind": "system", "comment": text,
         "status": status, "reply_to": reply_to or [], "ts": ts or _now(), "actions": norm,
+        "agent": agent,
     })
     _save(cfg, data)
     return nid

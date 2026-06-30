@@ -38,6 +38,26 @@ def test_system_note_actions_normalized(cfg):
     assert note["actions"] == [["A", "A"], ["B", "b"]]          # bare string → [label, label]; pair kept
 
 
+def test_add_system_note_records_agent(cfg):
+    nid = ledger.add_system_note(cfg, "sample", "fixed it", agent="Codex")
+    note = next(e for e in ledger.load(cfg)["sample"] if e["id"] == nid)
+    assert note["agent"] == "Codex" and note["author"] == "claude"
+    nid2 = ledger.add_system_note(cfg, "sample", "x")            # omitted → None (UI falls back to 'Claude')
+    assert next(e for e in ledger.load(cfg)["sample"] if e["id"] == nid2)["agent"] is None
+
+
+def test_cmd_reply_stamps_the_configured_provider(cfg, collection):
+    """`curiator reply` records the agent that answered, so the panel attributes it (the tmp gallery is
+    headless-cc → 'Claude')."""
+    import argparse
+
+    from curiator.cli import cmd_reply
+    fid = ledger.save_entry(cfg, "sample", comment="fix it", ts="t0")
+    cmd_reply(argparse.Namespace(app="sample", feedback_id=fid, text="Done.", status="done", actions=None))
+    note = [e for e in ledger.load(cfg)["sample"] if e["author"] == "claude"][-1]
+    assert note["agent"] == "Claude"
+
+
 def test_reply_actions_arg_parsing():
     from curiator.cli import _parse_actions_arg
     assert _parse_actions_arg("A,B,C") == [["A", "A"], ["B", "B"], ["C", "C"]]

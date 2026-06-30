@@ -119,6 +119,19 @@ def test_catalog_has_share_buttons_and_general_row(shell_mod):
     assert types.count("share") == 1           # a per-app share button (General row has none)
 
 
+def test_agent_label_attributes_the_reply(collection, client):
+    """An agent note carries `agent` (the provider) → the panel shows '⚙ Codex', not a hardcoded Claude."""
+    led = collection / "feedback" / "app_feedback.json"
+    led.write_text(json.dumps({"sample": [
+        {"id": "u1", "author": "user", "kind": "comment", "comment": "fix it", "status": "new",
+         "ts": "2026-06-29T16:00:00+00:00"},
+        {"id": "n1", "author": "claude", "kind": "system", "comment": "fixed it", "status": "update",
+         "reply_to": ["u1"], "ts": "2026-06-29T16:05:00+00:00", "agent": "Codex"},
+    ]}))
+    body = client.get("/general").get_data(as_text=True)
+    assert "⚙ Codex" in body and "⚙ Claude" not in body
+
+
 def test_settings_page_renders_and_writes_back(collection, client):
     """GET renders the agent form (auth.mode none ⇒ admin); POST writes gallery.yaml + redirects, and
     config then loads the new values — the loop hot-reloads them, no restart."""

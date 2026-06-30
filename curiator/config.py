@@ -57,6 +57,24 @@ def load_config() -> dict:
     return cfg
 
 
+_AGENT_NAMES = {"headless-cc": "Claude", "codex": "Codex", "api": "Claude"}
+
+
+def agent_label(cfg: dict) -> str:
+    """A human label for the agent that produces ⚙ replies — recorded on each agent message so the
+    panel shows WHICH provider answered (Codex vs Claude), not a hardcoded name. Derived from
+    agent.adapter (+ model): headless-cc/api → Claude, codex → Codex, command → the cmd's binary."""
+    a = (cfg or {}).get("agent", {}) or {}
+    adapter = a.get("adapter", "headless-cc")
+    if adapter == "command":
+        cmd = (a.get("cmd") or "").strip().split()
+        base = Path(cmd[0]).name if cmd else "Agent"
+    else:
+        base = _AGENT_NAMES.get(adapter, adapter)
+    model = a.get("model")
+    return f"{base} ({model})" if model else base
+
+
 def _scalar(v) -> str:
     """Render a Python value as a YAML scalar for in-place gallery.yaml edits."""
     if v is None or v == "":
