@@ -12,6 +12,16 @@ Until the live take is recorded, regenerate the committed storyboard with:
 make demo-gif
 ```
 
+For a reproducible browser-rendered capture using Brave headless:
+
+```bash
+make demo-capture
+```
+
+`demo-capture` starts a temporary one-app collection, captures the real React/Dash shell through
+Brave's DevTools protocol, and writes `docs/demo.gif` without the storyboard placeholder marker. Use
+`make demo-gif` only when you intentionally want the fallback storyboard.
+
 **Setup before recording — one command:**
 
 ```bash

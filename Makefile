@@ -1,4 +1,4 @@
-.PHONY: install up watch serve demo demo-up demo-gif release-prepare release-check release-launch-check release-evidence reset-demo walkthrough test
+.PHONY: install up watch serve demo demo-up demo-gif demo-capture release-prepare release-check release-launch-check release-evidence reset-demo walkthrough test
 install:        ## pip install -e . (editable)
 	pip install -e .
 up:             ## serve the gallery at http://127.0.0.1:8300
@@ -11,6 +11,8 @@ demo:           ## record-ready: reset the demo, then serve (gallery + watcher) 
 	curiator demo-up
 demo-gif:       ## render the README demo GIF storyboard to docs/demo.gif
 	python scripts/render_demo_gif.py
+demo-capture:   ## capture docs/demo.gif from a real Brave-rendered gallery
+	python scripts/capture_demo_gif.py
 release-prepare:  ## cut release metadata; use VERSION=0.2.0 DATE=YYYY-MM-DD
 	@if [ -z "$(VERSION)" ]; then echo "VERSION=... is required"; exit 2; fi
 	python scripts/prepare_release.py "$(VERSION)" $(if $(DATE),--date "$(DATE)")
