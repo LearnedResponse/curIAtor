@@ -822,11 +822,11 @@ def revert_feedback(cfg: dict, target: str, reason: str = "manual revert") -> di
 
 
 # ───────────────────────────── reflect → LESSONS.md ─────────────────────────────
-def reflect(cfg: dict) -> str:
+def _reflect_repo(repo: Path) -> str:
     """Summarize the curator's git history (curator(*) commits + reverts) into LESSONS.md content,
     grouped by app — what stuck vs what got reverted. Each fresh one-shot loads it (cross-item memory)."""
     fmt = "%H%x1f%s%x1f%b%x1e"
-    raw = _git(cfg, "log", "--all", f"--grep={_APP_TRAILER}:", f"--format={fmt}", check=False).stdout
+    raw = _git_in(repo, "log", "--all", f"--grep={_APP_TRAILER}:", f"--format={fmt}", check=False).stdout
     reverted_shorts, by_app = set(), {}
     records = []
     for chunk in (c for c in raw.split("\x1e") if c.strip()):
@@ -862,7 +862,34 @@ def reflect(cfg: dict) -> str:
     return "\n".join(out).rstrip() + "\n"
 
 
+def reflect(cfg: dict) -> str:
+    return _reflect_repo(Path(cfg["repo_root"]))
+
+
 def write_lessons(cfg: dict) -> Path:
     p = Path(cfg["repo_root"]) / "LESSONS.md"
     p.write_text(reflect(cfg))
     return p
+
+
+def _repo_has_curator_history(repo: Path) -> bool:
+    raw = _git_in(repo, "log", "--all", f"--grep={_APP_TRAILER}:", "--format=%H", check=False)
+    return bool(raw.stdout.strip())
+
+
+def write_all_lessons(cfg: dict) -> list[Path]:
+    """Write LESSONS.md for the root memory and each nested memory with curator history.
+
+    Existing callers that want the historical single-repo behavior should keep using write_lessons().
+    The CLI uses this broader pass so independent memories such as .planning can keep their own
+    reflection instead of being folded into the product repo's LESSONS.md.
+    """
+    root = Path(cfg["repo_root"]).resolve()
+    paths = [write_lessons(cfg)]
+    for repo in _nested_memory_repos(root):
+        p = repo / "LESSONS.md"
+        if not p.exists() and not _repo_has_curator_history(repo):
+            continue
+        p.write_text(_reflect_repo(repo))
+        paths.append(p)
+    return paths

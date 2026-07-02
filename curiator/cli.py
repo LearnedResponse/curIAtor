@@ -1513,8 +1513,9 @@ def cmd_reflect(args) -> int:
     """Summarize the curator's git history (curator(*) commits + reverts) into LESSONS.md."""
     cfg = load_config()
     from . import gitmem
-    p = gitmem.write_lessons(cfg)
-    print(f"curiator: wrote {p} — loaded into each agent run's task bundle.")
+    paths = gitmem.write_all_lessons(cfg)
+    for p in paths:
+        print(f"curiator: wrote {p} — loaded into that memory's agent context.")
     return 0
 
 

@@ -237,6 +237,27 @@ def test_commit_run_can_commit_only_nested_memory(cfg, collection):
                                                  cwd=planning, capture_output=True, text=True).stdout.split()
 
 
+def test_reflect_writes_lessons_for_nested_memory(cfg, collection):
+    planning = _init_planning_memory(collection)
+    cfg["git"]["include_ledger"] = False
+    (planning / "backlog" / "README.md").write_text("# Planning\n\n- reflect me\n")
+    fid = ledger.save_entry(cfg, "sample", comment="just update planning", ts="t0")
+    ledger.add_system_note(cfg, "sample", "Recorded planning.", reply_to=[fid], ts="t1")
+    ledger.set_status(cfg, "sample", [fid], "done")
+
+    res = gitmem.commit_run(cfg, "sample", fid, status="done", note_text="Recorded planning.")
+    paths = gitmem.write_all_lessons(cfg)
+
+    assert res["committed"], res
+    assert (collection / "LESSONS.md") in paths
+    assert (planning / "LESSONS.md") in paths
+    assert "_No curator commits yet._" in (collection / "LESSONS.md").read_text()
+    planning_lessons = (planning / "LESSONS.md").read_text()
+    assert "## planning" in planning_lessons
+    assert "curator(planning): Recorded planning." in planning_lessons
+    assert f"feedback {fid}" in planning_lessons
+
+
 def test_commit_includes_dependency_manifest(cfg, collection):
     """An elevated run that adds a dependency: requirements.txt rides in the SAME atomic commit as the
     source + ledger — not left dangling in the working tree (the M2/elevated re-run regression)."""
