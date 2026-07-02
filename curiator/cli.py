@@ -12,6 +12,7 @@
     curiator done       # finish interactive work via the same reply/reload/git path
     curiator queue      # review held feedback before dispatch
     curiator smoke      # run configured app smoke checks across the collection
+    curiator galleries  # list nested curiator-* collection repos under ./galleries
     curiator release-preflight # run doctor/smoke/path checks across release galleries or fresh clones
     curiator reset-demo # rewind the demo: re-break aviato, clear the ledger
     curiator demo-up    # reset-demo, then serve — one command, record-ready
@@ -182,6 +183,67 @@ def _project_root(cwd: Path | None = None) -> Path:
     here = (cwd or Path.cwd()).resolve()
     out = _git_output(here, "rev-parse", "--show-toplevel")
     return Path(out).resolve() if out else here
+
+
+def _galleries_root(root_arg: str | None) -> Path:
+    project = _project_root()
+    raw = Path(root_arg or "galleries").expanduser()
+    return raw.resolve() if raw.is_absolute() else (project / raw).resolve()
+
+
+def _discover_galleries(root: Path) -> list[Path]:
+    if not root.exists():
+        return []
+    return sorted(
+        p for p in root.iterdir()
+        if p.is_dir() and p.name.startswith("curiator-") and (p / "gallery.yaml").exists()
+    )
+
+
+def _gallery_summary(repo: Path) -> dict:
+    is_git = _git_output(repo, "rev-parse", "--is-inside-work-tree") == "true"
+    dirty = _git_text(repo, "status", "--porcelain", "--untracked-files=all").splitlines() if is_git else []
+    return {
+        "name": repo.name,
+        "path": str(repo),
+        "gallery": str(repo / "gallery.yaml"),
+        "git": is_git,
+        "branch": _git_output(repo, "branch", "--show-current") if is_git else None,
+        "head": _git_output(repo, "rev-parse", "--short", "HEAD") if is_git else None,
+        "dirty": dirty,
+    }
+
+
+def _rel_cmd_path(path: str) -> str:
+    try:
+        return os.path.relpath(Path(path), Path.cwd())
+    except ValueError:  # pragma: no cover - different Windows drives
+        return path
+
+
+def cmd_galleries(args) -> int:
+    root = _galleries_root(args.root)
+    galleries = [_gallery_summary(repo) for repo in _discover_galleries(root)]
+    payload = {"root": str(root), "count": len(galleries), "galleries": galleries}
+    if args.json:
+        print(json.dumps(payload, indent=2))
+        return 0
+
+    print(f"curiator: {len(galleries)} nested galleries under {root}")
+    if not galleries:
+        print("  none found; create one with `curiator init galleries/curiator-my-topic --git`")
+        return 0
+    for g in galleries:
+        git = "not-git"
+        if g["git"]:
+            branch = g.get("branch") or "detached"
+            head = g.get("head") or "no-head"
+            git = f"{branch}@{head}"
+        dirty = f"{len(g['dirty'])} dirty" if g["dirty"] else "clean"
+        gallery = _rel_cmd_path(g["gallery"])
+        print(f"  {g['name']}: {git}, {dirty}")
+        print(f"    use: CURIATOR_GALLERY={shlex.quote(gallery)} curiator status")
+    return 0
 
 
 def _resolve_app(cfg: dict, app: str | None = None) -> str:
@@ -1879,6 +1941,10 @@ def main(argv=None) -> int:
     sm.add_argument("--jobs", type=int, default=1, help="run up to N smoke checks concurrently (default: 1)")
     sm.add_argument("--json", action="store_true", help="emit machine-readable results")
     sm.set_defaults(func=cmd_smoke)
+    gl = sub.add_parser("galleries", help="list nested curiator-* collection repos")
+    gl.add_argument("--root", default="galleries", help="directory containing curiator-* gallery repos")
+    gl.add_argument("--json", action="store_true", help="emit machine-readable gallery repo status")
+    gl.set_defaults(func=cmd_galleries)
     rp = sub.add_parser("release-preflight", help="run release checks across nested public galleries")
     rp.add_argument("--root", default="galleries", help="directory containing curiator-* gallery repos")
     rp.add_argument("--gallery", action="append",

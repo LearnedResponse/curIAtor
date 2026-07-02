@@ -49,6 +49,13 @@ git -C galleries/curiator-my-topic add -A
 git -C galleries/curiator-my-topic commit -m "chore: initialize collection"
 ```
 
+List the colocated collection repos and get the exact command for targeting one:
+
+```bash
+curiator galleries
+CURIATOR_GALLERY=galleries/curiator-my-topic/gallery.yaml curiator status
+```
+
 From a nested gallery, use `runner: { mode: checkout, path: ../.. }` when ◆ General feedback should
 patch the parent runner checkout. Public/example collections that should work after `pip install
 curiator` should stay on `runner: { mode: pinned }`.

@@ -21,9 +21,13 @@ Current local gallery repos:
 Run curIAtor against a nested gallery with:
 
 ```bash
+curiator galleries
 CURIATOR_GALLERY=galleries/curiator-geometry/gallery.yaml curiator status
 CURIATOR_GALLERY=galleries/curiator-geometry/gallery.yaml curiator up
 ```
+
+`curiator galleries` prints each nested repo's branch/head, dirty state, and the exact
+`CURIATOR_GALLERY=...` command to target it from this checkout.
 
 When editing a nested gallery, commit inside that gallery repo, not in the parent runner repo.
 

@@ -48,6 +48,8 @@ All notable changes to curIAtor are documented here. The format follows
 - `curiator release-preflight` runs doctor/smoke/path checks across the nested public release
   collections, and `--fresh-clone` repeats those checks from temporary clones of the committed gallery
   histories.
+- `curiator galleries` lists nested `galleries/curiator-*` collection repos with git head, dirty state,
+  and the `CURIATOR_GALLERY=...` command for targeting one from the runner checkout.
 - A generated `docs/demo.gif` storyboard now ships at the README hero path, with `make demo-gif` /
   `scripts/render_demo_gif.py` to regenerate it until the final live browser recording replaces it.
 - `SECURITY.md` documents the prompt-injection caveat, collection-level containment boundary, autonomy
