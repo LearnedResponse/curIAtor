@@ -139,12 +139,22 @@ def test_release_preflight_flags_publish_unsafe_runtime_artifacts(tmp_path, monk
     (repo / "feedback" / "tasks").mkdir()
     (repo / "feedback" / "replies").mkdir()
     (repo / "feedback" / "shots").mkdir()
+    (repo / "apps" / "__pycache__").mkdir()
+    (repo / "node_modules" / "pkg").mkdir(parents=True)
+    (repo / ".venv").mkdir()
+    (repo / ".pytest_cache" / "v" / "cache").mkdir(parents=True)
     (repo / ".curiator-users.json").write_text('{"users": []}\n')
     (repo / ".env.local").write_text("OPENAI_API_KEY=sk-local\n")
     (repo / ".env.example").write_text("OPENAI_API_KEY=\n")
     (repo / "feedback" / "tasks" / "abc.md").write_text("task bundle\n")
     (repo / "feedback" / "replies" / "abc.md").write_text("agent trace\n")
     (repo / "feedback" / "shots" / "abc.png").write_bytes(b"not really png")
+    (repo / "apps" / "__pycache__" / "sample.cpython-314.pyc").write_bytes(b"pyc")
+    (repo / "node_modules" / "pkg" / "index.js").write_text("module.exports = {}\n")
+    (repo / ".venv" / "pyvenv.cfg").write_text("home = /usr/bin\n")
+    (repo / ".pytest_cache" / "v" / "cache" / "nodeids").write_text("[]\n")
+    (repo / "coverage.xml").write_text("<coverage />\n")
+    (repo / "npm-debug.log").write_text("debug log\n")
     (repo / "feedback" / "app_feedback.json").write_text("[]\n")
     (repo / "feedback" / "app_feedback.sqlite").write_bytes(b"intentional ledger")
     (repo / "feedback" / "app_feedback.sqlite-wal").write_bytes(b"live sidecar")
@@ -165,6 +175,12 @@ def test_release_preflight_flags_publish_unsafe_runtime_artifacts(tmp_path, monk
     assert "feedback/shots/abc.png" in files
     assert "feedback/app_feedback.json" in files
     assert "feedback/app_feedback.sqlite-wal" in files
+    assert "apps/__pycache__/sample.cpython-314.pyc" in files
+    assert "node_modules/pkg/index.js" in files
+    assert ".venv/pyvenv.cfg" in files
+    assert ".pytest_cache/v/cache/nodeids" in files
+    assert "coverage.xml" in files
+    assert "npm-debug.log" in files
     assert "feedback/app_feedback.sqlite" not in files
     assert ".env.example" not in files
 

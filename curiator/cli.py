@@ -1213,10 +1213,16 @@ def _machine_path_hits(repo: Path, needles: tuple[str, ...]) -> list[dict]:
 _SAFE_ENV_TEMPLATE_NAMES = {".env.example", ".env.sample", ".env.template"}
 _PUBLISH_RUNTIME_PREFIXES = ("feedback/shots/", "feedback/tasks/", "feedback/replies/")
 _PUBLISH_SQLITE_SIDECARS = ("feedback/app_feedback.sqlite-wal", "feedback/app_feedback.sqlite-shm")
+_PUBLISH_CACHE_DIRS = {"__pycache__", ".pytest_cache", ".ruff_cache", ".mypy_cache", ".cache"}
+_PUBLISH_ENV_DIRS = {".venv", "venv", ".env"}
+_PUBLISH_DEPENDENCY_DIRS = {"node_modules"}
+_PUBLISH_LOCAL_FILES = {".DS_Store", ".coverage", "coverage.xml"}
+_PUBLISH_LOG_FILES = {"npm-debug.log", "yarn-error.log", "pnpm-debug.log"}
 
 
 def _publish_artifact_message(rel: str) -> str | None:
     rel = rel.replace("\\", "/")
+    parts = [p for p in rel.split("/") if p]
     name = rel.rsplit("/", 1)[-1]
     if rel == ".curiator-users.json":
         return "tracked local user store; do not publish hosted-login users or password hashes"
@@ -1228,6 +1234,14 @@ def _publish_artifact_message(rel: str) -> str | None:
         return "tracked runtime feedback artifact; audit and publish intentionally outside release preflight"
     if name == ".env" or (name.startswith(".env.") and name not in _SAFE_ENV_TEMPLATE_NAMES):
         return "tracked environment file; keep secrets and local deployment settings out of public examples"
+    if any(part in _PUBLISH_CACHE_DIRS for part in parts) or name.endswith((".pyc", ".pyo")):
+        return "tracked interpreter/test cache; remove generated cache files before publishing examples"
+    if any(part in _PUBLISH_ENV_DIRS for part in parts):
+        return "tracked virtual environment directory; publish dependency manifests, not installed environments"
+    if any(part in _PUBLISH_DEPENDENCY_DIRS for part in parts):
+        return "tracked dependency install directory; publish manifests/locks, not node_modules"
+    if name in _PUBLISH_LOCAL_FILES or name in _PUBLISH_LOG_FILES:
+        return "tracked local generated file; remove local cache, coverage, or debug artifacts before publishing"
     return None
 
 

@@ -21,7 +21,7 @@ leave feedback → watch the fix land and the ⚙ reply arrive. Every item below
    release. The release workflow builds/attaches artifacts and has a PyPI trusted-publishing job with
    a tag-vs-`pyproject.toml` version guard; `make release-check` now runs the local gate (lint, tests,
    strict public-gallery fresh-clone preflight, demo GIF regeneration, package build, and `twine check`). Local
-   gate evidence from July 2, 2026: `make release-check` passed with 209 tests, public-gallery
+   gate evidence from July 2, 2026: `make release-check` passed with 211 tests, public-gallery
    fresh-clone preflight `3/3` with zero publish-artifact hits, regenerated `docs/demo.gif`, built
    sdist/wheel, and `twine check` passed both artifacts.
    Remaining external setup is configuring the PyPI Trusted Publisher, then running
@@ -46,7 +46,8 @@ leave feedback → watch the fix land and the ⚙ reply arrive. Every item below
    hooks used by git-as-memory commits. From the runner checkout, `curiator release-preflight` runs
    those checks across the nested public galleries and also rejects dirty nested repos, tracked
    machine-local paths, and tracked publish-unsafe runtime/auth artifacts such as local user stores,
-   task/reply traces, screenshots, SQLite sidecars, env files, and legacy JSON ledgers; `curiator
+   task/reply traces, screenshots, SQLite sidecars, env files, legacy JSON ledgers, generated caches,
+   virtualenvs, and `node_modules`; `curiator
    release-preflight --fresh-clone` repeats the same gate from temporary clones of the committed
    gallery histories. Remaining release work is the fresh-clone check on a machine that isn't this one,
    and the loop must close there.
