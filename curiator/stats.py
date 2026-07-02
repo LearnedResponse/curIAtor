@@ -9,6 +9,7 @@ import io
 import subprocess
 from typing import Any
 
+from . import __version__
 from . import ledger
 
 OPEN_STATUSES = {"new", "working", "awaiting_approval"}
@@ -259,6 +260,24 @@ def summarize_git(cfg: dict) -> dict[str, Any]:
     }
 
 
+def summarize_runner(include_git: bool = True) -> dict[str, Any]:
+    """Summarize the curIAtor runner that produced a stats report."""
+    out: dict[str, Any] = {"version": __version__}
+    if not include_git:
+        return {**out, "git_available": False, "reason": "git disabled"}
+    root = Path(__file__).resolve().parents[1]
+    if _git(root, "rev-parse", "--git-dir").returncode != 0:
+        return {**out, "git_available": False, "reason": "not a git repo"}
+    dirty = bool(_git_text(root, "status", "--porcelain"))
+    return {
+        **out,
+        "git_available": True,
+        "git_branch": _git_text(root, "branch", "--show-current") or "detached",
+        "git_head": _git_text(root, "rev-parse", "--short", "HEAD"),
+        "git_dirty": dirty,
+    }
+
+
 def summarize(cfg: dict, app: str | None = None, include_git: bool = True) -> dict[str, Any]:
     out = {
         "gallery": cfg.get("gallery_path"),
@@ -322,6 +341,7 @@ def compare(configs: list[dict], include_git: bool = True) -> dict[str, Any]:
     no_dispatch = sum(row["no_dispatch_cycles"] for row in rows)
     human = sum(row["human_intervention_cycles"] for row in rows)
     return {
+        "runner": summarize_runner(include_git=include_git),
         "collections": rows,
         "totals": {
             "collections": len(rows),
@@ -355,10 +375,21 @@ def _fmt_git_ref(row: dict[str, Any]) -> str:
     return f"{branch}@{head}" if branch else str(head)
 
 
+def _fmt_runner_ref(runner: dict[str, Any]) -> str:
+    version = runner.get("version") or "unknown"
+    if not runner.get("git_available"):
+        return f"curIAtor {version}"
+    ref = _fmt_git_ref({"git_branch": runner.get("git_branch"), "git_head": runner.get("git_head")})
+    state = "dirty" if runner.get("git_dirty") else "clean"
+    return f"curIAtor {version}, {ref}, {state}"
+
+
 def format_compare_markdown(report: dict[str, Any]) -> str:
     """Render collection-level comparison rows for papers and release notes."""
     lines = [
         "# curIAtor Stats Compare",
+        "",
+        f"_Runner: {_md(_fmt_runner_ref(report.get('runner') or {}))}._",
         "",
         "| Collection | Git head | Cycles | Direct fixes | Proposals | No dispatch | Human intervention | Replied | Reply rate | Median reply | Agent notes | Curator commits |",
         "|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
@@ -389,6 +420,10 @@ def format_compare_csv(report: dict[str, Any]) -> str:
     buf = io.StringIO()
     fieldnames = [
         "collection",
+        "runner_version",
+        "runner_git_branch",
+        "runner_git_head",
+        "runner_git_dirty",
         "gallery",
         "cycles",
         "open_cycles",
@@ -415,8 +450,15 @@ def format_compare_csv(report: dict[str, Any]) -> str:
     ]
     writer = csv.DictWriter(buf, fieldnames=fieldnames)
     writer.writeheader()
+    runner = report.get("runner") or {}
     for row in report["collections"]:
-        writer.writerow(row)
+        writer.writerow({
+            "runner_version": runner.get("version"),
+            "runner_git_branch": runner.get("git_branch"),
+            "runner_git_head": runner.get("git_head"),
+            "runner_git_dirty": runner.get("git_dirty"),
+            **row,
+        })
     return buf.getvalue()
 
 

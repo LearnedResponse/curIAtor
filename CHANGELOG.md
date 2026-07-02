@@ -48,8 +48,8 @@ All notable changes to curIAtor are documented here. The format follows
   latency, direct-fix/proposal/no-dispatch/human-intervention rates, and git-as-memory commits, with
   JSON, Markdown, and CSV output for reproducible release/paper case studies.
 - `curiator stats compare <gallery>...` emits collection-level case-study rows across multiple
-  galleries, including collection git branch/head, reply rates, first-reply latency, and curator commit
-  counts.
+  galleries, including runner version/git head, collection git branch/head, reply rates, first-reply
+  latency, and curator commit counts.
 - `curiator link` now writes relative gallery paths when possible, so linked app repos keep working
   when moved or cloned next to their collection.
 - Generated task bundles now use repo-relative app roots, source scopes, screenshots, ledger paths, and

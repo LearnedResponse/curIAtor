@@ -14,8 +14,9 @@ curiator stats compare galleries/curiator-aviato galleries/curiator-ot galleries
 curiator stats compare galleries/curiator-aviato galleries/curiator-ot galleries/curiator-geometry --json
 ```
 
-The compare table includes each collection's git branch/head plus direct-fix, proposal, no-dispatch,
-and human-intervention rates derived from ledger statuses; do not recalculate those columns by hand.
+The compare report includes the runner version/git head and each collection's git branch/head plus
+direct-fix, proposal, no-dispatch, and human-intervention rates derived from ledger statuses; do not
+recalculate those columns by hand.
 
 For per-collection appendix tables:
 

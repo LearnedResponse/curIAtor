@@ -178,6 +178,10 @@ def test_stats_compare_combines_collection_rows(tmp_path, capsys):
     assert gitmem.commit_run(beta, "sample", fid_beta, status="done", note_text="Fixed.")["committed"]
 
     report = stats.compare([alpha, beta])
+    assert report["runner"]["version"]
+    assert report["runner"]["git_available"] is True
+    assert report["runner"]["git_head"]
+    assert isinstance(report["runner"]["git_dirty"], bool)
     assert report["totals"]["collections"] == 2
     assert report["totals"]["cycles"] == 3
     assert report["totals"]["replied_cycles"] == 2
@@ -194,6 +198,7 @@ def test_stats_compare_combines_collection_rows(tmp_path, capsys):
     markdown = stats.format_compare_markdown(report)
     alpha_ref = f"{rows['alpha']['git_branch']}@{rows['alpha']['git_head']}"
     beta_ref = f"{rows['beta']['git_branch']}@{rows['beta']['git_head']}"
+    assert "_Runner: curIAtor" in markdown
     assert "| Collection | Git head | Cycles |" in markdown
     assert f"| alpha | {alpha_ref} | 2 | 1 (50.0%) | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) | 1 | 50.0% | 5m 30s | 1 | 1 |" in markdown
     assert f"| beta | {beta_ref} | 1 | 1 (100.0%) | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) | 1 | 100.0% | 1m | 1 | 1 |" in markdown
@@ -206,6 +211,7 @@ def test_stats_compare_combines_collection_rows(tmp_path, capsys):
         "--json",
     ]) == 0
     payload = json.loads(capsys.readouterr().out)
+    assert payload["runner"]["git_head"] == report["runner"]["git_head"]
     assert payload["totals"]["cycles"] == 3
     assert [row["collection"] for row in payload["collections"]] == ["alpha", "beta"]
     assert payload["collections"][0]["git_head"] == rows["alpha"]["git_head"]
@@ -217,6 +223,8 @@ def test_stats_compare_csv_keeps_single_collection_csv_unchanged(tmp_path):
 
     rows = list(csv.DictReader(io.StringIO(stats.format_compare_csv(stats.compare([alpha], include_git=False)))))
     assert rows[0]["collection"] == "alpha"
+    assert rows[0]["runner_version"]
+    assert rows[0]["runner_git_head"] == ""
     assert rows[0]["git_head"] == ""
     assert rows[0]["curator_commits"] == ""
 
