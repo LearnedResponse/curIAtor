@@ -21,7 +21,7 @@ leave feedback → watch the fix land and the ⚙ reply arrive. Every item below
    release. The release workflow builds/attaches artifacts and has a PyPI trusted-publishing job with
    a tag-vs-`pyproject.toml` version guard; `make release-check` now runs the local gate (lint, tests,
    public-gallery fresh-clone preflight, demo GIF regeneration, package build, and `twine check`). Local
-   gate evidence from July 2, 2026: `make release-check` passed with 169 tests, public-gallery
+   gate evidence from July 2, 2026: `make release-check` passed with 179 tests, public-gallery
    fresh-clone preflight `3/3`, regenerated `docs/demo.gif`, built sdist/wheel, and `twine check`
    passed both artifacts.
    Remaining external setup is configuring the PyPI Trusted Publisher, then running
@@ -39,10 +39,11 @@ leave feedback → watch the fix land and the ⚙ reply arrive. Every item below
    `.claude/commands/curiator.md` and `.agents/skills/curiator/SKILL.md`; the three release
    collections carry those current paths and now default to `runner.mode: pinned` for standalone
    `pip install curiator` use (`curiator-aviato` `b23e0bc`, `curiator-ot` `36e21cf`,
-   `curiator-geometry` `30bb155` on `curiator/auto`). `curiator doctor` now gives a local preflight for machine-absolute paths,
-   missing app roots/sources, weak smoke coverage, suspicious proxy port wiring, missing command
-   executables, and common missing dependency manifests; `curiator smoke` runs the same per-app smoke
-   hooks used by git-as-memory commits. From the runner checkout,
+   `curiator-geometry` `30bb155` on `curiator/auto`). `curiator doctor` now gives a local preflight for
+   machine-absolute paths, missing app roots/sources, weak smoke coverage, suspicious proxy port wiring,
+   likely HMR dev-server proxy commands, missing command executables, and common missing dependency
+   manifests; `curiator smoke` runs the same per-app smoke hooks used by git-as-memory commits. From the
+   runner checkout,
    `curiator release-preflight` runs those checks across the nested public galleries and also rejects
    dirty nested repos or tracked machine-local paths; `curiator release-preflight --fresh-clone` repeats
    the same gate from temporary clones of the committed gallery histories. Remaining release work is
