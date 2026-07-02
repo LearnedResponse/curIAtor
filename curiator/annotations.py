@@ -52,7 +52,9 @@ def clean_annotations(raw) -> list[dict]:
                     clean_target[field] = text
             classes = target.get("classes")
             if isinstance(classes, list):
-                clean_target["classes"] = [c for c in (_short_text(v, 80) for v in classes[:5]) if c]
+                clean_classes = [c for c in (_short_text(v, 80) for v in classes[:5]) if c]
+                if clean_classes:
+                    clean_target["classes"] = clean_classes
             if clean_target:
                 mark["target"] = clean_target
         out.append(mark)

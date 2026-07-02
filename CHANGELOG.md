@@ -124,6 +124,8 @@ All notable changes to curIAtor are documented here. The format follows
   generated legacy `.codex/skills/curiator/SKILL.md` shims are cleaned up on reinstall.
 - Ledger inspection commands now open existing SQLite ledgers read-only, so `curiator status`,
   `context`, and `feedback show` do not dirty git-tracked collection ledgers.
+- Screenshot annotation sanitization now drops empty DOM-target class lists instead of persisting
+  meaningless `target: {classes: []}` metadata in the ledger.
 - Git-as-memory replies no longer mutate the SQLite ledger after creating a curator commit; the commit
   SHA is printed and remains queryable from git, while the collection stays clean after `curiator done`.
 - `SECURITY.md` now distinguishes clone-and-run public examples (`auth.mode: none` plus `auto-small`)
