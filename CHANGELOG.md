@@ -21,7 +21,7 @@ All notable changes to curIAtor are documented here. The format follows
   need their own base path.
 - `curiator app create` / `curiator init-app` to scaffold app directories and register them in
   `gallery.yaml` using Dash, static, tiny Python-server, React/Vite, Svelte/Vite, or Streamlit
-  templates.
+  templates; React/Svelte scaffolds can auto-detect or explicitly set npm/pnpm/yarn/bun commands.
 - Per-feedback run artifacts: task bundles live under `feedback/tasks/<id>.md`, agent stdout/stderr
   streams live to `feedback/replies/<id>.md`, and feedback status badges link to a scrollable trace view.
 - Screenshot feedback can be annotated in-browser with boxes, arrows, numbered pins, and redaction

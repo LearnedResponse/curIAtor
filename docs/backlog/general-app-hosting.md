@@ -121,11 +121,12 @@ svelte / streamlit; later gradio), each emitting a directory + the right `mount`
 2. **The `proxy` mount + same-origin reverse-proxy** (landed as a lightweight localhost proxy; still needs
    framework-specific templates/build ergonomics).
 3. **Scaffold templates** (`curiator init-app --template …`) — first pass landed for React/Svelte via
-   Vite proxy mounts, including `npm run build` smoke hooks and `CURIATOR_APP` base-path config.
+   Vite proxy mounts, including build smoke hooks, `CURIATOR_APP` base-path config, and npm/pnpm/yarn/bun
+   package-manager detection/override.
    Streamlit also has a first scaffold using `server.baseUrlPath`, a prefix-preserving proxy mount,
    and a generated note about the lightweight proxy's WebSocket/production limits.
-4. JS-specific niceties beyond the first scaffold pass (preview command, package-manager detection,
-   richer HMR/proxy diagnostics) per framework as demand warrants.
+4. JS-specific niceties beyond the first scaffold pass (preview command and richer HMR/proxy diagnostics)
+   per framework as demand warrants.
 
 Dash-first is the *launch wedge* (ship fast, own the data/HMI audience), **not the identity** — the
 overlay stayed framework-agnostic and the non-Dash proof now runs (`curiator-aviato`: React SSR + Rust +

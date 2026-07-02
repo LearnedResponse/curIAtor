@@ -72,6 +72,29 @@ def test_app_create_react_and_svelte_proxy_templates(collection):
     assert react["smoke"] == "npm run build"
     assert svelte["mount"]["port"] == 8701
     assert svelte["smoke"] == "npm run build"
+    assert "npm run build" in (react_root / "src" / "App.jsx").read_text()
+
+
+def test_app_create_js_package_manager_detection_and_override(collection):
+    from curiator import cli
+
+    (collection / "pnpm-lock.yaml").write_text("lockfileVersion: '9.0'\n")
+    assert cli.main(["app", "create", "react_pnpm", "--template", "react"]) == 0
+    assert cli.main([
+        "app", "create", "svelte_yarn",
+        "--template", "svelte",
+        "--package-manager", "yarn",
+    ]) == 0
+
+    data = _gallery(collection)
+    react = next(a for a in data["apps"] if a["name"] == "react_pnpm")
+    svelte = next(a for a in data["apps"] if a["name"] == "svelte_yarn")
+    assert react["smoke"] == "pnpm run build"
+    assert react["mount"]["cmd"] == "pnpm run dev -- --host 127.0.0.1 --port 8700"
+    assert svelte["smoke"] == "yarn run build"
+    assert svelte["mount"]["cmd"] == "yarn run dev --host 127.0.0.1 --port 8701"
+    assert "pnpm run build" in (collection / "apps" / "react_pnpm" / "src" / "App.jsx").read_text()
+    assert "yarn run build" in (collection / "apps" / "svelte_yarn" / "src" / "App.svelte").read_text()
 
 
 def test_app_create_streamlit_proxy_template(collection):

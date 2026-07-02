@@ -1527,6 +1527,37 @@ def _next_proxy_port(cfg: dict, start: int = 8700) -> int:
     return port
 
 
+_JS_PACKAGE_MANAGERS = ("npm", "pnpm", "yarn", "bun")
+
+
+def _detect_package_manager(repo: Path) -> str:
+    for lockfile, manager in (
+        ("pnpm-lock.yaml", "pnpm"),
+        ("yarn.lock", "yarn"),
+        ("bun.lockb", "bun"),
+        ("bun.lock", "bun"),
+        ("package-lock.json", "npm"),
+        ("npm-shrinkwrap.json", "npm"),
+    ):
+        if (repo / lockfile).exists():
+            return manager
+    return "npm"
+
+
+def _resolve_package_manager(repo: Path, requested: str | None) -> str:
+    if not requested or requested == "auto":
+        return _detect_package_manager(repo)
+    return requested
+
+
+def _js_run_command(manager: str, script: str, args: str = "") -> str:
+    if not args:
+        return f"{manager} run {script}"
+    if manager in {"npm", "pnpm", "bun"}:
+        return f"{manager} run {script} -- {args}"
+    return f"yarn run {script} {args}"
+
+
 def _append_app_entry(text: str, entry: str) -> str:
     """Append an app item under the top-level `apps:` block while preserving the rest of gallery.yaml."""
     lines = text.splitlines()
@@ -1549,7 +1580,14 @@ def _append_app_entry(text: str, entry: str) -> str:
     return "\n".join(prefix + lines) + ("\n" if text.endswith("\n") else "")
 
 
-def _gallery_entry(name: str, template: str, title: str, tags: list[str], port: int | None) -> str:
+def _gallery_entry(
+    name: str,
+    template: str,
+    title: str,
+    tags: list[str],
+    port: int | None,
+    package_manager: str = "npm",
+) -> str:
     root = f"apps/{name}"
     if template == "dash":
         return (
@@ -1572,13 +1610,15 @@ def _gallery_entry(name: str, template: str, title: str, tags: list[str], port: 
             f"    tags: {_yaml_list(tags)}\n"
         )
     if template in {"react", "svelte"}:
+        smoke = _js_run_command(package_manager, "build")
+        serve = _js_run_command(package_manager, "dev", f"--host 127.0.0.1 --port {port}")
         return (
             f"  - name: {name}\n"
             f"    title: {json.dumps(title)}\n"
             f"    root: {root}\n"
             f"    source: .\n"
-            f"    smoke: npm run build\n"
-            f"    mount: {{ kind: proxy, cmd: \"npm run dev -- --host 127.0.0.1 --port {port}\", port: {port} }}\n"
+            f"    smoke: {smoke}\n"
+            f"    mount: {{ kind: proxy, cmd: \"{serve}\", port: {port} }}\n"
             f"    tags: {_yaml_list(tags)}\n"
         )
     if template == "streamlit":
@@ -1604,16 +1644,17 @@ def _gallery_entry(name: str, template: str, title: str, tags: list[str], port: 
     )
 
 
-def _app_template_files(name: str, template: str, title: str) -> dict[str, str]:
+def _app_template_files(name: str, template: str, title: str, package_manager: str = "npm") -> dict[str, str]:
+    js_smoke = _js_run_command(package_manager, "build")
     if template == "dash":
         return {f"{name}.py": _APP_DASH_TEMPLATE.format(name=name, title=title)}
     if template == "static":
         return {"index.html": _APP_STATIC_TEMPLATE.format(name=name, title=title)}
     if template == "react":
-        return {rel: content.format(name=name, title=title, title_json=json.dumps(title))
+        return {rel: content.format(name=name, title=title, title_json=json.dumps(title), js_smoke=js_smoke)
                 for rel, content in _APP_REACT_TEMPLATE.items()}
     if template == "svelte":
-        return {rel: content.format(name=name, title=title, title_json=json.dumps(title))
+        return {rel: content.format(name=name, title=title, title_json=json.dumps(title), js_smoke=js_smoke)
                 for rel, content in _APP_SVELTE_TEMPLATE.items()}
     if template == "streamlit":
         return {rel: content.format(name=name, title=title, title_json=json.dumps(title))
@@ -1641,10 +1682,11 @@ def cmd_app_create(args) -> int:
     tags = _tags_arg(args.tags, template)
     proxy_templates = {"static", "python", "react", "svelte", "streamlit"}
     port = args.port if args.port is not None else (_next_proxy_port(cfg) if template in proxy_templates else None)
+    package_manager = _resolve_package_manager(repo, args.package_manager) if template in {"react", "svelte"} else "npm"
 
     created, skipped = [], []
     root.mkdir(parents=True, exist_ok=True)
-    for rel, content in _app_template_files(name, template, title).items():
+    for rel, content in _app_template_files(name, template, title, package_manager).items():
         p = root / rel
         if p.exists():
             skipped.append(str(p.relative_to(repo)))
@@ -1654,7 +1696,7 @@ def cmd_app_create(args) -> int:
         created.append(str(p.relative_to(repo)))
 
     gallery = Path(cfg["gallery_path"])
-    entry = _gallery_entry(name, template, title, tags, port)
+    entry = _gallery_entry(name, template, title, tags, port, package_manager)
     gallery.write_text(_append_app_entry(gallery.read_text(), entry))
     created.append(str(gallery.relative_to(repo)))
 
@@ -1763,6 +1805,8 @@ def main(argv=None) -> int:
     ac.add_argument("--title", help="display title")
     ac.add_argument("--tags", help="comma-separated tags; default is the template name")
     ac.add_argument("--port", type=int, help="proxy port for static/python/react/svelte/streamlit templates")
+    ac.add_argument("--package-manager", choices=["auto", *_JS_PACKAGE_MANAGERS], default="auto",
+                    help="JS package manager for react/svelte templates (default: auto)")
     ac.add_argument("--force", action="store_true", help="allow an existing apps/<name> directory")
     ac.set_defaults(func=cmd_app_create)
     ia = sub.add_parser("init-app", help="alias for `curiator app create`")
@@ -1772,6 +1816,8 @@ def main(argv=None) -> int:
     ia.add_argument("--title", help="display title")
     ia.add_argument("--tags", help="comma-separated tags; default is the template name")
     ia.add_argument("--port", type=int, help="proxy port for static/python/react/svelte/streamlit templates")
+    ia.add_argument("--package-manager", choices=["auto", *_JS_PACKAGE_MANAGERS], default="auto",
+                    help="JS package manager for react/svelte templates (default: auto)")
     ia.add_argument("--force", action="store_true", help="allow an existing apps/<name> directory")
     ia.set_defaults(func=cmd_app_create)
     r = sub.add_parser("reply", help="(agent) post a ⚙ note + set status")
@@ -1926,7 +1972,8 @@ Use the scaffold command; it creates `apps/<name>/` and updates `gallery.yaml`:
     curiator app create revenue --template dash --title "Revenue dashboard"
 
 Templates: `dash`, `static`, `python`, `react`, `svelte`, `streamlit`. React/Svelte use Vite behind a
-same-origin proxy mount; Streamlit uses its `baseUrlPath` option plus a prefix-preserving proxy mount.
+same-origin proxy mount and can auto-detect npm/pnpm/yarn/bun; Streamlit uses its `baseUrlPath` option
+plus a prefix-preserving proxy mount.
 You can still edit `gallery.yaml` manually for existing apps.
 
 See the consumer guide: https://github.com/LearnedResponse/curiator/blob/main/docs/USING_CURIATOR.md
@@ -2102,7 +2149,7 @@ export default function App() {{
       <h1>{{title}}</h1>
       <p>
         This React app is served through a same-origin proxy mount. Use the feedback rail to shape the
-        interface; the curator edits files in this directory and smoke-tests with <code>npm run build</code>.
+        interface; the curator edits files in this directory and smoke-tests with <code>{js_smoke}</code>.
       </p>
       <section className="metricGrid" aria-label="demo metrics">
         <div><b>4</b><span>signals</span></div>
@@ -2246,7 +2293,7 @@ export default app;
   <h1>{{title}}</h1>
   <p>
     This Svelte app is served through a same-origin proxy mount. Use the feedback rail to shape the
-    interface; the curator edits files in this directory and smoke-tests with <code>npm run build</code>.
+    interface; the curator edits files in this directory and smoke-tests with <code>{js_smoke}</code>.
   </p>
   <section class="metricGrid" aria-label="demo metrics">
     {{#each metrics as metric}}
