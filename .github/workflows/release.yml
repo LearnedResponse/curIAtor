@@ -35,6 +35,8 @@ jobs:
             echo "::error::tag $GITHUB_REF_NAME does not match pyproject version $version"
             exit 1
           fi
+      - name: Release doc check
+        run: python scripts/check_release_docs.py
       - name: Build sdist + wheel
         run: |
           python -m pip install --upgrade build twine
