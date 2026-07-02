@@ -25,7 +25,9 @@ All notable changes to curIAtor are documented here. The format follows
   `gallery.yaml` using Dash, static, tiny Python-server, dependency-light Node, Flask, FastAPI, Rust,
   React/Vite, Svelte/Vite, Vue/Vite, Next.js, Streamlit, or Gradio templates; JS scaffolds can
   auto-detect or explicitly set npm/pnpm/yarn/bun commands, and the Next scaffold uses a
-  prefix-preserving proxy mount with `basePath`.
+  prefix-preserving proxy mount with `basePath`. Generated proxy scaffolds now also register concrete
+  `commands.preview` commands so `curiator status` and `curiator context` show a standalone way to run
+  the app.
 - `curiator app import <source> <name> --template ...` copies a local app directory or clones a git URL
   into `apps/<name>` while preserving the app repo's own `.git/`, then registers the same template-driven
   mount, smoke, and preview metadata in `gallery.yaml`, with immediate doctor-style warnings for visible

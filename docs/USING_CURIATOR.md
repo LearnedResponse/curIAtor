@@ -120,8 +120,8 @@ server), `react` (Vite + React), `svelte` (Vite + Svelte), `vue` (Vite + Vue), `
 Router), `streamlit`, and `gradio`.
 The Node, Flask, FastAPI, Rust, and JS templates use `proxy` mounts; Vite templates set their base path
 from `CURIATOR_APP`, and the Next template sets `basePath`, so assets resolve under `/app/<name>/`. Pass
-`--package-manager pnpm|yarn|bun|npm` to override auto-detection from lockfiles. They also add
-`commands.preview` to `gallery.yaml`, and
+`--package-manager pnpm|yarn|bun|npm` to override auto-detection from lockfiles. Every generated proxy
+template also adds a concrete standalone `commands.preview` command to `gallery.yaml`, and
 `curiator status` / `curiator context` surface it alongside the smoke command. The Next, Streamlit, and
 Gradio templates use framework root-path/base-path settings with prefix-preserving proxy mounts and
 include generated README notes about the lightweight proxy's production reverse-proxy limits.

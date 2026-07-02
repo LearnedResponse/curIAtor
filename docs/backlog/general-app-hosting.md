@@ -136,9 +136,10 @@ only at scaffold/import time.
    Gradio has the same first-pass shape using `root_path` and a prefix-preserving proxy mount.
 4. JS/framework-specific niceties beyond the first scaffold pass: `curiator app templates` now exposes
    the scaffold/import menu with mount kind, toolchain, and intended use so users and agents do not
-   need to scrape parser help or docs. `commands.preview` now lands in JS scaffold
-   gallery entries and appears in `curiator status` / `curiator context`; proxy failures now render a
-   diagnostic page with command/cwd/port/target/process state plus recent stdout/stderr. WebSocket/HMR
+   need to scrape parser help or docs. `commands.preview` now lands in every generated proxy scaffold,
+   including static/Python, Node, Flask, FastAPI, Rust, JS, Streamlit, and Gradio entries, and appears
+   in `curiator status` / `curiator context`; proxy failures now render a diagnostic page with
+   command/cwd/port/target/process state plus recent stdout/stderr. WebSocket/HMR
    upgrade requests now get an explicit lightweight-proxy diagnostic instead of falling through the
    HTTP proxy path, and `curiator doctor` warns when proxy commands look like HMR-oriented framework dev
    servers or when Vite/Next/FastAPI/Gradio/Streamlit mounts are missing the base-path/root-path config

@@ -130,9 +130,13 @@ def test_init_app_alias_static_and_python_proxy_ports(collection):
     assert landing["mount"]["kind"] == "proxy"
     assert landing["mount"]["port"] == 8700
     assert "http.server 8700" in landing["mount"]["cmd"]
+    assert landing["commands"]["preview"] == "python -m http.server 8700 --bind 127.0.0.1"
     assert status["mount"]["kind"] == "proxy"
     assert status["mount"]["port"] == 8701
+    assert status["mount"]["cmd"] == "python server.py --port 8701"
     assert status["smoke"] == "python -m py_compile server.py"
+    assert status["commands"]["preview"] == "python server.py --port 8701"
+    assert "argparse" in (collection / "apps" / "status_server" / "server.py").read_text()
 
 
 def test_app_create_node_proxy_template(collection, capsys):
@@ -409,8 +413,9 @@ def test_app_create_js_package_manager_detection_and_override(collection):
     assert "bun run build" in (collection / "apps" / "vue_bun" / "src" / "App.vue").read_text()
 
 
-def test_app_create_streamlit_proxy_template(collection):
+def test_app_create_streamlit_proxy_template(collection, capsys):
     from curiator import cli
+    from curiator.config import app_spec, load_config
 
     assert cli.main(["app", "create", "demo_streamlit", "--template", "streamlit"]) == 0
 
@@ -430,11 +435,21 @@ def test_app_create_streamlit_proxy_template(collection):
     assert "streamlit run app.py" in app["mount"]["cmd"]
     assert "--server.baseUrlPath app/{app}" in app["mount"]["cmd"]
     assert app["smoke"] == "python -m py_compile app.py"
+    assert app["commands"]["preview"] == (
+        "streamlit run app.py --server.address 127.0.0.1 --server.port 8700 "
+        "--server.headless true --server.baseUrlPath app/demo_streamlit --browser.gatherUsageStats false"
+    )
     assert app["tags"] == ["streamlit"]
+    assert app_spec(load_config(), "demo_streamlit")["commands"]["preview"] == app["commands"]["preview"]
+
+    assert cli.main(["context", "--app", "demo_streamlit", "--limit", "1"]) == 0
+    out = capsys.readouterr().out
+    assert "- preview: `streamlit run app.py --server.address 127.0.0.1 --server.port 8700" in out
 
 
-def test_app_create_gradio_proxy_template(collection):
+def test_app_create_gradio_proxy_template(collection, capsys):
     from curiator import cli
+    from curiator.config import app_spec, load_config
 
     assert cli.main(["app", "create", "demo_gradio", "--template", "gradio"]) == 0
 
@@ -455,7 +470,13 @@ def test_app_create_gradio_proxy_template(collection):
     assert app["mount"]["preserve_prefix"] is True
     assert "python app.py --port 8700 --root-path /app/{app}" == app["mount"]["cmd"]
     assert app["smoke"] == "python -m py_compile app.py"
+    assert app["commands"]["preview"] == "python app.py --port 8700 --root-path /app/demo_gradio"
     assert app["tags"] == ["gradio"]
+    assert app_spec(load_config(), "demo_gradio")["commands"]["preview"] == "python app.py --port 8700 --root-path /app/demo_gradio"
+
+    assert cli.main(["context", "--app", "demo_gradio", "--limit", "1"]) == 0
+    out = capsys.readouterr().out
+    assert "- preview: `python app.py --port 8700 --root-path /app/demo_gradio`" in out
 
 
 def test_app_create_rejects_duplicate_or_invalid_name(collection):
