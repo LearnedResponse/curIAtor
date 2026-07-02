@@ -108,6 +108,8 @@ curiator serve
 Open the gallery, **★ / 💬 / 📷** an app, and the curator reads the note + screenshot + source, makes
 the fix (auto-small) or proposes a plan (propose-only), smoke-tests, reloads the app, and replies in
 the panel. Edits land **uncommitted** in your working tree for review — the curator never commits.
+The current screenshot path uses same-origin `html2canvas` with upload as the fallback; see
+[`SCREENSHOT_CAPTURE.md`](SCREENSHOT_CAPTURE.md) for fidelity, privacy, and native-capture options.
 
 ## 3. Work Interactively From An App Repo
 
