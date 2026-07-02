@@ -529,6 +529,52 @@ body {
   white-space: normal;
 }
 
+.rshell-voice-summary {
+  display: grid;
+  gap: 4px;
+  margin-top: 6px;
+  padding: 6px 7px;
+  border: 1px solid #e0e8ef;
+  border-radius: 4px;
+  background: #fbfdff;
+  color: #3c4a55;
+  font-size: 11px;
+}
+
+.rshell-voice-row {
+  display: grid;
+  grid-template-columns: 54px minmax(0, 1fr);
+  align-items: start;
+  gap: 6px;
+}
+
+.rshell-voice-time {
+  color: #597083;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.rshell-voice-copy {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.rshell-voice-text {
+  display: block;
+  margin-top: 1px;
+  color: #243746;
+}
+
+.rshell-voice-text.muted {
+  color: #777;
+  font-style: italic;
+}
+
+.rshell-voice-more {
+  color: #777;
+  font-size: 10px;
+}
+
 .rshell-modal-backdrop {
   position: fixed;
   inset: 0;

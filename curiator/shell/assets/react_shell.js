@@ -208,6 +208,117 @@
       h(AnnotationRows, {marks}));
   }
 
+  function numberValue(value) {
+    if (typeof value === "boolean") return null;
+    const n = Number(value);
+    return Number.isFinite(n) ? n : null;
+  }
+
+  function intervalOf(item) {
+    const start = numberValue(item && item.start_ms);
+    const end = numberValue(item && item.end_ms);
+    if (start === null && end === null) return null;
+    const s = start === null ? end : start;
+    const e = end === null ? s : end;
+    return [s, Math.max(s, e)];
+  }
+
+  function intervalsOverlap(a, b) {
+    return b[0] <= a[1] && a[0] <= b[1];
+  }
+
+  function msLabel(value) {
+    const n = numberValue(value);
+    if (n === null) return "";
+    if (n < 1000) return Math.round(n) + "ms";
+    const seconds = n / 1000;
+    if (seconds < 60) return (seconds < 10 ? seconds.toFixed(1) : Math.round(seconds)) + "s";
+    const minutes = Math.floor(seconds / 60);
+    const rest = String(Math.round(seconds % 60)).padStart(2, "0");
+    return minutes + ":" + rest;
+  }
+
+  function timeRange(start, end) {
+    const a = msLabel(start);
+    const b = msLabel(end);
+    if (!a && !b) return "";
+    if (!b || a === b) return a;
+    if (!a) return b;
+    return a + "-" + b;
+  }
+
+  function transcriptRows(entry) {
+    const segments = (entry && entry.transcript_segments) || [];
+    if (!Array.isArray(segments)) return [];
+    return segments.slice(0, 200).map((segment, idx) => {
+      if (!segment || typeof segment !== "object") return null;
+      const interval = intervalOf(segment);
+      const text = String(segment.text || "").replace(/\s+/g, " ").trim();
+      if (!text) return null;
+      return {index: idx + 1, interval, text};
+    }).filter(Boolean);
+  }
+
+  function narrativeTargetText(target) {
+    if (!target || typeof target !== "object") return "";
+    if (target.selector) return target.selector;
+    if (target.data_testid) return "[data-testid=\"" + target.data_testid + "\"]";
+    if (target.role) return "[role=\"" + target.role + "\"]";
+    if (target.tag) return target.tag;
+    return "";
+  }
+
+  function buildNarrative(entry) {
+    const marks = (entry && entry.annotations) || [];
+    if (!Array.isArray(marks)) return [];
+    const segments = transcriptRows(entry).filter((segment) => segment.interval);
+    return marks.slice(0, 50).map((mark, idx) => {
+      if (!mark || typeof mark !== "object") return null;
+      const interval = intervalOf(mark);
+      if (!interval) return null;
+      const matches = segments.filter((segment) => intervalsOverlap(interval, segment.interval));
+      const target = mark.tool === "redact" ? "" : narrativeTargetText(mark.target);
+      return {
+        index: idx + 1,
+        label: mark.tool === "pin" && mark.n ? "pin " + mark.n : "mark " + (idx + 1),
+        tool: mark.tool || "mark",
+        note: String(mark.note || "").replace(/\s+/g, " ").trim(),
+        target,
+        start_ms: interval[0],
+        end_ms: interval[1],
+        text: matches.map((segment) => segment.text).join(" ")
+      };
+    }).filter(Boolean).sort((a, b) => (a.start_ms - b.start_ms) || (a.index - b.index));
+  }
+
+  function VoiceSummary({entry}) {
+    const narrative = buildNarrative(entry);
+    const segments = transcriptRows(entry);
+    if (!narrative.length && !segments.length) return null;
+    const rows = narrative.length ? narrative : segments;
+    const title = narrative.length ? "Narrated feedback" : "Voice transcript";
+    return h("div", {className: "rshell-voice-summary"},
+      h("div", {className: "rshell-annotation-summary-title"}, title),
+      rows.slice(0, 8).map((row) => {
+        const isNarrative = Boolean(row.tool);
+        const body = isNarrative
+          ? h("span", {className: "rshell-voice-copy"},
+              h("b", null, row.label + " · " + row.tool),
+              row.note ? " — " + row.note : "",
+              row.target ? h("code", {className: "rshell-annotation-target"}, row.target) : null,
+              h("span", {className: row.text ? "rshell-voice-text" : "rshell-voice-text muted"},
+                row.text || "no overlapping transcript"))
+          : h("span", {className: "rshell-voice-copy"},
+              h("span", {className: "rshell-voice-text"}, row.text));
+        return h("div", {className: "rshell-voice-row", key: isNarrative ? "mark-" + row.index : "seg-" + row.index},
+          h("span", {className: "rshell-voice-time"}, row.interval
+            ? timeRange(row.interval[0], row.interval[1])
+            : timeRange(row.start_ms, row.end_ms)),
+          body);
+      }),
+      rows.length > 8 ? h("div", {className: "rshell-voice-more"}, "+" + (rows.length - 8) + " more") : null);
+  }
+
   function AnnotationPreview({entry, onClose, onUseDraft}) {
     const marks = (entry && entry.annotations) || [];
     const [editing, setEditing] = useState(false);
@@ -511,6 +622,7 @@
       h("div", {className: "rshell-entry-body"}, entry.comment || ""),
       entry.shot_url ? h("img", {className: "rshell-shot", src: entry.shot_url}) : null,
       h(AnnotationSummary, {entry, onPreview}),
+      h(VoiceSummary, {entry}),
       actionBlock);
     return h("div", {className: "rshell-thread"}, body,
       (children[entry.id] || []).map((c) => h(Entry, {key: c.id, entry: c, depth: depth + 1, children,

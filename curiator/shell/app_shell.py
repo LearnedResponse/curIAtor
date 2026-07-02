@@ -58,6 +58,7 @@ sys.path.insert(0, str(HERE))
 PORT = 8200  # default; overridden by gallery.yaml shell.port just below (after the registry import)
 
 from curiator.annotations import clean_annotations  # noqa: E402
+from curiator.narrative import build_narrative  # noqa: E402
 from curiator.transcripts import clean_transcript_segments  # noqa: E402
 import registry as REG  # gallery.yaml-backed registry
 from curiator import auth, ledger  # identity/provenance + shared SQLite feedback ledger
@@ -533,6 +534,139 @@ def _annotation_summary_dash(entry: dict):
                            "color": "#444", "fontSize": "11px"})
 
 
+def _ms_label(value) -> str:
+    try:
+        n = float(value)
+    except (TypeError, ValueError):
+        return ""
+    if n < 1000:
+        return f"{round(n)}ms"
+    seconds = n / 1000
+    if seconds < 60:
+        return f"{seconds:.1f}s" if seconds < 10 else f"{round(seconds)}s"
+    return f"{int(seconds // 60)}:{round(seconds % 60):02d}"
+
+
+def _time_range_label(start, end) -> str:
+    a = _ms_label(start)
+    b = _ms_label(end)
+    if not a and not b:
+        return ""
+    if not b or a == b:
+        return a
+    if not a:
+        return b
+    return f"{a}-{b}"
+
+
+def _voice_segments(entry: dict) -> list[dict]:
+    raw = entry.get("transcript_segments")
+    if not isinstance(raw, list):
+        return []
+    segments = []
+    for idx, seg in enumerate(raw[:200], start=1):
+        if not isinstance(seg, dict):
+            continue
+        text = " ".join(str(seg.get("text") or "").split())
+        if not text:
+            continue
+        segments.append({
+            "kind": "segment",
+            "key": idx,
+            "time": _time_range_label(seg.get("start_ms"), seg.get("end_ms")),
+            "text": text,
+            "muted": False,
+        })
+    return segments
+
+
+def _voice_summary_rows(entry: dict):
+    segments = _voice_segments(entry)
+    raw_segments = entry.get("transcript_segments") if isinstance(entry.get("transcript_segments"), list) else []
+    narrative = build_narrative(_annotation_marks(entry), raw_segments)
+    if narrative:
+        rows = []
+        for row in narrative[:8]:
+            target = _annotation_target_text({"tool": row.get("tool"), "target": row.get("target")})
+            note = f" — {row['note']}" if row.get("note") else ""
+            rows.append({
+                "kind": "narrative",
+                "key": row.get("mark_index"),
+                "time": _time_range_label(row.get("start_ms"), row.get("end_ms")),
+                "lead": f"{row.get('label') or 'mark'} · {row.get('tool') or 'mark'}{note}",
+                "target": target,
+                "text": row.get("text") or "no overlapping transcript",
+                "muted": not bool(row.get("text")),
+            })
+        return "Narrated feedback", rows, max(0, len(narrative) - len(rows))
+    if segments:
+        rows = segments[:8]
+        return "Voice transcript", rows, max(0, len(segments) - len(rows))
+    return None
+
+
+def _voice_summary_html(entry: dict) -> str:
+    summary = _voice_summary_rows(entry)
+    if not summary:
+        return ""
+    title, rows, extra = summary
+    out = [
+        "<div style='margin-top:6px;padding:6px 7px;border:1px solid #e0e8ef;border-radius:4px;"
+        "background:#fbfdff;color:#3c4a55;font-size:11px'>",
+        f"<div style='font-weight:700;color:#555;margin-bottom:4px'>{_esc(title)}</div>",
+    ]
+    for row in rows:
+        text_style = "color:#777;font-style:italic" if row.get("muted") else "color:#243746"
+        target = row.get("target")
+        target_html = (f"<code style='display:block;margin-top:2px;color:#555;background:#f7f7f7;"
+                       f"border-radius:3px;padding:2px 4px;white-space:normal'>{_esc(target)}</code>"
+                       if target else "")
+        lead = f"<b>{_esc(row['lead'])}</b>" if row.get("lead") else ""
+        copy = (f"{lead}{target_html}<span style='display:block;margin-top:1px;{text_style}'>"
+                f"{_esc(row.get('text') or '')}</span>")
+        out.append(
+            "<div style='display:grid;grid-template-columns:54px minmax(0,1fr);gap:6px;"
+            "align-items:start;margin-top:4px'>"
+            f"<span style='color:#597083;font-weight:700;white-space:nowrap'>{_esc(row.get('time') or '')}</span>"
+            f"<span style='min-width:0;overflow-wrap:anywhere'>{copy}</span></div>"
+        )
+    if extra:
+        out.append(f"<div style='color:#777;font-size:10px;margin-top:4px'>+{extra} more</div>")
+    out.append("</div>")
+    return "".join(out)
+
+
+def _voice_summary_dash(entry: dict):
+    summary = _voice_summary_rows(entry)
+    if not summary:
+        return None
+    title, rows, extra = summary
+    children = [html.Div(title, style={"fontWeight": 700, "color": "#555"})]
+    for row in rows:
+        body = []
+        if row.get("lead"):
+            body.append(html.B(row["lead"]))
+        if row.get("target"):
+            body.append(html.Code(row["target"], style={"display": "block", "marginTop": "2px", "color": "#555",
+                                                       "background": "#f7f7f7", "borderRadius": "3px",
+                                                       "padding": "2px 4px", "whiteSpace": "normal"}))
+        body.append(html.Span(row.get("text") or "", style={"display": "block", "marginTop": "1px",
+                                                            "color": "#777" if row.get("muted") else "#243746",
+                                                            "fontStyle": "italic" if row.get("muted") else "normal"}))
+        children.append(html.Div([
+            html.Span(row.get("time") or "", style={"color": "#597083", "fontWeight": 700,
+                                                    "whiteSpace": "nowrap"}),
+            html.Span(body, style={"minWidth": 0, "overflowWrap": "anywhere"}),
+        ], style={"display": "grid", "gridTemplateColumns": "54px minmax(0, 1fr)", "alignItems": "start",
+                  "gap": "6px"}))
+    if extra:
+        children.append(html.Div(f"+{extra} more", style={"color": "#777", "fontSize": "10px"}))
+    return html.Div(children, style={"display": "grid", "gap": "4px", "marginTop": "6px",
+                                    "padding": "6px 7px", "border": "1px solid #e0e8ef",
+                                    "borderRadius": "4px", "background": "#fbfdff",
+                                    "color": "#3c4a55", "fontSize": "11px"})
+
+
 def save_entry(
     key,
     stars,
@@ -814,6 +948,7 @@ def render_history(range_key=None):
                         f"border-radius:4px;margin-top:4px'>"
                         if e.get("screenshot") else "")
                 annotations = _annotation_summary_html(e)
+                voice = _voice_summary_html(e)
                 who = (e.get("user") or {}).get("name")
                 whoh = (f" <span style='color:#8e44ad;font-size:10px;font-weight:600'>· {_esc(who)}</span>"
                         if who else "")
@@ -823,7 +958,7 @@ def render_history(range_key=None):
                            f"{_status_badge_html(e, st, stc)} {tsh}{whoh}"
                            f"{_reply_button_html(key, e)}"
                            f"<div style='font-size:12.5px;color:#333;white-space:pre-wrap;margin-top:2px'>"
-                           f"{_esc(e.get('comment', ''))}</div>{shot}{annotations}</div>")
+                           f"{_esc(e.get('comment', ''))}</div>{shot}{annotations}{voice}</div>")
             for child in children.get(e.get("id"), []):
                 render_entry(child, depth + 1)
 
@@ -887,6 +1022,9 @@ def feedback_list(key):
             annotation_summary = _annotation_summary_dash(e)
             if annotation_summary:
                 kids.append(annotation_summary)
+            voice_summary = _voice_summary_dash(e)
+            if voice_summary:
+                kids.append(voice_summary)
             row = html.Div(kids, style={"borderLeft": f"2px solid {st_col}", "padding": "4px 8px",
                                         "marginBottom": "6px", "marginLeft": f"{indent}px",
                                         "background": "#fafafa", "opacity": 0.6 if st == "done" else 1.0})

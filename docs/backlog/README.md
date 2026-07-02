@@ -53,4 +53,4 @@ deliberate (ship, let the example demos surface what to prioritize).
   DOM-target snapping). Tier 0 dictation is documented; local transcription is command-backed and
   `curiator voice setup` configures the packaged faster-whisper adapter; recording mode aligns
   annotation marks and transcript segments to one clock, and timed marks with overlapping speech render
-  as an ordered `Narrated feedback` task-bundle block.
+  as an ordered `Narrated feedback` task-bundle block and compact prior-feedback summary.

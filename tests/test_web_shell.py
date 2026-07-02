@@ -87,6 +87,8 @@ def test_react_shell_has_burned_screenshot_annotations(web_client):
     assert "function AnnotationSummary" in js
     assert "function AnnotationPreview" in js
     assert "function AnnotationReplayOverlay" in js
+    assert "function VoiceSummary" in js
+    assert "function buildNarrative" in js
     assert "function copyAnnotations" in js
     assert "function useAnnotationDraft" in js
     assert "function composeShot" in js
@@ -123,6 +125,9 @@ def test_react_shell_has_burned_screenshot_annotations(web_client):
     assert "rshell-annotation-canvas" in css
     assert ".rshell-annotation-note input" in css
     assert ".rshell-annotation-summary" in css
+    assert ".rshell-voice-summary" in css
+    assert ".rshell-voice-row" in css
+    assert ".rshell-voice-time" in css
     assert ".rshell-annotation-preview-btn" in css
     assert ".rshell-modal-backdrop" in css
     assert ".rshell-modal-actions" in css
@@ -437,6 +442,8 @@ def test_react_shell_feedback_api_stores_sanitized_annotations(web_client):
     assert "legend overlaps chart" in home
     assert "#chart .legend" in home
     assert "target omitted" in home
+    assert "Narrated feedback" in home
+    assert "move the legend" in home
 
     cfg = load_config()
     entry = ledger.load(cfg)["sample"][-1]

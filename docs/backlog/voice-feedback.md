@@ -1,7 +1,8 @@
 # Backlog — voice + narrated feedback (talk through the fix)
 
 > **Status:** Tier 0, command-backed local transcription, packaged faster-whisper setup, shared-clock
-> mark/transcript timing, segment persistence, and the first task-bundle narrative merge landed
+> mark/transcript timing, segment persistence, task-bundle narrative merge, and visible feedback
+> narrative summaries landed
 > 2026-07-02. **North star:
 > "narrated feedback"** — voice + annotation on a shared clock, so a review is an
 > *ordered, intent-per-mark tour* the agent can follow.
@@ -14,8 +15,9 @@
 > mic audio with `MediaRecorder`, POSTs it to `/api/transcribe`, appends the returned transcript to the
 > comment box, and stores returned segment timestamps on the feedback entry so agents see
 > `Voice transcript segments` plus a derived `Narrated feedback` block when timed marks overlap timed
-> speech. When recording is active, annotation marks and transcript segments share the recording start
-> as `t=0`.
+> speech. Prior feedback threads now show the compact `Narrated feedback` summary, with a `Voice
+> transcript` fallback when saved speech has no timed marks. When recording is active, annotation marks
+> and transcript segments share the recording start as `t=0`.
 > Composes with `annotated-feedback.md`, not a separate feature. Captured 2026-07-02.
 
 ## The pitch
@@ -93,9 +95,10 @@ to retrofit.
    fields, and `/api/transcribe` accepts/returns segment timestamps. Transcript segments are now
    persisted into the feedback ledger and task bundle, and React recording mode aligns marks plus
    transcript segments to the same `t=0`.
-5. **Narrated feedback** — first task-bundle merge landed: timed marks pair with overlapping transcript
-   segments into an ordered `Narrated feedback` block. Remaining: persist any richer narrative metadata
-   that proves useful and upgrade the replay overlay to narrated replay.
+5. **Narrated feedback** — first task-bundle and UI summaries landed: timed marks pair with overlapping
+   transcript segments into an ordered `Narrated feedback` block, and prior feedback threads expose the
+   same compact summary. Remaining: persist any richer narrative metadata that proves useful and upgrade
+   the replay overlay to narrated replay.
 6. **Verify by running** — a spoken-while-drawing review round-trips; the agent's reply follows the
    ordered narrative and lands the marks in sequence.
 
