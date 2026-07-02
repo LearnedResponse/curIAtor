@@ -287,7 +287,7 @@ For the runner's own release gate, use the combined local check:
 ```bash
 make release-prepare VERSION=0.2.0 DATE=<release-date>  # only when cutting a release
 make release-check
-make release-launch-check  # final public launch only: rejects generated demo GIF placeholders
+make release-launch-check  # final public launch only: rejects generated demo/paper placeholders
 ```
 
 The full publication checklist lives in [`RELEASE.md`](RELEASE.md), including PyPI Trusted Publishing,

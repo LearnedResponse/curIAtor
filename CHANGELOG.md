@@ -136,9 +136,9 @@ All notable changes to curIAtor are documented here. The format follows
 - `.zenodo.json` provides GitHub-Zenodo archive metadata, and
   `make release-prepare VERSION=... DATE=...` cuts release metadata by updating `pyproject.toml`,
   `CITATION.cff`, `.zenodo.json`, and the Keep-a-Changelog links in one tested step.
-- The companion paper draft now includes related-work and acknowledgement prose, and the release-doc
-  gate rejects lingering `TODO(draft)` placeholders while still allowing release-blocked evidence
-  placeholders.
+- The companion paper draft now includes related-work and acknowledgement prose; the normal release-doc
+  gate rejects lingering `TODO(draft)` placeholders while still allowing release-blocked evidence, and
+  `--strict-launch` rejects `TODO(release)` placeholders before publication.
 
 ### Fixed
 - `curiator commands install` now writes the Codex repo skill to `.agents/skills/curiator/SKILL.md`,
