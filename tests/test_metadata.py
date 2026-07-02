@@ -1,6 +1,7 @@
 """Repository metadata files used by release/archival workflows."""
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import yaml
@@ -13,6 +14,19 @@ def test_citation_cff_has_release_metadata():
     assert data["authors"][0]["family-names"] == "Guetz"
     assert data["license"] == "Apache-2.0"
     assert data["repository-code"] == "https://github.com/LearnedResponse/curiator"
+
+
+def test_zenodo_json_has_archive_metadata():
+    data = json.loads(Path(".zenodo.json").read_text())
+    citation = yaml.safe_load(Path("CITATION.cff").read_text())
+
+    assert data["upload_type"] == "software"
+    assert data["access_right"] == "open"
+    assert data["license"] == "Apache-2.0"
+    assert data["title"] == citation["title"]
+    assert data["version"] == citation["version"]
+    assert data["publication_date"] == citation["date-released"]
+    assert data["creators"][0]["name"] == "Guetz, Adam"
 
 
 def test_issue_templates_are_valid_yaml():

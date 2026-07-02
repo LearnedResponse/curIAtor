@@ -1,0 +1,21 @@
+{
+  "access_right": "open",
+  "creators": [
+    {
+      "name": "Guetz, Adam"
+    }
+  ],
+  "description": "curIAtor is a self-hosted overlay for web app collections: users rate, comment on, and screenshot live apps in the browser, and a coding agent turns that contextual feedback into reviewed source changes and ledger-linked replies.",
+  "keywords": [
+    "software maintenance",
+    "coding agents",
+    "web applications",
+    "human feedback",
+    "research software"
+  ],
+  "license": "Apache-2.0",
+  "publication_date": "2026-06-29",
+  "title": "curIAtor: an AI-maintained web app feedback overlay",
+  "upload_type": "software",
+  "version": "0.1.0"
+}

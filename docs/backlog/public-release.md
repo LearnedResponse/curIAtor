@@ -71,9 +71,11 @@ leave feedback → watch the fix land and the ⚙ reply arrive. Every item below
    are tracked in `.github/labels.yml`, and the first good-first seed queue has been drained.
    Remaining after publication: README badges for PyPI/DOI and creating/pinning any new GitHub issues.
    `CONTRIBUTING.md` and the DCO check already exist.
-7. **Zenodo wiring** — `CITATION.cff` is present with current release metadata; remaining release-time
-   work is enabling the GitHub↔Zenodo integration so every release auto-archives with a DOI, then
-   adding the Zenodo concept DOI to `CITATION.cff`. The [paper](zenodo-paper.md) builds on this.
+7. **Zenodo wiring** — `CITATION.cff` and `.zenodo.json` are present with release metadata, and
+   `make release-prepare` updates both alongside `pyproject.toml` and `CHANGELOG.md`. Remaining
+   release-time work is enabling the GitHub↔Zenodo integration so every release auto-archives with a
+   DOI, then adding the Zenodo concept DOI to `CITATION.cff`. The [paper](zenodo-paper.md) builds on
+   this.
 
 ## Guardrails
 

@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import datetime as dt
+import json
 import re
 from pathlib import Path
 
@@ -59,6 +60,18 @@ def replace_citation_metadata(text: str, version: str, release_date: str) -> str
     return text
 
 
+def replace_zenodo_metadata(text: str, version: str, release_date: str) -> str:
+    try:
+        data = json.loads(text)
+    except json.JSONDecodeError as exc:
+        raise ReleasePrepareError(f".zenodo.json is invalid JSON: {exc}") from exc
+    if not isinstance(data, dict):
+        raise ReleasePrepareError(".zenodo.json must contain a JSON object")
+    data["version"] = version
+    data["publication_date"] = release_date
+    return json.dumps(data, indent=2, ensure_ascii=False, sort_keys=True) + "\n"
+
+
 def cut_changelog(text: str, version: str, release_date: str) -> str:
     heading = f"## [{version}]"
     if re.search(rf"^## \[{re.escape(version)}\](?:\s|$)", text, flags=re.MULTILINE):
@@ -95,12 +108,14 @@ def prepare_release(root: Path, version: str, release_date: str, *, write: bool 
     paths = [
         root / "pyproject.toml",
         root / "CITATION.cff",
+        root / ".zenodo.json",
         root / "CHANGELOG.md",
     ]
-    pyproject, citation, changelog = paths
+    pyproject, citation, zenodo, changelog = paths
     updates = {
         pyproject: replace_project_version(pyproject.read_text(encoding="utf-8"), version),
         citation: replace_citation_metadata(citation.read_text(encoding="utf-8"), version, release_date),
+        zenodo: replace_zenodo_metadata(zenodo.read_text(encoding="utf-8"), version, release_date),
         changelog: cut_changelog(changelog.read_text(encoding="utf-8"), version, release_date),
     }
     if write:

@@ -80,8 +80,9 @@ All notable changes to curIAtor are documented here. The format follows
   before a release tag is pushed.
 - `make release-check` runs the local release gate: lint, tests, public-gallery fresh-clone preflight,
   demo GIF regeneration, package build, and `twine check`.
-- `make release-prepare VERSION=... DATE=...` cuts release metadata by updating `pyproject.toml`,
-  `CITATION.cff`, and the Keep-a-Changelog links in one tested step.
+- `.zenodo.json` provides GitHub-Zenodo archive metadata, and
+  `make release-prepare VERSION=... DATE=...` cuts release metadata by updating `pyproject.toml`,
+  `CITATION.cff`, `.zenodo.json`, and the Keep-a-Changelog links in one tested step.
 
 ### Fixed
 - `curiator commands install` now writes the Codex repo skill to `.agents/skills/curiator/SKILL.md`,

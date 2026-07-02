@@ -37,6 +37,14 @@ def _write_release_fixture(root: Path, *, existing_release: bool = False) -> Non
         version: "0.1.0"
         date-released: "2026-06-29"
     """))
+    (root / ".zenodo.json").write_text(textwrap.dedent("""\
+        {
+          "title": "curIAtor",
+          "upload_type": "software",
+          "version": "0.1.0",
+          "publication_date": "2026-06-29"
+        }
+    """))
     release_block = "## [0.2.0] \u2014 2026-07-02\n\n" if existing_release else ""
     (root / "CHANGELOG.md").write_text(
         "# Changelog\n\n"
@@ -57,11 +65,14 @@ def test_prepare_release_updates_version_citation_and_changelog(tmp_path):
 
     changed = module.prepare_release(tmp_path, "0.2.0", "2026-07-02")
 
-    assert [path.name for path in changed] == ["pyproject.toml", "CITATION.cff", "CHANGELOG.md"]
+    assert [path.name for path in changed] == ["pyproject.toml", "CITATION.cff", ".zenodo.json", "CHANGELOG.md"]
     assert 'version = "0.2.0"' in (tmp_path / "pyproject.toml").read_text()
     citation = (tmp_path / "CITATION.cff").read_text()
     assert 'version: "0.2.0"' in citation
     assert 'date-released: "2026-07-02"' in citation
+    zenodo = (tmp_path / ".zenodo.json").read_text()
+    assert '"version": "0.2.0"' in zenodo
+    assert '"publication_date": "2026-07-02"' in zenodo
 
     changelog = (tmp_path / "CHANGELOG.md").read_text()
     assert "## [Unreleased]\n\n## [0.2.0] \u2014 2026-07-02\n\n### Added" in changelog
@@ -76,8 +87,9 @@ def test_prepare_release_dry_run_validates_without_writing(tmp_path):
 
     changed = module.prepare_release(tmp_path, "0.2.0", "2026-07-02", write=False)
 
-    assert len(changed) == 3
+    assert len(changed) == 4
     assert 'version = "0.1.0"' in (tmp_path / "pyproject.toml").read_text()
+    assert '"version": "0.1.0"' in (tmp_path / ".zenodo.json").read_text()
     assert "## [0.2.0]" not in (tmp_path / "CHANGELOG.md").read_text()
 
 
@@ -97,3 +109,12 @@ def test_prepare_release_validates_version_and_date(tmp_path):
         module.prepare_release(tmp_path, "v0.2.0", "2026-07-02")
     with pytest.raises(module.ReleasePrepareError, match="date must be"):
         module.prepare_release(tmp_path, "0.2.0", "July 2, 2026")
+
+
+def test_prepare_release_validates_zenodo_json(tmp_path):
+    module = _load_script()
+    _write_release_fixture(tmp_path)
+    (tmp_path / ".zenodo.json").write_text("not json")
+
+    with pytest.raises(module.ReleasePrepareError, match=".zenodo.json is invalid JSON"):
+        module.prepare_release(tmp_path, "0.2.0", "2026-07-02")

@@ -196,6 +196,7 @@ curiator smoke --app revenue --json
 curiator smoke --jobs 4 --json # run independent app checks concurrently, preserving report order
 curiator release-preflight     # from a runner checkout: checks nested public galleries
 curiator release-preflight --fresh-clone
+make release-prepare VERSION=0.2.0 DATE=2026-07-02  # updates package, citation, Zenodo, changelog
 ```
 
 For the runner's own release gate, use the combined local check:

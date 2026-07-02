@@ -1,8 +1,9 @@
 # Backlog — the companion paper (Zenodo)
 
-> **Status:** scoped 2026-07-01; stats CLI landed, paper/DOI work not started. A citable
-> software/systems paper, self-archived on **Zenodo** with a DOI. Sequences last: the three public
-> collections are its evaluation, so [public-release](public-release.md) → the collections → this.
+> **Status:** scoped 2026-07-01; stats CLI and local Zenodo metadata landed, paper/DOI work not
+> started. A citable software/systems paper, self-archived on **Zenodo** with a DOI. Sequences last:
+> the three public collections are its evaluation, so [public-release](public-release.md) → the
+> collections → this.
 
 ## The claim (one sentence)
 
@@ -42,8 +43,9 @@ the durable record of that conversation.
 
 ## Work-order
 
-1. `CITATION.cff` + the Zenodo webhook (rides the [release](public-release.md) item). The citation
-   file exists; after GitHub-Zenodo archiving is enabled, add the Zenodo concept DOI to it.
+1. `CITATION.cff` + `.zenodo.json` + the Zenodo webhook (rides the [release](public-release.md) item).
+   The local metadata files exist and are updated by `make release-prepare`; after GitHub-Zenodo
+   archiving is enabled, add the Zenodo concept DOI to `CITATION.cff`.
 2. **`curiator stats` — core landed.** It reads a collection ledger + git log and emits the
    case-study numbers (cycles, status distribution, per-app counts, reply latency, curator commits),
    with `--json` for machine-readable snapshots, `--markdown` for paper/release-note tables, and
