@@ -68,10 +68,10 @@ feedback: { dir: ./feedback, screenshots: true }
 
 On each new-feedback fire, the harness hands the agent: the app `name`, its `source` path(s), the
 feedback `comment` + `stars` + `screenshot` path, and a **task template** encoding the guardrails
-we used (`feedback_loop_task.md`): triage → auto-do clearly-scoped low-risk fixes (+ smoke-test +
-restart) / propose plans for substantive ones (`awaiting_approval`) / ack positives; post a reply
-via the ledger; **leave changes uncommitted**; never auto-commit. The agent returns; the harness
-re-arms the watcher.
+now shipped as `curiator/loop/task_template.md`: triage → auto-do clearly-scoped low-risk fixes
+(+ smoke-test + restart) / propose plans for substantive ones (`awaiting_approval`) / ack positives;
+post a reply via the ledger; leave a diff or a git-as-memory commit according to the collection's
+`git:` policy; never push. The agent returns; the harness re-arms the watcher.
 
 ## Agent adapter / deployment modes
 
@@ -301,18 +301,26 @@ the curation tier goes multi-user/public — same boundary as the `api` adapter 
 target. Build it then; the git-as-memory record is what makes reputation *computable* rather than
 hand-curated when you do.
 
-## Extraction checklist (our hack → shippable v0)
+## Extraction status (our hack → shippable v0)
 
-- [ ] Decouple from this math repo + from Dash specifically (mount = generic proxy, not in-process).
-- [ ] Make the loop **agent-pluggable** (config block, not the hardcoded `feedback_watch.sh` → Claude).
-      Ship **two reference adapters**: `headless-cc` (`claude -p`, default) and `api`/Agent-SDK; document
-      the **context-bundle convention** (+ optional knowledge-store backing, e.g. graphify) for the cold `api` path.
-- [ ] Registry schema + loader; one **non-Dash** example app (Streamlit/Gradio) to prove generality.
-- [ ] Keep: the same-origin capture (html2canvas), the JSON ledger, the status state-machine
-      (`new → awaiting_approval → done`), the General/history view, the mobile collapse-to-one-column JS.
-- [ ] README + the task-template + the autonomy-dial docs.
-- Effort: a weekend or two to a credible v0 — the pieces already exist and *work* (proven end-to-end
-  in this session: comment-with-screenshot → agent reads it → fixes the app → replies, ~6 cycles).
+The original extraction checklist is now mostly landed:
+
+- [x] Decoupled from the math repo and from Dash as identity: the default shell is Flask + React,
+      `proxy` is the universal mount, and `dash-inproc` is one adapter.
+- [x] Made the loop **agent-pluggable** through configured adapters and task templates:
+      `headless-cc`, `codex`, `command`, and `api` are separate paths, with repo-local skill/command
+      install for interactive work.
+- [x] Added a registry schema + loader and public-shaped non-Dash proofs: React/Node SSR, Rust HTTP,
+      Vite-family scaffolds, Streamlit, Gradio, FastAPI, Flask, static, and Dash app directories.
+- [x] Kept the same-origin capture model while replacing the legacy JSON ledger with a SQLite runtime
+      source of truth plus screenshots, task bundles, replies, threaded feedback, run traces, the
+      General/history view, and collapsible overlay drawers.
+- [x] Added README, task template, autonomy/security docs, release runbook, and app/galleries CLIs.
+- [ ] Before public launch: replace the generated `docs/demo.gif` with a real browser capture, fill
+      release-time paper evidence, publish the example collection repos, configure PyPI/Zenodo, and
+      rerun the loop from a machine that is not this one.
+- [ ] Future layers: branch/merge/PR UI, heavier Docker/Compose orchestration, team-scale API context
+      bundles, and DOM-mapped annotation v2.
 
 ## Landscape / differentiation
 
@@ -329,5 +337,5 @@ going horizontal.
   right edit** is the real capability bet (BYO-agent punts this to the user's agent, fairly).
 - Restart/redeploy orchestration per app (we hand-restart processes) needs a clean supervisor.
 - Versioning / rollback / PR-review of agent changes is the obvious next layer for any real use.
-- Source artifacts (this session's working bits): `app_shell.py`, `shell_assets/`, `assets/mobile_responsive.js`,
-  `feedback/`, `feedback_watch.sh`, `feedback_loop_task.md`.
+- Source artifacts are now package code rather than session-local files: `curiator/shell/`,
+  `curiator/shell/assets/`, `curiator/loop/`, `curiator/ledger.py`, and `curiator/cli.py`.

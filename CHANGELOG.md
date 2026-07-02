@@ -153,6 +153,8 @@ All notable changes to curIAtor are documented here. The format follows
 ### Fixed
 - `docs/USING_CURIATOR.md` no longer says the curator never commits; it now describes the current
   default-uncommitted behavior plus `git.commit: true` git-as-memory commits.
+- `docs/DESIGN.md` no longer presents the original Dash/JSON-ledger extraction checklist as still
+  unlanded; it now records the current Flask/React, proxy, SQLite, scaffold, and release-gate state.
 - `curiator commands install` now writes the Codex repo skill to `.agents/skills/curiator/SKILL.md`,
   matching current Codex skill discovery, while keeping Claude's `.claude/commands/curiator.md`;
   generated legacy `.codex/skills/curiator/SKILL.md` shims are cleaned up on reinstall.
