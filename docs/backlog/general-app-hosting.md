@@ -82,8 +82,10 @@ i.e. a thin `create-vite`-style scaffolder per framework (currently dash / stati
 flask / fastapi / rust / react / svelte / vue / next / streamlit / gradio), each emitting a directory + the right `mount`
 block. Existing repos follow the same template contract via `app import`: the source is copied/cloned
 into `apps/<name>` with its own `.git/` intact, while the template registers only the mount/smoke/preview
-metadata. Plugins = lock-in + maintenance; templates + the generic proxy = leverage. Stay generic at the
-mount, opinionated only at scaffold/import time.
+metadata. When git-as-memory handles a source-changing run against one of those imported app repos, it
+commits the app repo first and then records the collection ledger plus updated gitlink. Plugins =
+lock-in + maintenance; templates + the generic proxy = leverage. Stay generic at the mount, opinionated
+only at scaffold/import time.
 
 ## Honest scoping & sequencing
 

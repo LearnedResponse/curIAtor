@@ -105,6 +105,11 @@ the template only chooses the `gallery.yaml` mount, smoke, preview command, tags
 registration, import prints doctor-style warnings for issues it can see immediately, such as framework
 dev-server/HMR commands, missing dependency manifests, or Vite/Next/FastAPI/Gradio/Streamlit base-path
 settings that need source changes before the app will behave correctly under `/app/<name>/`.
+When git-as-memory is enabled and an imported app root is its own Git repo, a source-changing
+`curiator done`/agent reply first commits inside that app repo, then commits the collection ledger plus
+the updated app gitlink. The app keeps its own history, while the collection keeps the feedback thread
+and provenance receipt. `curiator status --app <name>` shows the nested app repo branch/dirty state
+when that two-repo workflow applies.
 
 Templates today: `dash` (in-process Dash), `static` (same-origin proxy using `http.server`), `python`
 (tiny proxy-served Python HTTP app), `node` (dependency-light Node HTTP server), `flask`

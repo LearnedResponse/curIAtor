@@ -48,11 +48,15 @@ _GENERAL_COLLECTION_GLOBS = [
 
 
 # ───────────────────────────── low-level git ─────────────────────────────
-def _git(cfg: dict, *args: str, check: bool = True):
-    r = subprocess.run(["git", *args], cwd=cfg["repo_root"], capture_output=True, text=True)
+def _git_in(repo: Path, *args: str, check: bool = True):
+    r = subprocess.run(["git", *args], cwd=repo, capture_output=True, text=True)
     if check and r.returncode != 0:
-        raise RuntimeError(f"git {' '.join(args)} failed: {(r.stderr or r.stdout).strip()}")
+        raise RuntimeError(f"git {' '.join(args)} failed in {repo}: {(r.stderr or r.stdout).strip()}")
     return r
+
+
+def _git(cfg: dict, *args: str, check: bool = True):
+    return _git_in(Path(cfg["repo_root"]), *args, check=check)
 
 
 def is_repo(cfg: dict) -> bool:
@@ -120,6 +124,31 @@ def _app_spec(cfg: dict, app: str) -> dict | None:
     }
 
 
+def _is_git_toplevel(repo: Path) -> bool:
+    top = _git_in(repo, "rev-parse", "--show-toplevel", check=False).stdout.strip()
+    return bool(top) and Path(top).resolve() == repo.resolve()
+
+
+def _nested_app_repo(cfg: dict, spec: dict) -> Path | None:
+    root = Path(spec.get("root") or "")
+    collection = Path(cfg["repo_root"]).resolve()
+    if not root.exists() or root.resolve() == collection:
+        return None
+    if _is_git_toplevel(root):
+        return root.resolve()
+    return None
+
+
+def _rel_to(path: Path | None, base: Path) -> str | None:
+    if not path:
+        return None
+    try:
+        rel = path.resolve().relative_to(base.resolve())
+    except ValueError:
+        return None
+    return str(rel) or "."
+
+
 def _ledger_relpath(cfg: dict) -> str:
     return f"{(cfg.get('feedback', {}) or {}).get('dir', 'feedback')}/app_feedback.sqlite"
 
@@ -132,6 +161,12 @@ def _add_paths(cfg: dict, paths: list[str], ledger_rel: str | None = None) -> No
     if ledger_rel and ledger_rel in paths:
         ledger.checkpoint(cfg)
         _git(cfg, "add", "-f", "--", ledger_rel)
+
+
+def _add_paths_in(repo: Path, paths: list[str]) -> None:
+    normal = [p for p in paths if p]
+    if normal:
+        _git_in(repo, "add", "--", *normal)
 
 
 def _gallery_relpath(cfg: dict) -> str | None:
@@ -202,17 +237,23 @@ def smoke_app(cfg: dict, app: str, src: str | None) -> tuple[bool, str]:
     return True, "n/a (no smoke configured)"
 
 
-def _path_changed(cfg: dict, rel: str) -> bool:
-    if _git(cfg, "diff", "--quiet", "HEAD", "--", rel, check=False).returncode != 0:
+def _path_changed_in(repo: Path, rel: str) -> bool:
+    if rel in {"", "."}:
+        return bool(_dirty_paths_in(repo))
+    if _git_in(repo, "diff", "--quiet", "HEAD", "--", rel, check=False).returncode != 0:
         return True
     prefix = rel.rstrip("/") + "/"
-    return any(p == rel or p.startswith(prefix) for p in _dirty_paths(cfg))
+    return any(p == rel or p.startswith(prefix) for p in _dirty_paths_in(repo))
 
 
-def _dirty_paths(cfg: dict) -> list[str]:
+def _path_changed(cfg: dict, rel: str) -> bool:
+    return _path_changed_in(Path(cfg["repo_root"]), rel)
+
+
+def _dirty_paths_in(repo: Path) -> list[str]:
     """Every modified / added / untracked path in the working tree (porcelain, rename-aware)."""
     out = []
-    for line in _git(cfg, "status", "--porcelain", check=False).stdout.splitlines():
+    for line in _git_in(repo, "status", "--porcelain", check=False).stdout.splitlines():
         rel = line[3:]                                    # strip the 2-char status + its trailing space
         if " -> " in rel:                                 # a rename — take the destination path
             rel = rel.split(" -> ", 1)[1]
@@ -222,19 +263,27 @@ def _dirty_paths(cfg: dict) -> list[str]:
     return out
 
 
-def _extra_paths(cfg: dict, globs: list[str], exclude: set[str]) -> list[str]:
+def _dirty_paths(cfg: dict) -> list[str]:
+    return _dirty_paths_in(Path(cfg["repo_root"]))
+
+
+def _extra_paths_in(repo: Path, globs: list[str], exclude: set[str]) -> list[str]:
     """Working-tree changes matching `globs` (dependency manifests by default), so an elevated run that
     also edits e.g. requirements.txt rides in the SAME commit instead of dangling. Excludes the source +
     ledger (staged separately). Returns [] when globs is empty (the strict source+ledger-only policy)."""
     if not globs:
         return []
     out: list[str] = []
-    for rel in _dirty_paths(cfg):
+    for rel in _dirty_paths_in(repo):
         if rel in exclude or rel in out:
             continue
         if any(fnmatch.fnmatch(rel, g) for g in globs):
             out.append(rel)
     return out
+
+
+def _extra_paths(cfg: dict, globs: list[str], exclude: set[str]) -> list[str]:
+    return _extra_paths_in(Path(cfg["repo_root"]), globs, exclude)
 
 
 def _general_collection_paths(cfg: dict, fb: dict | None, exclude: set[str]) -> list[str]:
@@ -277,6 +326,63 @@ def _build_message(app, summary, comment, stars, changed_desc, smoke) -> str:
     )
 
 
+def _commit_nested_app_repo(
+    cfg: dict,
+    app: str,
+    feedback_id: str,
+    *,
+    repo: Path,
+    source_rel: str,
+    summary: str,
+    comment: str,
+    stars,
+    status: str,
+    smoke: str,
+) -> dict:
+    """Commit an imported/nested app repository before the collection ledger commit.
+
+    Collection git can only record the nested repo's gitlink. The app source change must therefore be
+    committed inside the app repo first; the collection commit then records the new gitlink plus the
+    ledger/reply.
+    """
+    git = cfg.get("git", {}) or {}
+    paths = [source_rel]
+    exclude = {source_rel}
+    extra = [] if source_rel == "." else _extra_paths_in(repo, git.get("also_commit", _DEFAULT_ALSO_COMMIT), exclude)
+    paths.extend(extra)
+    _add_paths_in(repo, paths)
+    if _git_in(repo, "diff", "--cached", "--quiet", check=False).returncode == 0:
+        return {"committed": False, "reason": "nothing staged in nested app repo"}
+
+    changed_desc = f"edited {source_rel}"
+    if extra:
+        changed_desc += f" (+{', '.join(extra)})"
+    if status == "awaiting_approval":
+        changed_desc = "plan only" if source_rel == "." and not extra else changed_desc
+
+    msg = _build_message(app, summary, comment, stars, changed_desc, smoke).replace("{fid}", feedback_id)
+    from_email = None
+    led = ledger.load(cfg)
+    for item in led.get(app, []):
+        if item.get("id") == feedback_id and item.get("author") != "claude":
+            from_email = (item.get("user") or {}).get("email")
+            break
+    if from_email:
+        msg += f"Feedback-From: {from_email}\n"
+    msg += f"Co-Authored-By: curiator[{_agent_label(cfg)}] <noreply@curiator.dev>\n"
+    commit_args = ["commit", "-m", msg] + (["-s"] if git.get("signoff", True) else [])
+    _git_in(repo, *commit_args)
+    sha = _git_in(repo, "rev-parse", "--short", "HEAD").stdout.strip()
+    branch = _git_in(repo, "rev-parse", "--abbrev-ref", "HEAD").stdout.strip()
+    return {
+        "committed": True,
+        "sha": sha,
+        "branch": branch,
+        "repo": str(repo),
+        "paths": paths,
+    }
+
+
 # ───────────────────────────── commit per run ─────────────────────────────
 def commit_run(cfg: dict, app: str, feedback_id: str, *, status: str, note_text: str) -> dict:
     """One atomic commit for an agent run: the source edit (if any) + the ledger (the reply + status).
@@ -291,19 +397,52 @@ def commit_run(cfg: dict, app: str, feedback_id: str, *, status: str, note_text:
                    if e.get("id") == feedback_id and e.get("author") != "claude"), None)
         comment, stars = (fb or {}).get("comment", ""), (fb or {}).get("stars")
 
-        src = source_for(cfg, app)
-        changed = bool(src) and _path_changed(cfg, src)
+        spec = _app_spec(cfg, app) or {}
+        src = spec.get("source_rel")
+        nested_repo = _nested_app_repo(cfg, spec) if app != _GENERAL_KEY and spec else None
+        nested_source = _rel_to(spec.get("source"), nested_repo) if nested_repo else None
+        parent_stage_src = spec.get("root_rel") if nested_repo and nested_source else src
+        nested_commit: dict | None = None
+        changed = bool(src) and (
+            _path_changed_in(nested_repo, nested_source)
+            if nested_repo and nested_source
+            else _path_changed(cfg, src)
+        )
         smoke = "n/a (no source change)"
+        summary = (note_text or "").strip().splitlines()[0][:72] if note_text else f"feedback on {app}"
         if changed:
             ok, msg = smoke_app(cfg, app, src)
             if not ok:
-                _git(cfg, "checkout", "--", src)             # never commit a broken app
+                if nested_repo and nested_source:
+                    _git_in(nested_repo, "checkout", "--", nested_source)
+                else:
+                    _git(cfg, "checkout", "--", src)         # never commit a broken app
                 return {"committed": False, "reason": f"smoke-test failed, reverted edit: {msg}"}
             smoke = msg
-        changed_desc = f"edited {src}" if changed else ("plan only" if status == "awaiting_approval" else "ack / no source change")
+            if nested_repo and nested_source:
+                nested_commit = _commit_nested_app_repo(
+                    cfg,
+                    app,
+                    feedback_id,
+                    repo=nested_repo,
+                    source_rel=nested_source,
+                    summary=summary,
+                    comment=comment,
+                    stars=stars,
+                    status=status,
+                    smoke=smoke,
+                )
+                if not nested_commit.get("committed"):
+                    return {"committed": False, "reason": nested_commit.get("reason", "nested app repo was not committed")}
+        if changed:
+            changed_desc = f"edited {src}"
+            if nested_commit:
+                changed_desc += f" (nested app {Path(nested_commit['repo']).name}@{nested_commit['sha']})"
+        else:
+            changed_desc = "plan only" if status == "awaiting_approval" else "ack / no source change"
 
         ledger_rel = _ledger_relpath(cfg)
-        exclude = {src or "", ledger_rel}
+        exclude = {parent_stage_src or "", ledger_rel}
         general_extra = _general_collection_paths(cfg, fb, exclude) if app == _GENERAL_KEY else []
         exclude.update(general_extra)
         extra = general_extra + _extra_paths(cfg, git.get("also_commit", _DEFAULT_ALSO_COMMIT), exclude)
@@ -311,13 +450,14 @@ def commit_run(cfg: dict, app: str, feedback_id: str, *, status: str, note_text:
             changed_desc += f" (+{', '.join(extra)})"     # dependency manifests captured in the same commit
 
         ensure_branch(cfg, git.get("branch"))
-        paths = ([src] if changed else []) + ([ledger_rel] if git.get("include_ledger", False) else []) + extra
+        paths = ([parent_stage_src] if changed and parent_stage_src else []) + (
+            [ledger_rel] if git.get("include_ledger", False) else []
+        ) + extra
         if paths:
             _add_paths(cfg, paths, ledger_rel)
         if _git(cfg, "diff", "--cached", "--quiet", check=False).returncode == 0:
             return {"committed": False, "reason": "nothing staged to commit"}
 
-        summary = (note_text or "").strip().splitlines()[0][:72] if note_text else f"feedback on {app}"
         msg = _build_message(app, summary, comment, stars, changed_desc, smoke).replace("{fid}", feedback_id)
         from_email = ((fb or {}).get("user") or {}).get("email")
         if from_email:
@@ -326,7 +466,10 @@ def commit_run(cfg: dict, app: str, feedback_id: str, *, status: str, note_text:
         commit_args = ["commit", "-m", msg] + (["-s"] if git.get("signoff", True) else [])
         _git(cfg, *commit_args)
         sha = _git(cfg, "rev-parse", "--short", "HEAD").stdout.strip()
-        return {"committed": True, "sha": sha, "branch": current_branch(cfg)}
+        result = {"committed": True, "sha": sha, "branch": current_branch(cfg)}
+        if nested_commit:
+            result["app_commits"] = [nested_commit]
+        return result
 
 
 # ───────────────────────────── revert ─────────────────────────────

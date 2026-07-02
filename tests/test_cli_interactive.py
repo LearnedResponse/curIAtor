@@ -80,6 +80,40 @@ def test_status_and_context_default_to_current_app(collection, monkeypatch, caps
     assert "curiator work --app sample" in out
 
 
+def test_status_surfaces_nested_app_repo(collection, monkeypatch, capsys):
+    import subprocess
+
+    from curiator import cli
+
+    appdir = collection / "apps" / "imported"
+    appdir.mkdir()
+    (appdir / "server.py").write_text("print('imported')\n")
+    subprocess.run(["git", "init", "-q"], cwd=appdir, check=True, capture_output=True)
+    subprocess.run(["git", "config", "user.name", "Test Curator"], cwd=appdir, check=True, capture_output=True)
+    subprocess.run(["git", "config", "user.email", "curator@test.local"], cwd=appdir, check=True, capture_output=True)
+    subprocess.run(["git", "add", "-A"], cwd=appdir, check=True, capture_output=True)
+    subprocess.run(["git", "commit", "-q", "-m", "seed imported app"], cwd=appdir, check=True, capture_output=True)
+    (collection / "gallery.yaml").write_text(
+        (collection / "gallery.yaml").read_text().replace(
+            "    tags: [demo]\n",
+            "    tags: [demo]\n"
+            "  - name: imported\n"
+            "    title: Imported\n"
+            "    root: apps/imported\n"
+            "    source: .\n"
+            "    smoke: python server.py\n"
+            "    mount: { kind: proxy, cmd: \"python server.py --port 8812\", port: 8812 }\n",
+        )
+    )
+
+    monkeypatch.chdir(collection)
+    assert cli.main(["status", "--app", "imported"]) == 0
+
+    out = capsys.readouterr().out
+    assert f"app git: {appdir}" in out
+    assert "clean]" in out
+
+
 def test_commands_install_without_link(collection, monkeypatch):
     from curiator import cli
 

@@ -162,6 +162,9 @@ def _post_reply(cfg: dict, app: str, feedback_id: str, text: str, status: str | 
         except Exception as exc:  # noqa: BLE001 — a git hiccup must never break the reply / loop
             res = {"committed": False, "reason": str(exc)}
         if res.get("committed"):
+            for app_commit in res.get("app_commits") or []:
+                repo = Path(app_commit.get("repo", "")).name or "app repo"
+                print(f"curiator: committed nested app {repo}@{app_commit['sha']} on {app_commit.get('branch','')}")
             print(f"curiator: committed {res['sha']} on {res.get('branch','')}")
         else:
             print(f"curiator: not committed ({res.get('reason')})")
@@ -636,6 +639,11 @@ def cmd_status(args) -> int:
         print(f"  app:     {app}")
         print(f"  root:    {spec.get('root') or 'unknown'}")
         print(f"  source:  {spec.get('source') or 'unknown'}")
+        app_root = Path(spec.get("root") or "")
+        if app_root and app_root.resolve() != root.resolve() and _is_git_toplevel(app_root):
+            app_branch = _git_output(app_root, "branch", "--show-current") or "detached"
+            app_dirty = _git_output(app_root, "status", "--porcelain")
+            print(f"  app git: {app_root} [{app_branch}{', dirty' if app_dirty else ', clean'}]")
         if spec.get("smoke"):
             print(f"  smoke:   {spec['smoke']}")
         commands = spec.get("commands") if isinstance(spec.get("commands"), dict) else {}

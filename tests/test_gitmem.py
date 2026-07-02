@@ -249,3 +249,63 @@ def test_directory_source_commit_uses_configured_smoke(cfg, collection):
     files = _names_at_head(collection)
     assert "apps/suite/README.md" in files and "feedback/app_feedback.sqlite" in files
     assert "Smoke-test: passed" in _log(collection, "-1", "--format=%B")
+
+
+def test_nested_app_repo_commit_preserves_app_history_and_collection_receipt(cfg, collection):
+    appdir = collection / "apps" / "imported"
+    appdir.mkdir()
+    (appdir / "server.py").write_text("print('imported v1')\n")
+    subprocess.run(["git", "init", "-q"], cwd=appdir, check=True, capture_output=True)
+    subprocess.run(["git", "config", "user.name", "Test Curator"], cwd=appdir, check=True, capture_output=True)
+    subprocess.run(["git", "config", "user.email", "curator@test.local"], cwd=appdir, check=True, capture_output=True)
+    subprocess.run(["git", "add", "-A"], cwd=appdir, check=True, capture_output=True)
+    subprocess.run(["git", "commit", "-q", "-m", "imported app seed"], cwd=appdir, check=True, capture_output=True)
+
+    cfg["apps"] = [{
+        "name": "imported",
+        "root": "apps/imported",
+        "source": ".",
+        "mount": {"kind": "proxy", "cmd": "python server.py --port 8812", "port": 8812},
+        "smoke": "python server.py",
+    }]
+    (collection / "gallery.yaml").write_text(
+        (collection / "gallery.yaml").read_text().replace(
+            "    tags: [demo]\n",
+            "    tags: [demo]\n"
+            "  - name: imported\n"
+            "    title: Imported\n"
+            "    root: apps/imported\n"
+            "    source: .\n"
+            "    smoke: python server.py\n"
+            "    mount: { kind: proxy, cmd: \"python server.py --port 8812\", port: 8812 }\n",
+        )
+    )
+    subprocess.run(["git", "add", "gallery.yaml", "apps/imported"], cwd=collection, check=True, capture_output=True)
+    subprocess.run(["git", "commit", "-q", "-m", "register imported app"], cwd=collection, check=True, capture_output=True)
+
+    (appdir / "server.py").write_text("print('imported v2')\n")
+    fid = ledger.save_entry(cfg, "imported", comment="update imported app", ts="t0")
+    ledger.add_system_note(cfg, "imported", "Updated imported app.", reply_to=[fid], ts="t1")
+    ledger.set_status(cfg, "imported", [fid], "done")
+
+    res = gitmem.commit_run(cfg, "imported", fid, status="done", note_text="Updated imported app.")
+
+    assert res["committed"], res
+    assert res["app_commits"][0]["repo"] == str(appdir)
+    app_sha = res["app_commits"][0]["sha"]
+    assert app_sha == subprocess.run(["git", "rev-parse", "--short", "HEAD"], cwd=appdir,
+                                     capture_output=True, text=True).stdout.strip()
+    app_files = subprocess.run(["git", "show", "--name-only", "--format=", "HEAD"], cwd=appdir,
+                               capture_output=True, text=True).stdout.split()
+    assert app_files == ["server.py"]
+    assert f"Curiator-Feedback: {fid}" in _log(appdir, "-1", "--format=%B")
+
+    parent_files = _names_at_head(collection)
+    assert "apps/imported" in parent_files
+    assert "apps/imported/server.py" not in parent_files
+    assert "feedback/app_feedback.sqlite" in parent_files
+    body = _log(collection, "-1", "--format=%B")
+    assert f"nested app imported@{app_sha}" in body
+    assert f"Curiator-Feedback: {fid}" in body
+    assert not subprocess.run(["git", "status", "--porcelain"], cwd=appdir,
+                              capture_output=True, text=True).stdout.strip()
