@@ -64,10 +64,41 @@ def test_summarize_ledger_counts_cycles_statuses_and_latency(cfg):
     assert summary["totals"]["agent_notes"] == 1
     assert summary["totals"]["replied_cycles"] == 1
     assert summary["totals"]["screenshots"] == 1
+    assert summary["totals"]["direct_fix_cycles"] == 1
+    assert summary["totals"]["direct_fix_rate_percent"] == 50.0
+    assert summary["totals"]["proposal_cycles"] == 0
+    assert summary["totals"]["human_intervention_cycles"] == 0
     assert summary["status_counts"] == {"done": 1, "new": 1}
     assert summary["reply_latency"]["median_seconds"] == 330
     assert summary["apps"][0]["app"] == "sample"
     assert summary["apps"][0]["reply_rate_percent"] == 50.0
+
+
+def test_summarize_ledger_counts_proposals_no_dispatch_and_intervention(cfg):
+    done = ledger.save_entry(cfg, "sample", comment="fix it")
+    ledger.set_status(cfg, "sample", [done], "done")
+    proposed = ledger.save_entry(cfg, "sample", comment="needs a plan")
+    ledger.set_status(cfg, "sample", [proposed], "awaiting_approval")
+    ledger.save_entry(cfg, "sample", comment="anonymous moderation", extra={"status": "held"})
+    ledger.save_entry(cfg, "sample", comment="spam", extra={"status": "rejected"})
+
+    summary = stats.summarize(cfg, include_git=False)
+
+    assert summary["totals"]["cycles"] == 4
+    assert summary["totals"]["direct_fix_cycles"] == 1
+    assert summary["totals"]["direct_fix_rate_percent"] == 25.0
+    assert summary["totals"]["proposal_cycles"] == 1
+    assert summary["totals"]["proposal_rate_percent"] == 25.0
+    assert summary["totals"]["no_dispatch_cycles"] == 1
+    assert summary["totals"]["no_dispatch_rate_percent"] == 25.0
+    assert summary["totals"]["human_intervention_cycles"] == 3
+    assert summary["totals"]["human_intervention_rate_percent"] == 75.0
+    assert summary["apps"][0]["status_counts"] == {
+        "awaiting_approval": 1,
+        "done": 1,
+        "held": 1,
+        "rejected": 1,
+    }
 
 
 def test_stats_cli_json_is_machine_readable(cfg, capsys):
@@ -89,7 +120,8 @@ def test_stats_markdown_renders_release_tables(cfg, capsys):
     summary = stats.summarize(cfg, include_git=False)
     markdown = stats.format_markdown(summary)
     assert "| Feedback cycles | 2 |" in markdown
-    assert "| sample | 2 | 1 | 1 | 50.0% | 5m 30s | done=1, new=1 |" in markdown
+    assert "| Direct fixes | 1 (50.0%) |" in markdown
+    assert "| sample | 2 | 1 (50.0%) | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) | 1 | 50.0% | 5m 30s | done=1, new=1 |" in markdown
 
     assert cli.main(["stats", "--markdown", "--no-git"]) == 0
     out = capsys.readouterr().out
@@ -106,6 +138,8 @@ def test_stats_csv_renders_app_rows(cfg, capsys):
     assert rows[0]["app"] == "sample"
     assert rows[0]["cycles"] == "2"
     assert rows[0]["median_reply_seconds"] == "330.0"
+    assert rows[0]["direct_fix_cycles"] == "1"
+    assert rows[0]["human_intervention_rate_percent"] == "0.0"
 
     assert cli.main(["stats", "--csv", "--no-git"]) == 0
     out_rows = list(csv.DictReader(io.StringIO(capsys.readouterr().out)))
@@ -153,8 +187,8 @@ def test_stats_compare_combines_collection_rows(tmp_path, capsys):
     assert rows["beta"]["median_reply_seconds"] == 60
 
     markdown = stats.format_compare_markdown(report)
-    assert "| alpha | 2 | 1 | 1 | 50.0% | 5m 30s | 1 | 1 |" in markdown
-    assert "| beta | 1 | 0 | 1 | 100.0% | 1m | 1 | 1 |" in markdown
+    assert "| alpha | 2 | 1 (50.0%) | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) | 1 | 50.0% | 5m 30s | 1 | 1 |" in markdown
+    assert "| beta | 1 | 1 (100.0%) | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) | 1 | 100.0% | 1m | 1 | 1 |" in markdown
 
     assert cli.main([
         "stats",

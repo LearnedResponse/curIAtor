@@ -14,6 +14,9 @@ curiator stats compare galleries/curiator-aviato galleries/curiator-ot galleries
 curiator stats compare galleries/curiator-aviato galleries/curiator-ot galleries/curiator-geometry --json
 ```
 
+The compare table includes direct-fix, proposal, no-dispatch, and human-intervention rates derived
+from ledger statuses; do not recalculate those columns by hand.
+
 For per-collection appendix tables:
 
 ```bash

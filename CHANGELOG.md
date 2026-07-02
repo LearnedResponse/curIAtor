@@ -32,8 +32,8 @@ All notable changes to curIAtor are documented here. The format follows
   `commands install` let Claude Code/Codex sessions use the same ledger/task/reply/git path without
   spawning a separate headless agent.
 - `curiator stats` summarizes feedback cycles, status distribution, per-app counts, first-reply
-  latency, and git-as-memory commits, with JSON, Markdown, and CSV output for reproducible
-  release/paper case studies.
+  latency, direct-fix/proposal/no-dispatch/human-intervention rates, and git-as-memory commits, with
+  JSON, Markdown, and CSV output for reproducible release/paper case studies.
 - `curiator stats compare <gallery>...` emits collection-level case-study rows across multiple
   galleries, including reply rates, first-reply latency, and curator commit counts.
 - `curiator link` now writes relative gallery paths when possible, so linked app repos keep working

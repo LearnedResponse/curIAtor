@@ -48,10 +48,11 @@ the durable record of that conversation.
    The local metadata files exist and are updated by `make release-prepare`; after GitHub-Zenodo
    archiving is enabled, add the Zenodo concept DOI to `CITATION.cff`.
 2. **`curiator stats` — core landed.** It reads a collection ledger + git log and emits the
-   case-study numbers (cycles, status distribution, per-app counts, reply latency, curator commits),
-   with `--json` for machine-readable snapshots, `--markdown` for paper/release-note tables, and
-   `--csv` for app-level spreadsheets or plotting scripts. `curiator stats compare <gallery>...`
-   now emits the cross-collection case-study table directly.
+   case-study numbers (cycles, status distribution, direct-fix/proposal/no-dispatch/human-intervention
+   rates, per-app counts, reply latency, curator commits), with `--json` for machine-readable
+   snapshots, `--markdown` for paper/release-note tables, and `--csv` for app-level spreadsheets or
+   plotting scripts. `curiator stats compare <gallery>...` now emits the cross-collection case-study
+   table directly.
    Remaining paper work: run it against each public collection after publication and cite the exact
    command/output snapshot.
 3. Draft in `docs/paper/` (markdown → pandoc PDF) — scaffolded with `curiator-paper.md` and

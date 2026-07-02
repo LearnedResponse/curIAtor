@@ -12,6 +12,10 @@ from typing import Any
 from . import ledger
 
 OPEN_STATUSES = {"new", "working", "awaiting_approval"}
+DIRECT_FIX_STATUSES = {"done"}
+PROPOSAL_STATUSES = {"awaiting_approval"}
+NO_DISPATCH_STATUSES = {"rejected"}
+HUMAN_INTERVENTION_STATUSES = {"awaiting_approval", "held", "rejected"}
 
 
 def _parse_ts(value: Any) -> datetime | None:
@@ -69,6 +73,23 @@ def _latency_summary(values: list[float]) -> dict[str, Any]:
     }
 
 
+def _status_metric_fields(statuses: Counter[str], cycles: int) -> dict[str, Any]:
+    direct = sum(statuses.get(s, 0) for s in DIRECT_FIX_STATUSES)
+    proposals = sum(statuses.get(s, 0) for s in PROPOSAL_STATUSES)
+    no_dispatch = sum(statuses.get(s, 0) for s in NO_DISPATCH_STATUSES)
+    human = sum(statuses.get(s, 0) for s in HUMAN_INTERVENTION_STATUSES)
+    return {
+        "direct_fix_cycles": direct,
+        "direct_fix_rate_percent": _percent(direct, cycles),
+        "proposal_cycles": proposals,
+        "proposal_rate_percent": _percent(proposals, cycles),
+        "no_dispatch_cycles": no_dispatch,
+        "no_dispatch_rate_percent": _percent(no_dispatch, cycles),
+        "human_intervention_cycles": human,
+        "human_intervention_rate_percent": _percent(human, cycles),
+    }
+
+
 def _entry_key(entry: dict) -> str:
     return str(entry.get("id") or "")
 
@@ -92,6 +113,10 @@ def summarize_ledger(cfg: dict, app: str | None = None) -> dict[str, Any]:
         "replied_cycles": 0,
         "screenshots": 0,
         "rated_cycles": 0,
+        "direct_fix_cycles": 0,
+        "proposal_cycles": 0,
+        "no_dispatch_cycles": 0,
+        "human_intervention_cycles": 0,
     }
 
     for app_key in sorted(raw):
@@ -126,6 +151,7 @@ def summarize_ledger(cfg: dict, app: str | None = None) -> dict[str, Any]:
         open_cycles = sum(n for s, n in statuses.items() if s in OPEN_STATUSES)
         screenshots = sum(1 for e in feedback if e.get("screenshot"))
         rated = sum(1 for e in feedback if e.get("stars") is not None)
+        status_metrics = _status_metric_fields(statuses, cycles)
 
         row = {
             "app": app_key,
@@ -137,6 +163,7 @@ def summarize_ledger(cfg: dict, app: str | None = None) -> dict[str, Any]:
             "reply_rate_percent": _percent(len(first_reply), cycles),
             "screenshots": screenshots,
             "rated_cycles": rated,
+            **status_metrics,
             "status_counts": dict(sorted(statuses.items())),
             "kind_counts": dict(sorted(kinds.items())),
             "author_counts": dict(sorted(authors.items())),
@@ -151,12 +178,20 @@ def summarize_ledger(cfg: dict, app: str | None = None) -> dict[str, Any]:
         totals["replied_cycles"] += len(first_reply)
         totals["screenshots"] += screenshots
         totals["rated_cycles"] += rated
+        totals["direct_fix_cycles"] += status_metrics["direct_fix_cycles"]
+        totals["proposal_cycles"] += status_metrics["proposal_cycles"]
+        totals["no_dispatch_cycles"] += status_metrics["no_dispatch_cycles"]
+        totals["human_intervention_cycles"] += status_metrics["human_intervention_cycles"]
         status_total.update(statuses)
         kind_total.update(kinds)
         author_total.update(authors)
         all_latencies.extend(latencies)
 
     totals["reply_rate_percent"] = _percent(totals["replied_cycles"], totals["cycles"])
+    totals["direct_fix_rate_percent"] = _percent(totals["direct_fix_cycles"], totals["cycles"])
+    totals["proposal_rate_percent"] = _percent(totals["proposal_cycles"], totals["cycles"])
+    totals["no_dispatch_rate_percent"] = _percent(totals["no_dispatch_cycles"], totals["cycles"])
+    totals["human_intervention_rate_percent"] = _percent(totals["human_intervention_cycles"], totals["cycles"])
     return {
         "ledger": str(ledger.path(cfg)),
         "apps_with_feedback": len([row for row in app_rows if row["entries"]]),
@@ -248,6 +283,14 @@ def _compare_row(summary: dict[str, Any]) -> dict[str, Any]:
         "open_cycles": totals["open_cycles"],
         "replied_cycles": totals["replied_cycles"],
         "reply_rate_percent": totals["reply_rate_percent"],
+        "direct_fix_cycles": totals["direct_fix_cycles"],
+        "direct_fix_rate_percent": totals["direct_fix_rate_percent"],
+        "proposal_cycles": totals["proposal_cycles"],
+        "proposal_rate_percent": totals["proposal_rate_percent"],
+        "no_dispatch_cycles": totals["no_dispatch_cycles"],
+        "no_dispatch_rate_percent": totals["no_dispatch_rate_percent"],
+        "human_intervention_cycles": totals["human_intervention_cycles"],
+        "human_intervention_rate_percent": totals["human_intervention_rate_percent"],
         "agent_notes": totals["agent_notes"],
         "screenshots": totals["screenshots"],
         "rated_cycles": totals["rated_cycles"],
@@ -265,6 +308,10 @@ def compare(configs: list[dict], include_git: bool = True) -> dict[str, Any]:
     rows = [_compare_row(summary) for summary in summaries]
     cycles = sum(row["cycles"] for row in rows)
     replied = sum(row["replied_cycles"] for row in rows)
+    direct = sum(row["direct_fix_cycles"] for row in rows)
+    proposals = sum(row["proposal_cycles"] for row in rows)
+    no_dispatch = sum(row["no_dispatch_cycles"] for row in rows)
+    human = sum(row["human_intervention_cycles"] for row in rows)
     return {
         "collections": rows,
         "totals": {
@@ -273,6 +320,14 @@ def compare(configs: list[dict], include_git: bool = True) -> dict[str, Any]:
             "open_cycles": sum(row["open_cycles"] for row in rows),
             "replied_cycles": replied,
             "reply_rate_percent": _percent(replied, cycles),
+            "direct_fix_cycles": direct,
+            "direct_fix_rate_percent": _percent(direct, cycles),
+            "proposal_cycles": proposals,
+            "proposal_rate_percent": _percent(proposals, cycles),
+            "no_dispatch_cycles": no_dispatch,
+            "no_dispatch_rate_percent": _percent(no_dispatch, cycles),
+            "human_intervention_cycles": human,
+            "human_intervention_rate_percent": _percent(human, cycles),
             "agent_notes": sum(row["agent_notes"] for row in rows),
             "curator_commits": sum(row["curator_commits"] or 0 for row in rows),
         },
@@ -288,12 +343,16 @@ def format_compare_markdown(report: dict[str, Any]) -> str:
     lines = [
         "# curIAtor Stats Compare",
         "",
-        "| Collection | Cycles | Open | Replied | Reply rate | Median reply | Agent notes | Curator commits |",
-        "|---|---:|---:|---:|---:|---:|---:|---:|",
+        "| Collection | Cycles | Direct fixes | Proposals | No dispatch | Human intervention | Replied | Reply rate | Median reply | Agent notes | Curator commits |",
+        "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
     ]
     for row in report["collections"]:
         lines.append(
-            f"| {_md(row['collection'])} | {row['cycles']} | {row['open_cycles']} | "
+            f"| {_md(row['collection'])} | {row['cycles']} | "
+            f"{row['direct_fix_cycles']} ({row['direct_fix_rate_percent']}%) | "
+            f"{row['proposal_cycles']} ({row['proposal_rate_percent']}%) | "
+            f"{row['no_dispatch_cycles']} ({row['no_dispatch_rate_percent']}%) | "
+            f"{row['human_intervention_cycles']} ({row['human_intervention_rate_percent']}%) | "
             f"{row['replied_cycles']} | {row['reply_rate_percent']}% | "
             f"{_fmt_seconds(row['median_reply_seconds'])} | {row['agent_notes']} | "
             f"{_fmt_optional_int(row['curator_commits'])} |"
@@ -318,6 +377,14 @@ def format_compare_csv(report: dict[str, Any]) -> str:
         "open_cycles",
         "replied_cycles",
         "reply_rate_percent",
+        "direct_fix_cycles",
+        "direct_fix_rate_percent",
+        "proposal_cycles",
+        "proposal_rate_percent",
+        "no_dispatch_cycles",
+        "no_dispatch_rate_percent",
+        "human_intervention_cycles",
+        "human_intervention_rate_percent",
         "agent_notes",
         "screenshots",
         "rated_cycles",
@@ -347,6 +414,10 @@ def format_markdown(summary: dict[str, Any]) -> str:
         f"| Feedback cycles | {totals['cycles']} |",
         f"| Open cycles | {totals['open_cycles']} |",
         f"| Replied cycles | {totals['replied_cycles']} ({totals['reply_rate_percent']}%) |",
+        f"| Direct fixes | {totals['direct_fix_cycles']} ({totals['direct_fix_rate_percent']}%) |",
+        f"| Proposals awaiting approval | {totals['proposal_cycles']} ({totals['proposal_rate_percent']}%) |",
+        f"| Closed without dispatch | {totals['no_dispatch_cycles']} ({totals['no_dispatch_rate_percent']}%) |",
+        f"| Human intervention | {totals['human_intervention_cycles']} ({totals['human_intervention_rate_percent']}%) |",
         f"| Agent notes | {totals['agent_notes']} |",
         f"| Screenshots | {totals['screenshots']} |",
         f"| Rated cycles | {totals['rated_cycles']} |",
@@ -356,20 +427,24 @@ def format_markdown(summary: dict[str, Any]) -> str:
         "",
         "## Per App",
         "",
-        "| App | Cycles | Open | Replied | Reply rate | Median reply | Status |",
-        "|---|---:|---:|---:|---:|---:|---|",
+        "| App | Cycles | Direct fixes | Proposals | No dispatch | Human intervention | Replied | Reply rate | Median reply | Status |",
+        "|---|---:|---:|---:|---:|---:|---:|---:|---:|---|",
     ]
     rows = [row for row in summary["apps"] if row["entries"]]
     if rows:
         for row in rows:
             lat = row["reply_latency"]
             lines.append(
-                f"| {_md(row['app'])} | {row['cycles']} | {row['open_cycles']} | "
+                f"| {_md(row['app'])} | {row['cycles']} | "
+                f"{row['direct_fix_cycles']} ({row['direct_fix_rate_percent']}%) | "
+                f"{row['proposal_cycles']} ({row['proposal_rate_percent']}%) | "
+                f"{row['no_dispatch_cycles']} ({row['no_dispatch_rate_percent']}%) | "
+                f"{row['human_intervention_cycles']} ({row['human_intervention_rate_percent']}%) | "
                 f"{row['replied_cycles']} | {row['reply_rate_percent']}% | "
                 f"{_fmt_seconds(lat['median_seconds'])} | {_md(_fmt_counts(row['status_counts']))} |"
             )
     else:
-        lines.append("| n/a | 0 | 0 | 0 | 0.0% | n/a | none |")
+        lines.append("| n/a | 0 | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) | 0 | 0.0% | n/a | none |")
 
     if "git" in summary:
         git = summary["git"]
@@ -399,6 +474,14 @@ def format_csv(summary: dict[str, Any]) -> str:
         "open_cycles",
         "replied_cycles",
         "reply_rate_percent",
+        "direct_fix_cycles",
+        "direct_fix_rate_percent",
+        "proposal_cycles",
+        "proposal_rate_percent",
+        "no_dispatch_cycles",
+        "no_dispatch_rate_percent",
+        "human_intervention_cycles",
+        "human_intervention_rate_percent",
         "agent_notes",
         "screenshots",
         "rated_cycles",
@@ -420,6 +503,14 @@ def format_csv(summary: dict[str, Any]) -> str:
             "open_cycles": row["open_cycles"],
             "replied_cycles": row["replied_cycles"],
             "reply_rate_percent": row["reply_rate_percent"],
+            "direct_fix_cycles": row["direct_fix_cycles"],
+            "direct_fix_rate_percent": row["direct_fix_rate_percent"],
+            "proposal_cycles": row["proposal_cycles"],
+            "proposal_rate_percent": row["proposal_rate_percent"],
+            "no_dispatch_cycles": row["no_dispatch_cycles"],
+            "no_dispatch_rate_percent": row["no_dispatch_rate_percent"],
+            "human_intervention_cycles": row["human_intervention_cycles"],
+            "human_intervention_rate_percent": row["human_intervention_rate_percent"],
             "agent_notes": row["agent_notes"],
             "screenshots": row["screenshots"],
             "rated_cycles": row["rated_cycles"],
