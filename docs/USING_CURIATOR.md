@@ -77,6 +77,10 @@ context` surface it alongside the smoke command. The Streamlit and Gradio templa
 root-path settings with prefix-preserving proxy mounts and include generated README notes about the
 lightweight proxy's production reverse-proxy limits.
 
+When a proxied app cannot start or the backend port never responds, the app iframe shows a proxy
+diagnostic page with the configured command, working directory, port, target URL, process state, and
+recent stdout/stderr from the launched process.
+
 You can also register an existing app manually: drop `apps/<name>.py` (exposing
 `build_app() -> dash.Dash`, plus a module-level `app`), then add an entry to `gallery.yaml`:
 

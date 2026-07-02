@@ -38,6 +38,7 @@ import re
 import shlex
 import sys
 import subprocess
+import tempfile
 import threading
 import time
 import uuid
@@ -1014,14 +1015,29 @@ def catalog_rows(search, sortby, tags_sel, reverse):
 
 # ============================== lazy mounting ================================
 _PROXY_PROCS: dict[str, subprocess.Popen] = {}
+_PROXY_LOGS: dict[str, dict[str, str]] = {}
 _HOP_HEADERS = {"connection", "keep-alive", "proxy-authenticate", "proxy-authorization",
                 "te", "trailers", "transfer-encoding", "upgrade"}
+
+
+def _discard_proxy_logs(key: str) -> None:
+    info = _PROXY_LOGS.pop(key, None) or {}
+    for field in ("stdout", "stderr"):
+        path = info.get(field)
+        if not path:
+            continue
+        try:
+            Path(path).unlink(missing_ok=True)
+        except OSError:
+            pass
 
 
 def _cleanup_proxies():
     for proc in list(_PROXY_PROCS.values()):
         if proc.poll() is None:
             proc.terminate()
+    for key in list(_PROXY_LOGS):
+        _discard_proxy_logs(key)
 
 
 atexit.register(_cleanup_proxies)
@@ -1057,11 +1073,83 @@ def _ensure_proxy(key: str, rec: dict) -> tuple[bool, str | None]:
         return True, None
     cwd = mount_cfg.get("cwd") or rec.get("root") or str(REG.COLLECTION_ROOT)
     env = {**os.environ, "PORT": str(port), "CURIATOR_APP": key}
+    _discard_proxy_logs(key)
+    safe_key = re.sub(r"[^A-Za-z0-9_.-]+", "_", key)
+    stdout = Path(tempfile.gettempdir()) / f"curiator-proxy-{safe_key}.stdout.log"
+    stderr = Path(tempfile.gettempdir()) / f"curiator-proxy-{safe_key}.stderr.log"
+    _PROXY_LOGS[key] = {
+        "stdout": str(stdout),
+        "stderr": str(stderr),
+        "cmd": str(cmd),
+        "cwd": str(cwd),
+        "port": str(port),
+    }
     try:
-        _PROXY_PROCS[key] = subprocess.Popen(shlex.split(cmd), cwd=cwd, env=env)
+        with stdout.open("wb") as out, stderr.open("wb") as err:
+            _PROXY_PROCS[key] = subprocess.Popen(shlex.split(cmd), cwd=cwd, env=env, stdout=out, stderr=err)
     except OSError as exc:
         return False, str(exc)
     return True, None
+
+
+def _proxy_log_tail(path: str | None, limit: int = 4000) -> str:
+    if not path:
+        return ""
+    try:
+        text = Path(path).read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return ""
+    return text[-limit:].strip()
+
+
+def _proxy_diagnostics_html(key: str, rec: dict, *, message: str, url: str | None = None) -> str:
+    mount_cfg = rec.get("mount") or {}
+    port = mount_cfg.get("port") or rec.get("port")
+    cmd = mount_cfg.get("cmd") or ""
+    cwd = mount_cfg.get("cwd") or rec.get("root") or str(REG.COLLECTION_ROOT)
+    proc = _PROXY_PROCS.get(key)
+    if proc is None:
+        state = "not started"
+    else:
+        code = proc.poll()
+        state = f"running pid {proc.pid}" if code is None else f"exited with code {code}"
+    info = _PROXY_LOGS.get(key) or {}
+    stderr = _proxy_log_tail(info.get("stderr"))
+    stdout = _proxy_log_tail(info.get("stdout"))
+
+    def row(label: str, value: str | int | None) -> str:
+        return ("<tr><th style='text-align:left;color:#777;padding:2px 10px 2px 0'>"
+                f"{_esc(label)}</th><td><code>{_esc(str(value or ''))}</code></td></tr>")
+
+    logs = ""
+    if stderr:
+        logs += ("<h4 style='margin:14px 0 4px'>stderr</h4>"
+                 f"<pre style='white-space:pre-wrap;background:#fff;border:1px solid #ddd;"
+                 f"border-radius:4px;padding:8px;max-width:860px'>{_esc(stderr)}</pre>")
+    if stdout:
+        logs += ("<h4 style='margin:14px 0 4px'>stdout</h4>"
+                 f"<pre style='white-space:pre-wrap;background:#fff;border:1px solid #ddd;"
+                 f"border-radius:4px;padding:8px;max-width:860px'>{_esc(stdout)}</pre>")
+    if not logs:
+        logs = "<p style='color:#777;font-size:13px'>No proxy stdout/stderr has been captured yet.</p>"
+
+    return (
+        "<div style='font-family:system-ui,sans-serif;padding:2em;color:#333'>"
+        f"<h3 style='margin:0 0 8px'><b>{_esc(key)}</b> proxy is not reachable</h3>"
+        f"<p style='color:#555;margin:0 0 12px'>{_esc(message)}</p>"
+        "<table style='font-size:13px;border-collapse:collapse'>"
+        f"{row('command', cmd)}"
+        f"{row('cwd', cwd)}"
+        f"{row('port', port)}"
+        f"{row('target', url or '')}"
+        f"{row('process', state)}"
+        "</table>"
+        f"{logs}"
+        "<p style='color:#777;font-size:12px;max-width:860px'>"
+        "Check that the scaffold dependencies are installed, the command can bind the configured port, "
+        "and the app honors its curIAtor base path when served under <code>/app/&lt;name&gt;/</code>."
+        "</p></div>"
+    )
 
 
 def _proxy_backend_path(key: str, rest: str, mount_cfg: dict) -> str:
@@ -1077,8 +1165,7 @@ def _proxy_call(key: str, rec: dict, rest: str, environ, start_response):
     ok, err = _ensure_proxy(key, rec)
     if not ok:
         start_response("502 Bad Gateway", [("Content-Type", "text/html; charset=utf-8")])
-        return [f"<div style='font-family:sans-serif;padding:2em;color:#555'>"
-                f"<b>{key}</b> proxy could not start: {_esc(err)}</div>".encode()]
+        return [_proxy_diagnostics_html(key, rec, message=f"proxy could not start: {err}").encode()]
     mount_cfg = rec.get("mount") or {}
     port = mount_cfg.get("port") or rec.get("port")
     path = _proxy_backend_path(key, rest, mount_cfg)
@@ -1110,8 +1197,8 @@ def _proxy_call(key: str, rec: dict, rest: str, environ, start_response):
             time.sleep(0.1)
     else:
         start_response("502 Bad Gateway", [("Content-Type", "text/html; charset=utf-8")])
-        return [f"<div style='font-family:sans-serif;padding:2em;color:#555'>"
-                f"<b>{key}</b> proxy failed: {_esc(str(last_exc))}</div>".encode()]
+        message = f"proxy backend did not respond: {last_exc or 'no response'}"
+        return [_proxy_diagnostics_html(key, rec, message=message, url=url).encode()]
     status = f"{resp.status} {getattr(resp, 'reason', 'OK')}"
     out_headers = [(k, v) for k, v in resp.headers.items() if k.lower() not in _HOP_HEADERS]
     start_response(status, out_headers)

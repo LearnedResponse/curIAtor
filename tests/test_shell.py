@@ -63,6 +63,32 @@ def test_proxy_backend_path_can_preserve_app_prefix(shell_mod):
     )
 
 
+def test_proxy_diagnostics_include_command_cwd_port_and_recent_logs(shell_mod, tmp_path):
+    out = tmp_path / "proxy.out"
+    err = tmp_path / "proxy.err"
+    out.write_text("dev server booting\n")
+    err.write_text("Error: missing dependency\n")
+    shell_mod._PROXY_LOGS["react_board"] = {"stdout": str(out), "stderr": str(err)}
+    try:
+        body = shell_mod._proxy_diagnostics_html(
+            "react_board",
+            {"root": str(tmp_path), "mount": {"kind": "proxy", "cmd": "npm run dev", "port": 8700}},
+            message="proxy backend did not respond: connection refused",
+            url="http://127.0.0.1:8700/",
+        )
+    finally:
+        shell_mod._PROXY_LOGS.pop("react_board", None)
+
+    assert "react_board" in body
+    assert "npm run dev" in body
+    assert str(tmp_path) in body
+    assert "8700" in body
+    assert "http://127.0.0.1:8700/" in body
+    assert "connection refused" in body
+    assert "Error: missing dependency" in body
+    assert "dev server booting" in body
+
+
 # ── boot + the pages that crashed ────────────────────────────────────────────
 def test_index_and_general_serve(client):
     assert client.get("/").status_code == 200            # the Dash shell index
