@@ -56,7 +56,8 @@ leave feedback → watch the fix land and the ⚙ reply arrive. Every item below
    10-item operator feedback queue, repo-local curIAtor skill shims, seed commit `6c5e2d6`, and latest
    release-hygiene commit `36e21cf`; its
    seeded feedback loop is complete on `curiator/auto` with ten curator commits from rainbow baseline
-   toward HP-HMI, and still needs a fresh-clone portability gate.
+   toward HP-HMI, and `curiator release-preflight --gallery curiator-ot --fresh-clone --json` passes at
+   `36e21cf`.
    (`curiator-finance` can join as a fourth if the cleanup is cheap; the three above are the release set.)
 5. **SECURITY.md — reviewed against current defaults; re-read once at release cut.** The product auto-runs a coding agent against
    feedback text. The first policy now states: one-container-per-collection as the blast-radius unit,

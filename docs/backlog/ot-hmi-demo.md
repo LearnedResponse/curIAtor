@@ -71,6 +71,9 @@ feedback" is a pitch the OT crowd feels in their bones.
   meta git-log receipt item plus all nine HMI cleanups (neutral color discipline, setpoint/normal band,
   prioritized alarms, one-hour sparklines, pump-state indicator, Level-2 operating state, alarm
   rationalization, historian freshness, trend palette). No seeded operator feedback remains open.
+- `curiator release-preflight --gallery curiator-ot --fresh-clone --json`: passing at `36e21cf`; the
+  temp clone runs `python scripts/smoke.py`, regenerates deterministic historian data, and imports/builds
+  the HMI cleanly.
 - Reading the OT feedback history no longer dirties the committed SQLite ledger after the core
   read-only ledger-open fix.
 
