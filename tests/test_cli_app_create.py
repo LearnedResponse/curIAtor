@@ -1,11 +1,46 @@
 """CLI app scaffolding: create app directories and update gallery.yaml."""
 from __future__ import annotations
 
+import subprocess
+
 import yaml
 
 
 def _gallery(collection):
     return yaml.safe_load((collection / "gallery.yaml").read_text())
+
+
+def _git(cwd, *args: str) -> str:
+    result = subprocess.run(["git", *args], cwd=cwd, check=True, capture_output=True, text=True)
+    return result.stdout.strip()
+
+
+def _node_app_repo(path, *, pnpm_lock: bool = False):
+    path.mkdir()
+    (path / "server.js").write_text(
+        "import http from 'node:http';\n"
+        "const port = Number(process.argv.at(-1)) || 8700;\n"
+        "http.createServer((req, res) => res.end('ok')).listen(port, '127.0.0.1');\n"
+    )
+    (path / "package.json").write_text(
+        '{\n'
+        '  "type": "module",\n'
+        '  "scripts": {\n'
+        '    "build": "node --check server.js",\n'
+        '    "dev": "node server.js",\n'
+        '    "preview": "node server.js"\n'
+        "  }\n"
+        "}\n"
+    )
+    (path / "README.md").write_text("# imported app\n")
+    if pnpm_lock:
+        (path / "pnpm-lock.yaml").write_text("lockfileVersion: '9.0'\n")
+    _git(path, "init", "-q")
+    _git(path, "config", "user.name", "Test Curator")
+    _git(path, "config", "user.email", "curator@test.local")
+    _git(path, "add", "-A")
+    _git(path, "commit", "-q", "-m", "init app")
+    return path
 
 
 def test_app_create_dash_directory_updates_gallery(collection):
@@ -376,3 +411,57 @@ def test_app_create_rejects_duplicate_or_invalid_name(collection):
 
     assert cli.main(["app", "create", "sample"]) == 1
     assert cli.main(["app", "create", "bad-name"]) == 1
+
+
+def test_app_import_copies_local_repo_and_registers_proxy(collection, tmp_path):
+    from curiator import cli
+    from curiator.config import app_spec, load_config
+
+    source = _node_app_repo(tmp_path / "external_node")
+
+    assert cli.main([
+        "app", "import", str(source), "imported_node",
+        "--template", "node",
+        "--title", "Imported Node",
+        "--tags", "node,external",
+        "--port", "8788",
+    ]) == 0
+
+    dest = collection / "apps" / "imported_node"
+    assert (dest / ".git").exists()
+    assert (dest / "server.js").read_text() == (source / "server.js").read_text()
+    assert _git(dest, "rev-parse", "--is-inside-work-tree") == "true"
+
+    data = _gallery(collection)
+    app = next(a for a in data["apps"] if a["name"] == "imported_node")
+    assert app["root"] == "apps/imported_node"
+    assert app["source"] == "."
+    assert app["mount"] == {"kind": "proxy", "cmd": "node server.js --port 8788", "port": 8788}
+    assert app["smoke"] == "node --check server.js"
+    assert app["commands"]["preview"] == "node server.js --port 8788"
+    assert app["tags"] == ["node", "external"]
+    assert app_spec(load_config(), "imported_node")["commands"]["preview"] == "node server.js --port 8788"
+
+
+def test_app_import_clones_git_url_and_detects_package_manager(collection, tmp_path):
+    from curiator import cli
+
+    source = _node_app_repo(tmp_path / "external_vite", pnpm_lock=True)
+
+    assert cli.main([
+        "app", "import", source.as_uri(), "imported_react",
+        "--template", "react",
+        "--port", "8790",
+    ]) == 0
+
+    dest = collection / "apps" / "imported_react"
+    assert (dest / ".git").exists()
+    assert (dest / "pnpm-lock.yaml").exists()
+    assert _git(dest, "rev-parse", "--is-inside-work-tree") == "true"
+
+    data = _gallery(collection)
+    app = next(a for a in data["apps"] if a["name"] == "imported_react")
+    assert app["smoke"] == "pnpm run build"
+    assert app["mount"] == {"kind": "proxy", "cmd": "pnpm run dev -- --host 127.0.0.1 --port 8790", "port": 8790}
+    assert app["commands"]["preview"] == "pnpm run preview -- --host 127.0.0.1 --port 8790"
+    assert app["tags"] == ["react"]

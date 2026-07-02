@@ -14,6 +14,7 @@
     curiator smoke      # run configured app smoke checks across the collection
     curiator galleries  # list nested curiator-* collection repos under ./galleries
     curiator galleries adopt ../curiator-demo # move an existing collection repo under ./galleries
+    curiator app import <repo-or-url> <name> # copy/clone an existing app repo into apps/<name>
     curiator release-preflight # run doctor/smoke/path checks across release galleries or fresh clones
     curiator playground-preflight # check hosted public-playground posture
     curiator reset-demo # rewind the demo: re-break aviato, clear the ledger
@@ -2393,6 +2394,38 @@ def _resolve_package_manager(repo: Path, requested: str | None) -> str:
     return requested
 
 
+def _looks_like_git_source(source: str) -> bool:
+    return bool(
+        re.match(r"^[A-Za-z][A-Za-z0-9+.-]*://", source)
+        or source.startswith("git@")
+        or re.match(r"^[^@\s]+@[^:\s]+:.+", source)
+        or source.endswith(".git")
+    )
+
+
+def _copy_or_clone_app_source(source_arg: str, dest: Path) -> tuple[str, Path | str]:
+    source = Path(source_arg).expanduser()
+    if source.exists():
+        source = source.resolve()
+        if not source.is_dir():
+            raise ValueError(f"source is not a directory: {source}")
+        if source == dest.resolve() or _is_relative_to(dest.resolve(), source):
+            raise ValueError(f"refusing to import into a destination inside the source: {dest}")
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copytree(source, dest)
+        return "copied", source
+
+    if not _looks_like_git_source(source_arg):
+        raise ValueError(f"source directory not found: {source_arg}")
+
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    result = subprocess.run(["git", "clone", "--quiet", source_arg, str(dest)], capture_output=True, text=True)
+    if result.returncode != 0:
+        detail = (result.stderr or result.stdout or f"git clone exited {result.returncode}").strip()
+        raise ValueError(f"git clone failed for {source_arg}: {detail}")
+    return "cloned", source_arg
+
+
 def _js_run_command(manager: str, script: str, args: str = "") -> str:
     if not args:
         return f"{manager} run {script}"
@@ -2664,6 +2697,49 @@ def cmd_app_create(args) -> int:
     return 0
 
 
+def cmd_app_import(args) -> int:
+    """Copy/clone an existing app repo or directory and register it in gallery.yaml."""
+    cfg = load_config()
+    name = args.name.strip()
+    if not _APP_NAME_RE.match(name):
+        print("curiator: app name must be a Python-safe identifier: letters, numbers, underscores; start with a letter")
+        return 1
+    if name in _app_names(cfg):
+        print(f"curiator: app '{name}' already exists in gallery.yaml")
+        return 1
+
+    template = args.template
+    repo = Path(cfg["repo_root"])
+    root = repo / "apps" / name
+    if root.exists():
+        print(f"curiator: {root} already exists; choose a new app name or remove the existing directory")
+        return 1
+
+    title = args.title or _title_from_name(name)
+    tags = _tags_arg(args.tags, template)
+    proxy_templates = {"static", "python", "node", "flask", "fastapi", "rust", "react", "svelte", "vue", "next", "streamlit", "gradio"}
+    port = args.port if args.port is not None else (_next_proxy_port(cfg) if template in proxy_templates else None)
+
+    try:
+        action, source = _copy_or_clone_app_source(args.source, root)
+    except ValueError as exc:
+        print(f"curiator: app import FAILED — {exc}")
+        return 1
+
+    package_manager = _resolve_package_manager(root, args.package_manager) if template in {"react", "svelte", "vue", "next"} else "npm"
+    gallery = Path(cfg["gallery_path"])
+    entry = _gallery_entry(name, template, title, tags, port, package_manager)
+    gallery.write_text(_append_app_entry(gallery.read_text(), entry))
+
+    print(f"curiator: {action} app source '{source}' into {root.relative_to(repo)}")
+    print(f"  + {root.relative_to(repo)}/")
+    print(f"  + {gallery.relative_to(repo)}")
+    print("next:")
+    print(f"  curiator reload {name}   # if the shell is already running")
+    print(f"  open /app/{name}/")
+    return 0
+
+
 def _scaffold_files() -> dict[str, str]:
     return {
         "gallery.yaml": _SCAFFOLD_GALLERY,
@@ -2808,6 +2884,17 @@ def main(argv=None) -> int:
                     help="JS package manager for react/svelte/vue/next templates (default: auto)")
     ac.add_argument("--force", action="store_true", help="allow an existing apps/<name> directory")
     ac.set_defaults(func=cmd_app_create)
+    ai = app_sub.add_parser("import", help="copy/clone an existing app repo and add it to gallery.yaml")
+    ai.add_argument("source", help="local app directory or git URL to copy/clone")
+    ai.add_argument("name", help="app key, e.g. orange_picker")
+    ai.add_argument("--template", choices=["dash", "static", "python", "node", "flask", "fastapi", "rust", "react", "svelte", "vue", "next", "streamlit", "gradio"], required=True,
+                    help="mount template to register for the imported app")
+    ai.add_argument("--title", help="display title")
+    ai.add_argument("--tags", help="comma-separated tags; default is the template name")
+    ai.add_argument("--port", type=int, help="proxy port for static/python/node/flask/fastapi/rust/react/svelte/vue/next/streamlit/gradio templates")
+    ai.add_argument("--package-manager", choices=["auto", *_JS_PACKAGE_MANAGERS], default="auto",
+                    help="JS package manager for react/svelte/vue/next templates (default: auto)")
+    ai.set_defaults(func=cmd_app_import)
     ia = sub.add_parser("init-app", help="alias for `curiator app create`")
     ia.add_argument("name", help="app key, e.g. orange_picker")
     ia.add_argument("--template", choices=["dash", "static", "python", "node", "flask", "fastapi", "rust", "react", "svelte", "vue", "next", "streamlit", "gradio"], default="dash",

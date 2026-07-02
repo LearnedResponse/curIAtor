@@ -75,12 +75,15 @@ actually worth building is **scaffolding templates**, not plugins. The initial c
 
 ```
 curiator app create pnl-board --template dash     # scaffolds apps/pnl-board/ + the gallery.yaml entry
+curiator app import https://github.com/me/lab-viewer.git lab_viewer --template react
 ```
 
 i.e. a thin `create-vite`-style scaffolder per framework (currently dash / static / python / node /
 flask / fastapi / rust / react / svelte / vue / next / streamlit / gradio), each emitting a directory + the right `mount`
-block. Plugins = lock-in + maintenance; templates + the generic proxy = leverage. Stay generic at the
-mount, opinionated only at scaffold time.
+block. Existing repos follow the same template contract via `app import`: the source is copied/cloned
+into `apps/<name>` with its own `.git/` intact, while the template registers only the mount/smoke/preview
+metadata. Plugins = lock-in + maintenance; templates + the generic proxy = leverage. Stay generic at the
+mount, opinionated only at scaffold/import time.
 
 ## Honest scoping & sequencing
 
@@ -121,7 +124,7 @@ mount, opinionated only at scaffold time.
 1. **Directories-per-app first** (landed).
 2. **The `proxy` mount + same-origin reverse-proxy** (landed as a lightweight localhost proxy; still needs
    framework-specific templates/build ergonomics).
-3. **Scaffold templates** (`curiator init-app --template …`) — Node's dependency-light HTTP scaffold,
+3. **Scaffold/import templates** (`curiator init-app --template …`, `curiator app import … --template …`) — Node's dependency-light HTTP scaffold,
    Flask's server-rendered scaffold, FastAPI's API-backed ASGI scaffold, and Rust's dependency-light HTTP scaffold are available for small server-side prototypes; first pass landed
    for React/Svelte/Vue via Vite proxy mounts and for Next.js via a prefix-preserving proxy mount,
    including build smoke hooks, `CURIATOR_APP` base-path config, and npm/pnpm/yarn/bun package-manager

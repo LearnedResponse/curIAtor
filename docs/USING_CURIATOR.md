@@ -78,6 +78,18 @@ curiator app create revenue --template dash --title "Revenue dashboard" --tags f
 # alias: curiator init-app revenue --template dash
 ```
 
+Import an existing local or GitHub app repo into `apps/<name>` and register it with the same mount
+templates:
+
+```bash
+curiator app import ../my-react-prototype research_board --template react --port 8710
+curiator app import https://github.com/me/lab-viewer.git lab_viewer --template node
+```
+
+`app import` copies local directories or runs `git clone` for URL-shaped sources, preserving the
+imported app's `.git/` directory inside `apps/<name>`. It does not scaffold or rewrite the app source;
+the template only chooses the `gallery.yaml` mount, smoke, preview command, tags, and proxy port.
+
 Templates today: `dash` (in-process Dash), `static` (same-origin proxy using `http.server`), `python`
 (tiny proxy-served Python HTTP app), `node` (dependency-light Node HTTP server), `flask`
 (server-rendered Flask app), `fastapi` (API-backed ASGI app), `rust` (dependency-light Rust HTTP

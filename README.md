@@ -78,6 +78,7 @@ pip install curiator
 curiator init my-collection --git # scaffold a collection repo (gallery.yaml + apps/ + a sample app)
 cd my-collection
 curiator app create orange_picker --template dash --title "Orange Picker"
+curiator app import https://github.com/me/lab-viewer.git lab_viewer --template react
 ```
 
 …or point it at existing apps in `gallery.yaml`:
