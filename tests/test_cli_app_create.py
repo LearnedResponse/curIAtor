@@ -48,8 +48,9 @@ def test_init_app_alias_static_and_python_proxy_ports(collection):
     assert status["smoke"] == "python -m py_compile server.py"
 
 
-def test_app_create_react_svelte_and_vue_proxy_templates(collection):
+def test_app_create_react_svelte_and_vue_proxy_templates(collection, capsys):
     from curiator import cli
+    from curiator.config import app_spec, load_config
 
     assert cli.main(["app", "create", "react_board", "--template", "react"]) == 0
     assert cli.main(["app", "create", "svelte_panel", "--template", "svelte"]) == 0
@@ -76,12 +77,22 @@ def test_app_create_react_svelte_and_vue_proxy_templates(collection):
     assert react["mount"]["port"] == 8700
     assert react["mount"]["cmd"] == "npm run dev -- --host 127.0.0.1 --port 8700"
     assert react["smoke"] == "npm run build"
+    assert react["commands"]["preview"] == "npm run preview -- --host 127.0.0.1 --port 8700"
     assert svelte["mount"]["port"] == 8701
     assert svelte["smoke"] == "npm run build"
+    assert svelte["commands"]["preview"] == "npm run preview -- --host 127.0.0.1 --port 8701"
     assert vue["mount"]["port"] == 8702
     assert vue["smoke"] == "npm run build"
+    assert vue["commands"]["preview"] == "npm run preview -- --host 127.0.0.1 --port 8702"
+    assert app_spec(load_config(), "react_board")["commands"]["preview"] == react["commands"]["preview"]
     assert "npm run build" in (react_root / "src" / "App.jsx").read_text()
     assert "npm run build" in (vue_root / "src" / "App.vue").read_text()
+
+    assert cli.main(["status", "--app", "react_board"]) == 0
+    assert cli.main(["context", "--app", "react_board", "--limit", "1"]) == 0
+    out = capsys.readouterr().out
+    assert "preview: npm run preview -- --host 127.0.0.1 --port 8700" in out
+    assert "- preview: `npm run preview -- --host 127.0.0.1 --port 8700`" in out
 
 
 def test_app_create_js_package_manager_detection_and_override(collection):
@@ -106,10 +117,13 @@ def test_app_create_js_package_manager_detection_and_override(collection):
     vue = next(a for a in data["apps"] if a["name"] == "vue_bun")
     assert react["smoke"] == "pnpm run build"
     assert react["mount"]["cmd"] == "pnpm run dev -- --host 127.0.0.1 --port 8700"
+    assert react["commands"]["preview"] == "pnpm run preview -- --host 127.0.0.1 --port 8700"
     assert svelte["smoke"] == "yarn run build"
     assert svelte["mount"]["cmd"] == "yarn run dev --host 127.0.0.1 --port 8701"
+    assert svelte["commands"]["preview"] == "yarn run preview --host 127.0.0.1 --port 8701"
     assert vue["smoke"] == "bun run build"
     assert vue["mount"]["cmd"] == "bun run dev -- --host 127.0.0.1 --port 8702"
+    assert vue["commands"]["preview"] == "bun run preview -- --host 127.0.0.1 --port 8702"
     assert "pnpm run build" in (collection / "apps" / "react_pnpm" / "src" / "App.jsx").read_text()
     assert "yarn run build" in (collection / "apps" / "svelte_yarn" / "src" / "App.svelte").read_text()
     assert "bun run build" in (collection / "apps" / "vue_bun" / "src" / "App.vue").read_text()

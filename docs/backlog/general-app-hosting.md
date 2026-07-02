@@ -126,8 +126,9 @@ svelte / vue / streamlit / gradio), each emitting a directory + the right `mount
    Streamlit also has a first scaffold using `server.baseUrlPath`, a prefix-preserving proxy mount,
    and a generated note about the lightweight proxy's WebSocket/production limits.
    Gradio has the same first-pass shape using `root_path` and a prefix-preserving proxy mount.
-4. JS-specific niceties beyond the first scaffold pass (preview command and richer HMR/proxy diagnostics)
-   per framework as demand warrants.
+4. JS-specific niceties beyond the first scaffold pass: `commands.preview` now lands in Vite scaffold
+   gallery entries and appears in `curiator status` / `curiator context`; richer HMR/proxy diagnostics
+   remain demand-paced per framework.
 
 Dash-first is the *launch wedge* (ship fast, own the data/HMI audience), **not the identity** — the
 overlay stayed framework-agnostic and the non-Dash proof now runs (`curiator-aviato`: React SSR + Rust +

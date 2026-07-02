@@ -384,6 +384,9 @@ def cmd_status(args) -> int:
         print(f"  source:  {spec.get('source') or 'unknown'}")
         if spec.get("smoke"):
             print(f"  smoke:   {spec['smoke']}")
+        commands = spec.get("commands") if isinstance(spec.get("commands"), dict) else {}
+        if commands.get("preview"):
+            print(f"  preview: {commands['preview']}")
         print(f"  feedback:{open_n} open / {total} total")
         print(f"  next:    curiator work --app {app}")
     else:
@@ -996,6 +999,9 @@ def cmd_context(args) -> int:
     print(f"- app root: `{spec.get('root') or ''}`")
     print(f"- source scope: `{spec.get('source') or ''}`")
     print(f"- smoke: `{spec.get('smoke') or 'none configured'}`")
+    commands = spec.get("commands") if isinstance(spec.get("commands"), dict) else {}
+    if commands.get("preview"):
+        print(f"- preview: `{commands['preview']}`")
     print(f"- feedback: {open_n} open / {total} total")
     print("")
     print("## Ready Commands")
@@ -1795,12 +1801,15 @@ def _gallery_entry(
     if template in {"react", "svelte", "vue"}:
         smoke = _js_run_command(package_manager, "build")
         serve = _js_run_command(package_manager, "dev", f"--host 127.0.0.1 --port {port}")
+        preview = _js_run_command(package_manager, "preview", f"--host 127.0.0.1 --port {port}")
         return (
             f"  - name: {name}\n"
             f"    title: {json.dumps(title)}\n"
             f"    root: {root}\n"
             f"    source: .\n"
             f"    smoke: {smoke}\n"
+            f"    commands:\n"
+            f"      preview: {json.dumps(preview)}\n"
             f"    mount: {{ kind: proxy, cmd: \"{serve}\", port: {port} }}\n"
             f"    tags: {_yaml_list(tags)}\n"
         )

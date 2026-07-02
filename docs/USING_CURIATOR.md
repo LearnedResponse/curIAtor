@@ -72,9 +72,10 @@ Templates today: `dash` (in-process Dash), `static` (same-origin proxy using `ht
 (Vite + Vue), `streamlit`, and `gradio`.
 The JS templates use `proxy` mounts and set Vite's base path from `CURIATOR_APP` so assets resolve
 under `/app/<name>/`; pass `--package-manager pnpm|yarn|bun|npm` to override auto-detection from
-lockfiles. The Streamlit and Gradio templates use framework root-path settings with prefix-preserving
-proxy mounts and include generated README notes about the lightweight proxy's production
-reverse-proxy limits.
+lockfiles. They also add `commands.preview` to `gallery.yaml`, and `curiator status` / `curiator
+context` surface it alongside the smoke command. The Streamlit and Gradio templates use framework
+root-path settings with prefix-preserving proxy mounts and include generated README notes about the
+lightweight proxy's production reverse-proxy limits.
 
 You can also register an existing app manually: drop `apps/<name>.py` (exposing
 `build_app() -> dash.Dash`, plus a module-level `app`), then add an entry to `gallery.yaml`:

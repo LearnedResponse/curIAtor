@@ -159,6 +159,7 @@ def app_specs(cfg: dict) -> list[dict]:
                 "source": str(_resolve(source_base, source) or root),
                 "smoke": mount.get("smoke", a.get("smoke")),
                 "smoke_timeout": mount.get("smoke_timeout", a.get("smoke_timeout")),
+                "commands": mount.get("commands", a.get("commands") or {}),
                 "module": mount.get("module"),
                 "mount": mount,
             })
