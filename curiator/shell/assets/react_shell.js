@@ -550,6 +550,7 @@
     const [shot, setShot] = useState(null);
     const [shotSource, setShotSource] = useState(null);
     const [annotations, setAnnotations] = useState([]);
+    const [transcriptSegments, setTranscriptSegments] = useState([]);
     const [replyTo, setReplyTo] = useState(null);
     const [previewEntry, setPreviewEntry] = useState(null);
     const [msg, setMsg] = useState("");
@@ -571,6 +572,7 @@
     useEffect(() => {
       if (replyTo && replyTo.key !== selected) setReplyTo(null);
       if (previewEntry) setPreviewEntry(null);
+      if (transcriptSegments.length) setTranscriptSegments([]);
     }, [selected]);
 
     const items = feedback.items || [];
@@ -596,6 +598,7 @@
         const payload = {stars: stars ? Number(stars) : null, comment, screenshot,
           screenshot_source: screenshot ? shotSource : null,
           annotations: screenshot ? annotations : [],
+          transcript_segments: transcriptSegments,
           reply_to: target ? [target.id] : []};
         return api("/api/feedback/" + encodeURIComponent(selected), {method: "POST", body: JSON.stringify(payload)});
       })
@@ -606,6 +609,7 @@
           setShot(null);
           setShotSource(null);
           setAnnotations([]);
+          setTranscriptSegments([]);
           setReplyTo(null);
           setMsg(data.entry.status === "held"
             ? "✓ queued for review (" + data.entry.id + ")" + (data.entry.screenshot ? " +screenshot" : "")
@@ -691,7 +695,9 @@
         .then((r) => r.ok ? r.json() : r.json().catch(() => ({})).then((j) => Promise.reject(j)))
         .then((data) => {
           appendTranscript(data.text || "");
-          const count = (data.segments || []).length;
+          const segments = data.segments || [];
+          setTranscriptSegments((current) => current.concat(segments));
+          const count = segments.length;
           setMsg(data.text ? "Transcript added" + (count ? " (" + count + " segments)" : "") + "." : "No speech detected.");
         })
         .catch((e) => setMsg(e.error || "Transcription failed."));

@@ -185,6 +185,32 @@ def _annotation_block(entry: dict) -> str:
     return "\n## Screenshot annotations\n" + "\n".join(rows)
 
 
+def _transcript_block(entry: dict) -> str:
+    """Prompt-facing transcript timing hints for voice feedback."""
+    segments = entry.get("transcript_segments") or []
+    if not isinstance(segments, list):
+        return ""
+    rows = []
+    for idx, seg in enumerate(segments[:200], start=1):
+        if not isinstance(seg, dict):
+            continue
+        text = str(seg.get("text") or "").strip()
+        if not text:
+            continue
+        bits = []
+        if isinstance(seg.get("start_ms"), (int, float)):
+            bits.append(f"start={seg['start_ms']:.0f}ms")
+        if isinstance(seg.get("end_ms"), (int, float)):
+            bits.append(f"end={seg['end_ms']:.0f}ms")
+        prefix = f"- segment {idx}"
+        if bits:
+            prefix += " [" + ", ".join(bits) + "]"
+        rows.append(f"{prefix}: {text}")
+    if not rows:
+        return ""
+    return "\n## Voice transcript segments\n" + "\n".join(rows)
+
+
 def _entry_label(entry: dict) -> str:
     who = "agent" if entry.get("kind") == "system" or entry.get("author") == "claude" else "user"
     status = entry.get("status") or "?"
@@ -336,6 +362,9 @@ def _collection_bundle(cfg: dict, entry: dict, eid: str, shot_path: str | None, 
     annotations = _annotation_block(entry)
     if annotations:
         body.append(annotations)
+    transcript = _transcript_block(entry)
+    if transcript:
+        body.append(transcript)
     if approval_followup:
         body.append(
             "\n**APPROVAL/FOLLOW-UP RUN** — the user has replied to a prior collection/app request. "
@@ -380,6 +409,9 @@ def _runner_bundle(cfg: dict, entry: dict, eid: str, shot_path: str | None) -> t
     annotations = _annotation_block(entry)
     if annotations:
         head.append(annotations)
+    transcript = _transcript_block(entry)
+    if transcript:
+        head.append(transcript)
     if mode == "checkout":
         root = _runner_root(cfg)
         root_display = _repo_display(cfg, root)
@@ -444,6 +476,9 @@ def _app_bundle(cfg: dict, key: str, entry: dict, eid: str, shot_path: str | Non
     annotations = _annotation_block(entry)
     if annotations:
         body.append(annotations)
+    transcript = _transcript_block(entry)
+    if transcript:
+        body.append(transcript)
     lessons = _lessons_for(cfg, key)
     if lessons:
         body.append(f"\n## Prior lessons for `{key}` (curator git history — what stuck / got reverted)\n{lessons}")

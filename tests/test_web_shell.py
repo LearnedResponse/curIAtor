@@ -147,6 +147,8 @@ def test_react_shell_has_local_voice_transcription(web_client):
     assert 'fetch("/api/transcribe"' in js
     assert "SpeechRecognition" not in js
     assert "voice.local_transcribe" in js
+    assert "transcriptSegments" in js
+    assert "transcript_segments: transcriptSegments" in js
     assert ".rshell-button.secondary.active" in css
 
 
@@ -401,6 +403,11 @@ def test_react_shell_feedback_api_stores_sanitized_annotations(web_client):
              "note": "private value", "target": {"selector": "#secret"}},
             {"tool": "unknown", "x1": 0.1, "y1": 0.1},
         ],
+        "transcript_segments": [
+            {"start": 0.2, "end": 0.8, "text": " move the legend "},
+            {"start_ms": 900, "end_ms": 1000, "text": " then widen the plot "},
+            {"text": ""},
+        ],
     })
     assert r.status_code == 200
     annotations = r.get_json()["entry"]["annotations"]
@@ -414,6 +421,11 @@ def test_react_shell_feedback_api_stores_sanitized_annotations(web_client):
     assert "text" not in annotations[0]["target"]
     assert annotations[1]["note"] == "private value"
     assert "target" not in annotations[1]
+    segments = r.get_json()["entry"]["transcript_segments"]
+    assert segments == [
+        {"start_ms": 200.0, "end_ms": 800.0, "text": "move the legend"},
+        {"start_ms": 900.0, "end_ms": 1000.0, "text": "then widen the plot"},
+    ]
 
     home = web_client.get("/general").get_data(as_text=True)
     assert "Annotations" in home
@@ -434,6 +446,9 @@ def test_react_shell_feedback_api_stores_sanitized_annotations(web_client):
     assert "selector `#chart .legend`" in body
     assert "data-testid `legend`" in body
     assert "legend overlaps chart" in body
+    assert "## Voice transcript segments" in body
+    assert "segment 1 [start=200ms, end=800ms]: move the legend" in body
+    assert "segment 2 [start=900ms, end=1000ms]: then widen the plot" in body
     assert "mark 2: `redact` at x1=0.100, y1=0.100, x2=0.200, y2=0.200 (target omitted for redaction)" in body
     assert "#secret" not in body
 

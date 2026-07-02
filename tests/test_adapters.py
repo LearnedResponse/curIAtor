@@ -60,6 +60,20 @@ def test_app_bundle_includes_screenshot_annotations(cfg):
     assert "#secret" not in body
 
 
+def test_app_bundle_includes_voice_transcript_segments(cfg):
+    entry = _entry(
+        transcript_segments=[
+            {"start_ms": 100, "end_ms": 350, "text": "move the legend"},
+            {"text": "untimed follow-up"},
+        ],
+    )
+
+    body = Path(build_task(cfg, "sample", entry).task_file).read_text()
+    assert "## Voice transcript segments" in body
+    assert "segment 1 [start=100ms, end=350ms]: move the legend" in body
+    assert "segment 2: untimed follow-up" in body
+
+
 def test_runner_routing_checkout_vs_pinned(cfg):
     g = build_task(cfg, GENERAL_KEY, _entry(id="g1", comment="the shell chrome is ugly"))
     body = Path(g.task_file).read_text()

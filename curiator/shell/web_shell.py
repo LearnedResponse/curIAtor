@@ -17,6 +17,7 @@ from flask import Flask, Response, jsonify, redirect, request, send_from_directo
 
 from curiator.shell import app_shell as core
 from curiator import auth, ledger
+from curiator.transcripts import bounded_text, clean_transcript_segments
 
 
 def _dash_deps_dir() -> Path:
@@ -199,46 +200,6 @@ def _transcribe_args(command, audio_path: Path) -> list[str]:
     return [*shlex.split(text), str(audio_path)]
 
 
-def _bounded_text(value, limit: int) -> str:
-    text = "" if value is None else str(value).strip()
-    return text[:limit]
-
-
-def _ms(value, *, seconds: bool) -> float | None:
-    try:
-        n = float(value)
-    except (TypeError, ValueError):
-        return None
-    if seconds:
-        n *= 1000.0
-    return max(0.0, min(86_400_000.0, n))
-
-
-def _clean_transcript_segments(raw) -> list[dict]:
-    if not isinstance(raw, list):
-        return []
-    out = []
-    for item in raw[:200]:
-        if not isinstance(item, dict):
-            continue
-        text = _bounded_text(item.get("text"), 1000)
-        if not text:
-            continue
-        start_ms = _ms(item.get("start_ms"), seconds=False)
-        end_ms = _ms(item.get("end_ms"), seconds=False)
-        if start_ms is None:
-            start_ms = _ms(item.get("start"), seconds=True)
-        if end_ms is None:
-            end_ms = _ms(item.get("end"), seconds=True)
-        seg = {"text": " ".join(text.split())}
-        if start_ms is not None:
-            seg["start_ms"] = start_ms
-        if end_ms is not None:
-            seg["end_ms"] = max(start_ms or 0.0, end_ms)
-        out.append(seg)
-    return out
-
-
 def _parse_transcript(stdout: str) -> dict:
     raw = stdout.strip()
     if not raw:
@@ -246,16 +207,16 @@ def _parse_transcript(stdout: str) -> dict:
     try:
         data = json.loads(raw)
     except json.JSONDecodeError:
-        return {"text": _bounded_text(raw, 10000), "segments": []}
+        return {"text": bounded_text(raw, 10000), "segments": []}
     if isinstance(data, list):
-        segments = _clean_transcript_segments(data)
-        return {"text": _bounded_text(" ".join(s["text"] for s in segments), 10000), "segments": segments}
+        segments = clean_transcript_segments(data)
+        return {"text": bounded_text(" ".join(s["text"] for s in segments), 10000), "segments": segments}
     if not isinstance(data, dict):
-        return {"text": _bounded_text(raw, 10000), "segments": []}
-    segments = _clean_transcript_segments(data.get("segments"))
-    text = _bounded_text(data.get("text"), 10000)
+        return {"text": bounded_text(raw, 10000), "segments": []}
+    segments = clean_transcript_segments(data.get("segments"))
+    text = bounded_text(data.get("text"), 10000)
     if not text and segments:
-        text = _bounded_text(" ".join(s["text"] for s in segments), 10000)
+        text = bounded_text(" ".join(s["text"] for s in segments), 10000)
     return {"text": text, "segments": segments}
 
 
@@ -482,6 +443,7 @@ def build_flask_app() -> Flask:
                 reply_to=reply_to,
                 status=status,
                 annotations=body.get("annotations"),
+                transcript_segments=body.get("transcript_segments"),
             )
             return jsonify({"entry": _safe_entry(entry), **_feedback_payload(key)})
         return jsonify(_feedback_payload(key))
@@ -542,7 +504,7 @@ def build_flask_app() -> Flask:
             except subprocess.TimeoutExpired:
                 return jsonify({"error": f"transcription timed out after {timeout}s"}), 504
             if proc.returncode != 0:
-                detail = _bounded_text(proc.stderr or proc.stdout, 500) or f"exit {proc.returncode}"
+                detail = bounded_text(proc.stderr or proc.stdout, 500) or f"exit {proc.returncode}"
                 return jsonify({"error": "transcription failed", "detail": detail}), 502
         return jsonify(_parse_transcript(proc.stdout))
 

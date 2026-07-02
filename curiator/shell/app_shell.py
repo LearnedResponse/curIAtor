@@ -58,6 +58,7 @@ sys.path.insert(0, str(HERE))
 PORT = 8200  # default; overridden by gallery.yaml shell.port just below (after the registry import)
 
 from curiator.annotations import clean_annotations  # noqa: E402
+from curiator.transcripts import clean_transcript_segments  # noqa: E402
 import registry as REG  # gallery.yaml-backed registry
 from curiator import auth, ledger  # identity/provenance + shared SQLite feedback ledger
 PORT = REG.SHELL_CFG.get("port", PORT)  # honor gallery.yaml: shell.port
@@ -532,7 +533,17 @@ def _annotation_summary_dash(entry: dict):
                            "color": "#444", "fontSize": "11px"})
 
 
-def save_entry(key, stars, comment, shot_dataurl, user=None, reply_to=None, status: str = "new", annotations=None):
+def save_entry(
+    key,
+    stars,
+    comment,
+    shot_dataurl,
+    user=None,
+    reply_to=None,
+    status: str = "new",
+    annotations=None,
+    transcript_segments=None,
+):
     eid = uuid.uuid4().hex[:8]
     screenshot = None
     if shot_dataurl and shot_dataurl.startswith("data:image"):
@@ -545,6 +556,9 @@ def save_entry(key, stars, comment, shot_dataurl, user=None, reply_to=None, stat
     cleaned_annotations = clean_annotations(annotations)
     if cleaned_annotations:
         extra["annotations"] = cleaned_annotations
+    cleaned_segments = clean_transcript_segments(transcript_segments)
+    if cleaned_segments:
+        extra["transcript_segments"] = cleaned_segments
     ledger.save_entry(
         LEDGER_CFG,
         key,
