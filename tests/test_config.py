@@ -48,6 +48,7 @@ def test_defaults_when_blocks_absent(tmp_path, monkeypatch):
     assert cfg["voice"]["transcribe_timeout"] == 60
     assert cfg["voice"]["web_speech"] is False
     assert cfg["voice"]["web_speech_lang"] is None
+    assert cfg["voice"]["retain_audio"] is False
 
 
 def test_infer_current_app_requires_an_unambiguous_match(tmp_path):

@@ -55,6 +55,9 @@ VOICE_CFG = CONFIG.get("voice", {}) or {}
 VOICE_CFG.setdefault("transcribe_cmd", None)
 VOICE_CFG.setdefault("transcribe_timeout", 60)
 VOICE_CFG.setdefault("transcribe_max_bytes", 25 * 1024 * 1024)
+VOICE_CFG.setdefault("web_speech", False)
+VOICE_CFG.setdefault("web_speech_lang", None)
+VOICE_CFG.setdefault("retain_audio", False)
 
 # the directories that hold app source — added to sys.path so in-process import works.
 APP_SOURCE_DIRS: list[Path] = []

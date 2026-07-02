@@ -133,6 +133,25 @@ def _shot_path(cfg: dict, entry: dict) -> str | None:
     return str(Path(fb_dir) / shot).replace("\\", "/")
 
 
+def _audio_path(cfg: dict, entry: dict) -> str | None:
+    """Prompt-facing retained-audio path, or None."""
+    audio = entry.get("audio")
+    if not audio:
+        return None
+    fb_dir = cfg.get("feedback", {}).get("dir", "feedback")
+    return str(Path(fb_dir) / audio).replace("\\", "/")
+
+
+def _audio_block(cfg: dict, entry: dict) -> str:
+    audio = _audio_path(cfg, entry)
+    if not audio:
+        return ""
+    return ("\n## Retained voice audio\n"
+            f"- audio clip (local runtime media): `{audio}`\n"
+            "- Use the transcript and narrated-feedback blocks as the primary task instructions; "
+            "listen to the clip only when the transcript is ambiguous.")
+
+
 def _annotation_block(entry: dict) -> str:
     """Prompt-facing structured annotation hints, if the screenshot was marked up."""
     marks = entry.get("annotations") or []
@@ -403,6 +422,9 @@ def _collection_bundle(cfg: dict, entry: dict, eid: str, shot_path: str | None, 
     narrative = _narrative_block(entry)
     if narrative:
         body.append(narrative)
+    audio = _audio_block(cfg, entry)
+    if audio:
+        body.append(audio)
     if approval_followup:
         body.append(
             "\n**APPROVAL/FOLLOW-UP RUN** — the user has replied to a prior collection/app request. "
@@ -453,6 +475,9 @@ def _runner_bundle(cfg: dict, entry: dict, eid: str, shot_path: str | None) -> t
     narrative = _narrative_block(entry)
     if narrative:
         head.append(narrative)
+    audio = _audio_block(cfg, entry)
+    if audio:
+        head.append(audio)
     if mode == "checkout":
         root = _runner_root(cfg)
         root_display = _repo_display(cfg, root)
@@ -523,6 +548,9 @@ def _app_bundle(cfg: dict, key: str, entry: dict, eid: str, shot_path: str | Non
     narrative = _narrative_block(entry)
     if narrative:
         body.append(narrative)
+    audio = _audio_block(cfg, entry)
+    if audio:
+        body.append(audio)
     lessons = _lessons_for(cfg, key)
     if lessons:
         body.append(f"\n## Prior lessons for `{key}` (curator git history — what stuck / got reverted)\n{lessons}")

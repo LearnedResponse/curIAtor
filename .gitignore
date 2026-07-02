@@ -12,6 +12,7 @@ dist/
 # feedback artifacts are runtime state: the SQLite ledger, shots, and generated task/trace files all
 # stay local (a legacy app_feedback.json is import-only — see curiator/ledger.py)
 feedback/shots/
+feedback/audio/
 feedback/task_*.md
 feedback/tasks/
 feedback/replies/

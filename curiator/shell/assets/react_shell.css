@@ -763,6 +763,11 @@ body {
   font-size: 11px;
 }
 
+.rshell-narrative-audio {
+  width: 100%;
+  margin-bottom: 8px;
+}
+
 .rshell-narrative-replay-head {
   display: flex;
   align-items: center;

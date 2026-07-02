@@ -189,6 +189,7 @@ Back up the mounted collection directory, not the container image. The important
 - `apps/`
 - `feedback/app_feedback.sqlite`
 - `feedback/shots/`
+- `feedback/audio/`
 - `feedback/tasks/`
 - `feedback/replies/`
 - `.curiator-users.json` for local auth

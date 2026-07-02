@@ -108,6 +108,7 @@ def _load_config_from_path(path: str | Path, *, link: dict | None = None) -> dic
     voice.setdefault("transcribe_max_bytes", 25 * 1024 * 1024)
     voice.setdefault("web_speech", False)
     voice.setdefault("web_speech_lang", None)
+    voice.setdefault("retain_audio", False)
     cfg["voice"] = voice
     cfg["current_app"] = (link.get("app") if link else None) or infer_current_app(cfg)
     return cfg

@@ -295,11 +295,13 @@
   function VoiceSummary({entry}) {
     const narrative = buildNarrative(entry);
     const segments = transcriptRows(entry);
-    if (!narrative.length && !segments.length) return null;
+    const hasAudio = Boolean(entry && entry.audio_url);
+    if (!narrative.length && !segments.length && !hasAudio) return null;
     const rows = narrative.length ? narrative : segments;
-    const title = narrative.length ? "Narrated feedback" : "Voice transcript";
+    const title = narrative.length ? "Narrated feedback" : (segments.length ? "Voice transcript" : "Retained audio");
     return h("div", {className: "rshell-voice-summary"},
       h("div", {className: "rshell-annotation-summary-title"}, title),
+      hasAudio ? h("audio", {className: "rshell-narrative-audio", controls: true, src: entry.audio_url}) : null,
       rows.slice(0, 8).map((row) => {
         const isNarrative = Boolean(row.tool);
         const body = isNarrative
@@ -361,6 +363,7 @@
     const [draftMarks, setDraftMarks] = useState(copyAnnotations(marks));
     const [activeIndex, setActiveIndex] = useState(null);
     const [playing, setPlaying] = useState(false);
+    const audioRef = useRef(null);
     useEffect(() => {
       setEditing(false);
       setDraftMarks(copyAnnotations(marks));
@@ -382,6 +385,17 @@
         }
       }, narrativeStepDuration(narrative[pos]));
       return () => window.clearTimeout(timer);
+    }, [playing, activeIndex, narrative]);
+    useEffect(() => {
+      const audio = audioRef.current;
+      if (!audio) return;
+      const row = narrative.find((item) => item.index === activeIndex);
+      if (playing && row) {
+        audio.currentTime = Math.max(0, (numberValue(row.start_ms) || 0) / 1000);
+        audio.play().catch(() => {});
+      } else if (!playing) {
+        audio.pause();
+      }
     }, [playing, activeIndex, narrative]);
     if (!entry || !marks.length) return null;
     const preview = h("div", {className: "rshell-annotation-replay-frame"},
@@ -407,6 +421,8 @@
           entry.shot_url ? h("div", {className: "rshell-annotation-replay-shot"},
             editing ? editor : preview) : null,
           h("div", {className: "rshell-annotation-replay-list"},
+            !editing && entry.audio_url ? h("audio", {className: "rshell-narrative-audio",
+              controls: true, ref: audioRef, src: entry.audio_url}) : null,
             !editing ? h(NarrativeReplay, {rows: narrative, activeIndex, setActiveIndex, playing, setPlaying}) : null,
             h(AnnotationRows, {marks: editing ? draftMarks : marks})))));
   }
@@ -720,6 +736,7 @@
     const [shotSource, setShotSource] = useState(null);
     const [annotations, setAnnotations] = useState([]);
     const [transcriptSegments, setTranscriptSegments] = useState([]);
+    const [retainedAudioRef, setRetainedAudioRef] = useState(null);
     const [narrativeClockStart, setNarrativeClockStart] = useState(null);
     const [replyTo, setReplyTo] = useState(null);
     const [previewEntry, setPreviewEntry] = useState(null);
@@ -752,6 +769,7 @@
       if (replyTo && replyTo.key !== selected) setReplyTo(null);
       if (previewEntry) setPreviewEntry(null);
       if (transcriptSegments.length) setTranscriptSegments([]);
+      if (retainedAudioRef) setRetainedAudioRef(null);
       narrativeClockRef.current = null;
       if (narrativeClockStart !== null) setNarrativeClockStart(null);
     }, [selected]);
@@ -770,7 +788,7 @@
     }
 
     function save() {
-      if (!stars && !comment.trim() && !shot) {
+      if (!stars && !comment.trim() && !shot && !retainedAudioRef) {
         setMsg("Add a rating, comment, or screenshot.");
         return;
       }
@@ -780,6 +798,7 @@
           screenshot_source: screenshot ? shotSource : null,
           annotations: screenshot ? annotations : [],
           transcript_segments: transcriptSegments,
+          audio_ref: retainedAudioRef,
           reply_to: target ? [target.id] : []};
         return api("/api/feedback/" + encodeURIComponent(selected), {method: "POST", body: JSON.stringify(payload)});
       })
@@ -791,12 +810,14 @@
           setShotSource(null);
           setAnnotations([]);
           setTranscriptSegments([]);
+          setRetainedAudioRef(null);
           narrativeClockRef.current = null;
           setNarrativeClockStart(null);
           setReplyTo(null);
+          const audio = data.entry.audio ? " +audio" : "";
           setMsg(data.entry.status === "held"
-            ? "✓ queued for review (" + data.entry.id + ")" + (data.entry.screenshot ? " +screenshot" : "")
-            : "✓ saved (" + data.entry.id + ")" + (data.entry.screenshot ? " +screenshot" : ""));
+            ? "✓ queued for review (" + data.entry.id + ")" + (data.entry.screenshot ? " +screenshot" : "") + audio
+            : "✓ saved (" + data.entry.id + ")" + (data.entry.screenshot ? " +screenshot" : "") + audio);
           reloadApps();
         }).catch((e) => setMsg(e.error || "Save failed."));
     }
@@ -897,8 +918,12 @@
           appendTranscript(data.text || "");
           const segments = offsetTranscriptSegments(data.segments || [], offsetMs || 0);
           setTranscriptSegments((current) => current.concat(segments));
+          setRetainedAudioRef(data.audio_ref || null);
           const count = segments.length;
-          setMsg(data.text ? "Transcript added" + (count ? " (" + count + " segments)" : "") + "." : "No speech detected.");
+          const audio = data.audio_ref ? " +retained audio" : "";
+          setMsg(data.text
+            ? "Transcript added" + (count ? " (" + count + " segments)" : "") + audio + "."
+            : (data.audio_ref ? "No speech detected; retained audio ready." : "No speech detected."));
         })
         .catch((e) => setMsg(e.error || "Transcription failed."));
     }

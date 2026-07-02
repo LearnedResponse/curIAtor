@@ -55,4 +55,5 @@ deliberate (ship, let the example demos surface what to prioritize).
   Speech opt-in is available; recording mode aligns
   annotation marks and transcript segments to one clock, and timed marks with overlapping speech render
   as an ordered `Narrated feedback` task-bundle block, compact prior-feedback summary, and
-  transcript-timed annotation replay.
+  transcript-timed annotation replay, with opt-in retained-audio replay for collections that choose to
+  keep local clips.

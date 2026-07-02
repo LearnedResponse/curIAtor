@@ -94,6 +94,8 @@ FEEDBACK_DIR = REG.REPO_ROOT / (REG.FEEDBACK_CFG.get("dir") or "feedback")
 LEDGER_CFG = {**REG.CONFIG, "repo_root": str(REG.REPO_ROOT), "gallery_path": str(REG.GALLERY_YAML)}
 SHOTS = FEEDBACK_DIR / "shots"
 REPLIES = FEEDBACK_DIR / "replies"
+AUDIO = FEEDBACK_DIR / "audio"
+PENDING_AUDIO = AUDIO / "pending"
 SHOTS.mkdir(parents=True, exist_ok=True)
 REPLIES.mkdir(parents=True, exist_ok=True)
 BLUE, GREEN, AMBER, GREY, PURPLE = "#2980b9", "#1f9d55", "#cc7a00", "#777", "#8e44ad"
@@ -103,7 +105,7 @@ OPEN_STATUSES = {"new", "working", "awaiting_approval", "held"}
 
 def _sync_shell_config() -> None:
     """Refresh shell globals derived from gallery.yaml after registry reloads."""
-    global TITLE, POLL_MS, COLLECTION_NAME, FEEDBACK_DIR, LEDGER_CFG, SHOTS, REPLIES
+    global TITLE, POLL_MS, COLLECTION_NAME, FEEDBACK_DIR, LEDGER_CFG, SHOTS, REPLIES, AUDIO, PENDING_AUDIO
     TITLE = _norm_title(REG.SHELL_CFG.get("title"))
     POLL_MS = int(REG.SHELL_CFG.get("poll_seconds", 4) * 1000)
     COLLECTION_NAME = _collection_name(REG.SHELL_CFG.get("title"))
@@ -111,6 +113,8 @@ def _sync_shell_config() -> None:
     LEDGER_CFG = {**REG.CONFIG, "repo_root": str(REG.REPO_ROOT), "gallery_path": str(REG.GALLERY_YAML)}
     SHOTS = FEEDBACK_DIR / "shots"
     REPLIES = FEEDBACK_DIR / "replies"
+    AUDIO = FEEDBACK_DIR / "audio"
+    PENDING_AUDIO = AUDIO / "pending"
     SHOTS.mkdir(parents=True, exist_ok=True)
     REPLIES.mkdir(parents=True, exist_ok=True)
 
@@ -607,14 +611,18 @@ def _voice_summary_rows(entry: dict):
 
 def _voice_summary_html(entry: dict) -> str:
     summary = _voice_summary_rows(entry)
-    if not summary:
+    audio = entry.get("audio")
+    if not summary and not audio:
         return ""
-    title, rows, extra = summary
+    title, rows, extra = summary or ("Retained audio", [], 0)
     out = [
         "<div style='margin-top:6px;padding:6px 7px;border:1px solid #e0e8ef;border-radius:4px;"
         "background:#fbfdff;color:#3c4a55;font-size:11px'>",
         f"<div style='font-weight:700;color:#555;margin-bottom:4px'>{_esc(title)}</div>",
     ]
+    if audio:
+        out.append(f"<audio controls src='/feedback-audio/{_esc(Path(audio).name)}' "
+                   "style='display:block;width:100%;margin-bottom:5px'></audio>")
     for row in rows:
         text_style = "color:#777;font-style:italic" if row.get("muted") else "color:#243746"
         target = row.get("target")
@@ -638,10 +646,14 @@ def _voice_summary_html(entry: dict) -> str:
 
 def _voice_summary_dash(entry: dict):
     summary = _voice_summary_rows(entry)
-    if not summary:
+    audio = entry.get("audio")
+    if not summary and not audio:
         return None
-    title, rows, extra = summary
+    title, rows, extra = summary or ("Retained audio", [], 0)
     children = [html.Div(title, style={"fontWeight": 700, "color": "#555"})]
+    if audio:
+        children.append(html.Audio(src=f"/feedback-audio/{Path(audio).name}", controls=True,
+                                   style={"display": "block", "width": "100%", "marginBottom": "5px"}))
     for row in rows:
         body = []
         if row.get("lead"):
@@ -667,6 +679,38 @@ def _voice_summary_dash(entry: dict):
                                     "color": "#3c4a55", "fontSize": "11px"})
 
 
+_AUDIO_SUFFIXES = {".webm", ".ogg", ".mp3", ".m4a", ".mp4", ".wav", ".flac"}
+
+
+def _pending_audio_path(audio_ref) -> Path | None:
+    if not isinstance(audio_ref, str) or "\\" in audio_ref:
+        return None
+    ref = Path(audio_ref)
+    if ref.is_absolute() or len(ref.parts) != 3 or ref.parts[0] != "audio" or ref.parts[1] != "pending":
+        return None
+    if ref.suffix.lower() not in _AUDIO_SUFFIXES:
+        return None
+    candidate = (FEEDBACK_DIR / ref).resolve()
+    try:
+        if candidate.parent != PENDING_AUDIO.resolve():
+            return None
+    except FileNotFoundError:
+        return None
+    return candidate
+
+
+def _claim_audio_ref(key: str, eid: str, audio_ref) -> str | None:
+    pending = _pending_audio_path(audio_ref)
+    if not pending or not pending.exists() or not pending.is_file():
+        return None
+    AUDIO.mkdir(parents=True, exist_ok=True)
+    safe_key = re.sub(r"[^A-Za-z0-9_.-]+", "_", str(key or "feedback")).strip("._") or "feedback"
+    fname = f"{safe_key}_{eid}{pending.suffix.lower()}"
+    dest = AUDIO / fname
+    os.replace(pending, dest)
+    return f"audio/{fname}"
+
+
 def save_entry(
     key,
     stars,
@@ -677,6 +721,7 @@ def save_entry(
     status: str = "new",
     annotations=None,
     transcript_segments=None,
+    audio_ref=None,
 ):
     eid = uuid.uuid4().hex[:8]
     screenshot = None
@@ -693,6 +738,9 @@ def save_entry(
     cleaned_segments = clean_transcript_segments(transcript_segments)
     if cleaned_segments:
         extra["transcript_segments"] = cleaned_segments
+    audio = _claim_audio_ref(key, eid, audio_ref)
+    if audio:
+        extra["audio"] = audio
     ledger.save_entry(
         LEDGER_CFG,
         key,
@@ -1512,6 +1560,10 @@ def build_shell() -> Dash:
     @shell.server.route("/feedback-shot/<path:fname>")
     def _shot(fname):
         return send_from_directory(SHOTS, fname)
+
+    @shell.server.route("/feedback-audio/<path:fname>")
+    def _audio(fname):
+        return send_from_directory(AUDIO, fname)
 
     @shell.server.route("/feedback-trace/<feedback_id>.md")
     def _trace_raw(feedback_id):

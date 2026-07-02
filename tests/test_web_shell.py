@@ -112,9 +112,14 @@ def test_react_shell_has_burned_screenshot_annotations(web_client):
     assert "rshell-annotation-replay-overlay" in js
     assert "rshell-annotation-replay-pin" in js
     assert "rshell-narrative-replay" in js
+    assert "rshell-narrative-audio" in js
     assert "Narrative replay" in js
     assert "Play transcript-timed narrative" in js
+    assert "entry.audio_url" in js
+    assert "Retained audio" in js
     assert "activeIndex" in js
+    assert "retainedAudioRef" in js
+    assert "audio_ref: retainedAudioRef" in js
     assert "Use as reply draft" in js
     assert 'setShotSource("replay")' in js
     assert "annotations: screenshot ? annotations : []" in js
@@ -145,6 +150,7 @@ def test_react_shell_has_burned_screenshot_annotations(web_client):
     assert ".rshell-annotation-replay-redact" in css
     assert ".rshell-annotation-replay-pin" in css
     assert ".rshell-narrative-replay" in css
+    assert ".rshell-narrative-audio" in css
     assert ".rshell-narrative-step.active" in css
     assert ".rshell-annotation-replay-box.active" in css
     assert ".rshell-annotation-target" in css
@@ -214,14 +220,46 @@ voice:
 
     boot = client.get("/api/bootstrap").get_json()
     assert boot["voice"]["local_transcribe"] is True
+    assert boot["voice"]["retain_audio"] is False
     r = client.post("/api/transcribe", data={"audio": (io.BytesIO(b"audio"), "clip.webm")})
     assert r.status_code == 200
     data = r.get_json()
     assert data["text"] == "move the legend"
+    assert "audio_ref" not in data
     assert data["segments"] == [
         {"start_ms": 250.0, "end_ms": 750.0, "text": "move"},
         {"start_ms": 800.0, "end_ms": 1200.0, "text": "the legend"},
     ]
+
+
+def test_react_shell_can_retain_audio_for_saved_feedback(collection, monkeypatch):
+    script = collection / "transcribe_fixture.py"
+    script.write_text("import json\nprint(json.dumps({'text': 'move it', 'segments': []}))\n")
+    (collection / "gallery.yaml").write_text((collection / "gallery.yaml").read_text() + f"""
+voice:
+  transcribe_cmd: "{sys.executable} {script} {{audio}}"
+  retain_audio: true
+""")
+    mod = _load_web_mod(monkeypatch)
+    client = mod.build_flask_app().test_client()
+
+    boot = client.get("/api/bootstrap").get_json()
+    assert boot["voice"]["retain_audio"] is True
+    r = client.post("/api/transcribe", data={"audio": (io.BytesIO(b"audio bytes"), "clip.webm")})
+    assert r.status_code == 200
+    audio_ref = r.get_json()["audio_ref"]
+    assert audio_ref.startswith("audio/pending/")
+    assert (collection / "feedback" / audio_ref).exists()
+
+    saved = client.post("/api/feedback/sample", json={"comment": "voice note", "audio_ref": audio_ref})
+    assert saved.status_code == 200
+    entry = saved.get_json()["entry"]
+    assert entry["audio"].startswith("audio/sample_")
+    assert entry["audio_url"].startswith("/feedback-audio/sample_")
+    assert not (collection / "feedback" / audio_ref).exists()
+    audio_file = collection / "feedback" / entry["audio"]
+    assert audio_file.read_bytes() == b"audio bytes"
+    assert client.get(entry["audio_url"]).get_data() == b"audio bytes"
 
 
 def test_react_shell_profile_settings_and_collection_home(web_client):
@@ -365,6 +403,37 @@ auth:
     entry = capture.get_json()["entry"]
     assert entry["status"] == "held"
     assert entry["screenshot"]
+
+
+def test_react_shell_rejects_anonymous_retained_audio(collection, monkeypatch):
+    from curiator import auth, ledger
+    from curiator.config import load_config
+
+    auth.clear_anonymous_feedback("127.0.0.1")
+    script = collection / "transcribe_fixture.py"
+    script.write_text("import json\nprint(json.dumps({'text': 'public voice', 'segments': []}))\n")
+    (collection / "gallery.yaml").write_text((collection / "gallery.yaml").read_text() + f"""
+auth:
+  mode: local
+  allow_anonymous: true
+  users_file: .curiator-users.json
+voice:
+  transcribe_cmd: "{sys.executable} {script} {{audio}}"
+  retain_audio: true
+""")
+    mod = _load_web_mod(monkeypatch)
+    client = mod.build_flask_app().test_client()
+
+    transcribed = client.post("/api/transcribe", data={"audio": (io.BytesIO(b"audio"), "clip.webm")})
+    assert transcribed.status_code == 200
+    assert transcribed.get_json()["text"] == "public voice"
+    assert "audio_ref" not in transcribed.get_json()
+
+    auth.clear_anonymous_feedback("127.0.0.1")
+    saved = client.post("/api/feedback/sample", json={"comment": "voice", "audio_ref": "audio/pending/fake.webm"})
+    assert saved.status_code == 400
+    assert saved.get_json()["error"] == "anonymous retained audio is disabled; sign in to attach audio"
+    assert ledger.load(load_config()).get("sample", []) == []
 
 
 def test_react_shell_allow_anonymous_feedback_is_rate_limited(collection, monkeypatch):

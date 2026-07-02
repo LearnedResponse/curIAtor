@@ -2,7 +2,8 @@
 
 > **Status:** Tier 0, command-backed local transcription, packaged faster-whisper setup, explicit
 > public/hosted Web Speech opt-in, shared-clock mark/transcript timing, segment persistence,
-> task-bundle narrative merge, and visible feedback narrative summaries landed
+> task-bundle narrative merge, visible feedback narrative summaries, transcript-timed replay, and
+> opt-in retained-audio replay landed
 > 2026-07-02. **North star:
 > "narrated feedback"** — voice + annotation on a shared clock, so a review is an
 > *ordered, intent-per-mark tour* the agent can follow.
@@ -17,11 +18,13 @@
 > `Voice transcript segments` plus a derived `Narrated feedback` block when timed marks overlap timed
 > speech. Prior feedback threads now show the compact `Narrated feedback` summary, with a `Voice
 > transcript` fallback when saved speech has no timed marks, and the annotation preview can replay a
-> transcript-timed narrative tour that highlights each saved mark with its overlapping phrase. Browser
-> Web Speech dictation is available only behind explicit `voice.web_speech: true` /
-> `curiator voice web-speech on` opt-in, because it may use browser-provider speech services and does
-> not provide reliable segment timestamps. When recording is active, annotation marks and transcript
-> segments share the recording start as `t=0`.
+> transcript-timed narrative tour that highlights each saved mark with its overlapping phrase. If
+> `voice.retain_audio: true` / `curiator voice retain-audio on` is enabled, the same preview can play
+> the retained local clip while stepping through marks; audio remains off by default and is stored under
+> `feedback/audio/` as runtime media. Browser Web Speech dictation is available only behind explicit
+> `voice.web_speech: true` / `curiator voice web-speech on` opt-in, because it may use browser-provider
+> speech services and does not provide reliable segment timestamps. When recording is active,
+> annotation marks and transcript segments share the recording start as `t=0`.
 > Composes with `annotated-feedback.md`, not a separate feature. Captured 2026-07-02.
 
 ## The pitch
@@ -76,8 +79,9 @@ The whole thing hinges on **one shared clock**:
 4. The task bundle gains a **"Narrative" block** — ordered ①②③, each with its mark, its DOM target,
    and the exact phrase spoken while drawing it — so the agent gets **sequence and dependencies**
    ("do this, *then* this"), not a static blob. The existing annotation **replay overlay** now has a
-   transcript-timed narrative tour; a true **narrated replay** with audio playback remains the
-   follow-on once audio retention has an explicit policy.
+   transcript-timed narrative tour. Audio-backed replay is now opt-in: when a collection enables
+   retained audio, the preview can play the local clip while highlighting marks; otherwise transcript
+   timing remains the default artifact.
 
 **Why Whisper is required here (not Web Speech):** the merge needs reliable per-segment timestamps to
 align speech to the mark being drawn. Web Speech's interim timing can't do it. So the north star
@@ -102,11 +106,11 @@ to retrofit.
    fields, and `/api/transcribe` accepts/returns segment timestamps. Transcript segments are now
    persisted into the feedback ledger and task bundle, and React recording mode aligns marks plus
    transcript segments to the same `t=0`.
-5. **Narrated feedback** — first task-bundle, UI summaries, and transcript-timed replay landed: timed
-   marks pair with overlapping transcript segments into an ordered `Narrated feedback` block, prior
-   feedback threads expose the same compact summary, and the annotation preview can step through the
-   saved mark/phrase sequence. Remaining: persist any richer narrative metadata that proves useful and
-   decide whether/how to retain audio for true audio-backed replay.
+5. **Narrated feedback** — first task-bundle, UI summaries, transcript-timed replay, and opt-in
+   retained-audio replay landed: timed marks pair with overlapping transcript segments into an ordered
+   `Narrated feedback` block, prior feedback threads expose the same compact summary, and the
+   annotation preview can step through the saved mark/phrase sequence, optionally with the retained
+   local audio clip. Remaining: persist any richer narrative metadata that proves useful.
 6. **Verify by running** — a spoken-while-drawing review round-trips; the agent's reply follows the
    ordered narrative and lands the marks in sequence.
 
@@ -126,6 +130,8 @@ to retrofit.
 
 - **No egress for private/OT.** Whisper runs **local**; Web Speech (which sends audio to Google) is
   **public-collections-only**, config-gated. Audio for a private collection must never leave the box.
+  Retained audio is opt-in local runtime media under `feedback/audio/`; audit it like screenshots
+  before sharing a collection.
 - **Client-side capture on a secure context** — `localhost` qualifies, so mic works without HTTPS;
   prompt for mic permission once.
 - **Additive / opt-in** — typing still works; voice and record-mode are optional. Never a regression

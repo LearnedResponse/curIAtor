@@ -71,6 +71,27 @@ def test_voice_web_speech_toggle_is_explicit(collection, monkeypatch, capsys):
     assert yaml.safe_load((collection / "gallery.yaml").read_text())["voice"]["web_speech"] is False
 
 
+def test_voice_retain_audio_toggle_is_explicit(collection, monkeypatch, capsys):
+    from curiator import cli
+    from curiator.config import load_config
+
+    monkeypatch.chdir(collection)
+    assert cli.main(["voice", "retain-audio", "on"]) == 0
+    out = capsys.readouterr().out
+    assert "retained audio enabled" in out
+    assert "feedback/audio/" in out
+    data = yaml.safe_load((collection / "gallery.yaml").read_text())
+    assert data["voice"]["retain_audio"] is True
+    assert load_config()["voice"]["retain_audio"] is True
+
+    assert cli.main(["voice", "show"]) == 0
+    shown = capsys.readouterr().out
+    assert "voice.retain_audio = True" in shown
+
+    assert cli.main(["voice", "retain-audio", "off"]) == 0
+    assert yaml.safe_load((collection / "gallery.yaml").read_text())["voice"]["retain_audio"] is False
+
+
 def test_faster_whisper_adapter_payload_formats_segments():
     from curiator.voice.faster_whisper import payload_from_segments
 

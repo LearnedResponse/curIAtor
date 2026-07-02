@@ -1332,7 +1332,7 @@ def _machine_path_hits(repo: Path, needles: tuple[str, ...]) -> list[dict]:
 
 
 _SAFE_ENV_TEMPLATE_NAMES = {".env.example", ".env.sample", ".env.template"}
-_PUBLISH_RUNTIME_PREFIXES = ("feedback/shots/", "feedback/tasks/", "feedback/replies/")
+_PUBLISH_RUNTIME_PREFIXES = ("feedback/shots/", "feedback/audio/", "feedback/tasks/", "feedback/replies/")
 _PUBLISH_SQLITE_SIDECARS = ("feedback/app_feedback.sqlite-wal", "feedback/app_feedback.sqlite-shm")
 _PUBLISH_CACHE_DIRS = {"__pycache__", ".pytest_cache", ".ruff_cache", ".mypy_cache", ".cache"}
 _PUBLISH_ENV_DIRS = {".venv", "venv", ".env"}
@@ -2934,6 +2934,7 @@ def cmd_voice(args) -> int:
         print(f"curiator: voice.transcribe_max_bytes = {voice.get('transcribe_max_bytes')}")
         print(f"curiator: voice.web_speech = {bool(voice.get('web_speech'))}")
         print(f"curiator: voice.web_speech_lang = {voice.get('web_speech_lang') or 'null'}")
+        print(f"curiator: voice.retain_audio = {bool(voice.get('retain_audio'))}")
         return 0
 
     if args.action == "web-speech":
@@ -2946,6 +2947,16 @@ def cmd_voice(args) -> int:
         print(f"curiator: browser Web Speech dictation {'enabled' if enabled else 'disabled'} in {gallery}")
         if enabled:
             print("note: browser Web Speech may use the browser provider's speech service; use only for public/hosted collections.")
+        return 0
+
+    if args.action == "retain-audio":
+        enabled = args.state == "on"
+        text = gallery.read_text()
+        text = set_block_key(text, "voice", "retain_audio", enabled)
+        gallery.write_text(text)
+        print(f"curiator: retained audio {'enabled' if enabled else 'disabled'} in {gallery}")
+        if enabled:
+            print("note: audio clips are stored under feedback/audio/ and should be audited before sharing or publishing.")
         return 0
 
     command = _VOICE_FASTER_WHISPER_CMD
@@ -3849,6 +3860,9 @@ def main(argv=None) -> int:
     vweb.add_argument("state", choices=["on", "off"])
     vweb.add_argument("--lang", default=None, help="optional BCP-47 recognition language, such as en-US")
     vweb.set_defaults(func=cmd_voice)
+    vaudio = vc_sub.add_parser("retain-audio", help="enable or disable retained audio clips for replay")
+    vaudio.add_argument("state", choices=["on", "off"])
+    vaudio.set_defaults(func=cmd_voice)
     rv = sub.add_parser("revert", help="(git-as-memory) undo a curator commit; record + thread stay intact")
     rv.add_argument("target", help="a feedback id or a commit SHA")
     rv.add_argument("--reason", default=None, help="why (recorded in the ⚙ note + revert commit)")
@@ -3972,6 +3986,7 @@ See the consumer guide: https://github.com/LearnedResponse/curiator/blob/main/do
 
 _SCAFFOLD_GITIGNORE = """\
 feedback/shots/
+feedback/audio/
 feedback/tasks/
 feedback/replies/
 feedback/app_feedback.sqlite*

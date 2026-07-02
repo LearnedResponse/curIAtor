@@ -22,7 +22,7 @@ leave feedback → watch the fix land and the ⚙ reply arrive. Every item below
    a tag-vs-`pyproject.toml` version guard; `make release-check` now runs the local gate (lint, tests,
    strict public-gallery fresh-clone preflight, `docs/demo.gif` presence validation, package build, and `twine check`). The
    human release checklist now lives in [`docs/RELEASE.md`](../RELEASE.md). Local gate evidence from
-   July 2, 2026: `make release-check` passed with 264 tests, public-gallery
+   July 2, 2026: `make release-check` passed with 268 tests, public-gallery
    fresh-clone preflight `3/3` with zero publish-artifact hits, validated the browser-captured
    `docs/demo.gif`, built sdist/wheel, and `twine check` passed both artifacts. The final local launch
    gate, `make release-launch-check`, also passed: strict release docs were clean and required plus
@@ -54,7 +54,7 @@ leave feedback → watch the fix land and the ⚙ reply arrive. Every item below
    hooks used by git-as-memory commits. From the runner checkout, `curiator release-preflight` runs
    those checks across the nested public galleries and also rejects dirty nested repos, tracked
    machine-local paths, local editable/path dependency pins, and tracked publish-unsafe runtime/auth artifacts such as local user stores,
-   task/reply traces, screenshots, SQLite sidecars, env files, legacy JSON ledgers, generated caches,
+   task/reply traces, screenshots, retained audio clips, SQLite sidecars, env files, legacy JSON ledgers, generated caches,
    virtualenvs, and `node_modules`; `curiator
    release-preflight --fresh-clone` repeats the same gate from temporary clones of the committed
    gallery histories, and `--http-smoke` can add the proxy process + HTTP response check when the app

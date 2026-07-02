@@ -104,7 +104,8 @@ degradation are now present.
    **Native** screen capture are disabled for anonymous users, and the feedback API rejects
    anonymous-held screenshots that are not explicitly marked as same-origin captures by the shell.
    Upload/native images are separate abuse/injection channels and the pool reviewers shouldn't have to
-   moderate arbitrary pixels.
+   moderate arbitrary pixels. Retained audio follows the same rule: anonymous reviewers may transcribe
+   through the configured local path, but durable audio attachment is disabled until they sign in.
 
 ## Deployment shape — a pattern, not a rearchitecture
 

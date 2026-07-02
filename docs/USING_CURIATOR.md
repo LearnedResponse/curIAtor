@@ -24,6 +24,7 @@ my-collection/
   requirements.txt      # pins curiator
   feedback/             # SQLite ledger source of truth + generated run artifacts
     shots/              # captured screenshots
+    audio/              # optional retained voice clips for replay
     tasks/              # per-feedback task bundles: <feedback_id>.md
     replies/            # live agent stdout/stderr traces: <feedback_id>.md
   README.md
@@ -243,6 +244,17 @@ transcript-timed **Narrative replay** in the annotation preview: each step highl
 shows the overlapping transcript phrase. When you annotate while recording, the React shell uses the
 recording start as the shared clock zero, so mark timestamps and transcript segments line up in the UI
 and task bundle. Audio clips are not retained by default; replay uses the saved transcript timing.
+Enable retained audio only when you want audio-backed replay and are prepared to audit local media:
+
+```bash
+curiator voice retain-audio on
+curiator voice setup
+curiator up
+```
+
+Retained clips are stored under `feedback/audio/`, referenced from the feedback ledger, and ignored by
+generated collection `.gitignore` files. Treat them like screenshots before sharing or publishing a
+collection.
 
 For public or hosted collections that can accept browser-provider speech services, enable the optional
 Web Speech dictation button explicitly:

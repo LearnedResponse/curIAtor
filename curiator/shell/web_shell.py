@@ -8,9 +8,11 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import shlex
 import subprocess
 import tempfile
+import uuid
 from pathlib import Path
 
 from flask import Flask, Response, jsonify, redirect, request, send_from_directory
@@ -29,6 +31,8 @@ def _safe_entry(entry: dict) -> dict:
     out = dict(entry)
     if entry.get("screenshot"):
         out["shot_url"] = f"/feedback-shot/{Path(entry['screenshot']).name}"
+    if entry.get("audio"):
+        out["audio_url"] = f"/feedback-audio/{Path(entry['audio']).name}"
     trace = core._trace_path(entry.get("id"))
     if trace and trace.exists():
         out["trace_url"] = f"/feedback-trace/{entry.get('id')}"
@@ -180,6 +184,7 @@ def _voice_payload() -> dict:
         "local_transcribe": bool(cfg.get("transcribe_cmd")),
         "web_speech": bool(cfg.get("web_speech")),
         "web_speech_lang": str(cfg.get("web_speech_lang") or ""),
+        "retain_audio": bool(cfg.get("retain_audio")),
         "max_bytes": _voice_int("transcribe_max_bytes", 25 * 1024 * 1024, low=1, high=200 * 1024 * 1024),
         "timeout": _voice_int("transcribe_timeout", 60, low=1, high=600),
     }
@@ -434,6 +439,8 @@ def build_flask_app() -> Flask:
             screenshot = body.get("screenshot")
             if status == "held" and screenshot and body.get("screenshot_source") != "capture":
                 return jsonify({"error": "anonymous uploaded/native screenshots are disabled; use Capture view"}), 400
+            if status == "held" and body.get("audio_ref"):
+                return jsonify({"error": "anonymous retained audio is disabled; sign in to attach audio"}), 400
             reply_to = body.get("reply_to") or []
             if isinstance(reply_to, str):
                 reply_to = [reply_to]
@@ -447,6 +454,7 @@ def build_flask_app() -> Flask:
                 status=status,
                 annotations=body.get("annotations"),
                 transcript_segments=body.get("transcript_segments"),
+                audio_ref=body.get("audio_ref"),
             )
             return jsonify({"entry": _safe_entry(entry), **_feedback_payload(key)})
         return jsonify(_feedback_payload(key))
@@ -509,7 +517,16 @@ def build_flask_app() -> Flask:
             if proc.returncode != 0:
                 detail = bounded_text(proc.stderr or proc.stdout, 500) or f"exit {proc.returncode}"
                 return jsonify({"error": "transcription failed", "detail": detail}), 502
-        return jsonify(_parse_transcript(proc.stdout))
+            payload = _parse_transcript(proc.stdout)
+            retain_audio = bool(voice.get("retain_audio")) and not (
+                auth.login_required(core.REG.AUTH_CFG) and not core._current_user()
+            )
+            if retain_audio:
+                core.PENDING_AUDIO.mkdir(parents=True, exist_ok=True)
+                retained = core.PENDING_AUDIO / f"{uuid.uuid4().hex}{suffix}"
+                shutil.copyfile(audio_path, retained)
+                payload["audio_ref"] = f"audio/pending/{retained.name}"
+        return jsonify(payload)
 
     @app.route("/api/action", methods=["POST"])
     def _action():
@@ -527,6 +544,10 @@ def build_flask_app() -> Flask:
     @app.route("/feedback-shot/<path:fname>")
     def _shot(fname):
         return send_from_directory(core.SHOTS, fname)
+
+    @app.route("/feedback-audio/<path:fname>")
+    def _audio(fname):
+        return send_from_directory(core.AUDIO, fname)
 
     @app.route("/feedback-trace/<feedback_id>.md")
     def _trace_raw(feedback_id):

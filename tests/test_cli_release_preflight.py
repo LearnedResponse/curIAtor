@@ -406,6 +406,7 @@ def test_release_preflight_flags_publish_unsafe_runtime_artifacts(tmp_path, monk
     (repo / "feedback" / "tasks").mkdir()
     (repo / "feedback" / "replies").mkdir()
     (repo / "feedback" / "shots").mkdir()
+    (repo / "feedback" / "audio").mkdir()
     (repo / "apps" / "__pycache__").mkdir()
     (repo / "node_modules" / "pkg").mkdir(parents=True)
     (repo / ".venv").mkdir()
@@ -423,6 +424,7 @@ def test_release_preflight_flags_publish_unsafe_runtime_artifacts(tmp_path, monk
     (repo / "feedback" / "tasks" / "abc.md").write_text("task bundle\n")
     (repo / "feedback" / "replies" / "abc.md").write_text("agent trace\n")
     (repo / "feedback" / "shots" / "abc.png").write_bytes(b"not really png")
+    (repo / "feedback" / "audio" / "abc.webm").write_bytes(b"audio")
     (repo / "apps" / "__pycache__" / "sample.cpython-314.pyc").write_bytes(b"pyc")
     (repo / "node_modules" / "pkg" / "index.js").write_text("module.exports = {}\n")
     (repo / ".venv" / "pyvenv.cfg").write_text("home = /usr/bin\n")
@@ -448,6 +450,7 @@ def test_release_preflight_flags_publish_unsafe_runtime_artifacts(tmp_path, monk
     assert "feedback/tasks/abc.md" in files
     assert "feedback/replies/abc.md" in files
     assert "feedback/shots/abc.png" in files
+    assert "feedback/audio/abc.webm" in files
     assert "feedback/app_feedback.json" in files
     assert "feedback/app_feedback.sqlite-wal" in files
     assert "apps/__pycache__/sample.cpython-314.pyc" in files

@@ -74,6 +74,15 @@ def test_app_bundle_includes_voice_transcript_segments(cfg):
     assert "segment 2: untimed follow-up" in body
 
 
+def test_app_bundle_includes_retained_voice_audio(cfg):
+    entry = _entry(audio="audio/sample_f1.webm")
+
+    body = Path(build_task(cfg, "sample", entry).task_file).read_text()
+    assert "## Retained voice audio" in body
+    assert "audio clip (local runtime media): `feedback/audio/sample_f1.webm`" in body
+    assert "listen to the clip only when the transcript is ambiguous" in body
+
+
 def test_app_bundle_includes_narrated_feedback_when_timings_overlap(cfg):
     entry = _entry(
         annotations=[
