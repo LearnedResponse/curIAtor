@@ -27,7 +27,10 @@ Before publishing or moving the public examples, run:
 
 ```bash
 curiator release-preflight
+curiator release-preflight --fresh-clone
 ```
 
 It checks the default public release set (`curiator-aviato`, `curiator-ot`, `curiator-geometry`) for
-dirty nested repos, tracked machine-local paths, `curiator doctor` errors, and smoke failures.
+dirty nested repos, tracked machine-local paths, `curiator doctor` errors, and smoke failures. The
+fresh-clone mode checks the committed state from a temporary clone, which catches files that only
+exist in the local working tree.

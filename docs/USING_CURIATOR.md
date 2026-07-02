@@ -154,6 +154,7 @@ curiator doctor --json
 curiator smoke                 # runs each app's configured smoke command/fallback import
 curiator smoke --app revenue --json
 curiator release-preflight     # from a runner checkout: checks nested public galleries
+curiator release-preflight --fresh-clone
 ```
 
 ## 4. Two install profiles

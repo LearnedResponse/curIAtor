@@ -36,8 +36,9 @@ leave feedback → watch the fix land and the ⚙ reply arrive. Every item below
    missing app roots/sources, weak smoke coverage, and suspicious proxy port wiring; `curiator smoke`
    runs the same per-app smoke hooks used by git-as-memory commits. From the runner checkout,
    `curiator release-preflight` runs those checks across the nested public galleries and also rejects
-   dirty nested repos or tracked machine-local paths. Remaining release work is the fresh-clone check
-   on a machine that isn't this one, and the loop must close there.
+   dirty nested repos or tracked machine-local paths; `curiator release-preflight --fresh-clone` repeats
+   the same gate from temporary clones of the committed gallery histories. Remaining release work is
+   the fresh-clone check on a machine that isn't this one, and the loop must close there.
 4. **Publish the three example collections** as public sibling repos, each linked from the README's
    Examples section. README links are prepared for `LearnedResponse/curiator-aviato`,
    `LearnedResponse/curiator-ot`, and `LearnedResponse/curiator-geometry`; publication and

@@ -11,7 +11,7 @@
     curiator work       # open a feedback item for interactive CLI work
     curiator done       # finish interactive work via the same reply/reload/git path
     curiator smoke      # run configured app smoke checks across the collection
-    curiator release-preflight # run doctor/smoke/path checks across nested release galleries
+    curiator release-preflight # run doctor/smoke/path checks across release galleries or fresh clones
     curiator reset-demo # rewind the demo: re-break aviato, clear the ledger
     curiator demo-up    # reset-demo, then serve — one command, record-ready
     curiator demo       # print the demo walkthrough
@@ -26,9 +26,11 @@ import argparse
 import json
 import os
 import re
+import shutil
 import shlex
 import subprocess
 import sys
+import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -552,11 +554,10 @@ def _machine_path_hits(repo: Path, needles: tuple[str, ...]) -> list[dict]:
     return hits
 
 
-def _release_preflight_one(gallery: Path, *, run_smoke: bool, allow_dirty: bool, needles: tuple[str, ...]) -> dict:
-    repo = gallery.parent
-    result = {
-        "name": repo.name,
-        "path": str(repo),
+def _empty_preflight_result(name: str, gallery: Path) -> dict:
+    return {
+        "name": name,
+        "path": str(gallery.parent),
         "gallery": str(gallery),
         "ok": False,
         "head": None,
@@ -565,6 +566,11 @@ def _release_preflight_one(gallery: Path, *, run_smoke: bool, allow_dirty: bool,
         "doctor": {"ok": False, "errors": 0, "warnings": 0, "issues": []},
         "smoke": {"ok": None, "results": []},
     }
+
+
+def _release_preflight_one(gallery: Path, *, run_smoke: bool, allow_dirty: bool, needles: tuple[str, ...]) -> dict:
+    repo = gallery.parent
+    result = _empty_preflight_result(repo.name, gallery)
     if not gallery.exists():
         result["error"] = f"missing gallery.yaml: {gallery}"
         return result
@@ -604,11 +610,47 @@ def _release_preflight_one(gallery: Path, *, run_smoke: bool, allow_dirty: bool,
     return result
 
 
-def _release_preflight_payload(args) -> dict:
+def _clone_gallery(source: Path, clone_parent: Path) -> tuple[Path | None, str | None]:
+    dest = clone_parent / source.name
+    r = subprocess.run(
+        ["git", "clone", "--quiet", "--no-local", str(source), str(dest)],
+        capture_output=True,
+        text=True,
+    )
+    if r.returncode != 0:
+        return None, (r.stderr or r.stdout or f"git clone exited {r.returncode}").strip()
+    return dest / "gallery.yaml", None
+
+
+def _release_preflight_source_result(source_gallery: Path, *, allow_dirty: bool) -> dict | None:
+    source_repo = source_gallery.parent
+    result = _empty_preflight_result(source_repo.name, source_gallery)
+    if not source_gallery.exists():
+        result["error"] = f"missing gallery.yaml: {source_gallery}"
+        return result
+    if _git_output(source_repo, "rev-parse", "--is-inside-work-tree") != "true":
+        result["error"] = f"not a git repository: {source_repo}"
+        return result
+    result["head"] = _git_output(source_repo, "rev-parse", "--short", "HEAD")
+    dirty = _git_text(source_repo, "status", "--porcelain", "--untracked-files=all").splitlines()
+    result["dirty"] = dirty
+    if dirty and not allow_dirty:
+        result["error"] = "source repo is dirty; commit, stash, or pass --allow-dirty before fresh-clone preflight"
+        return result
+    return None
+
+
+def _release_preflight_paths(args) -> tuple[Path, list[str], tuple[str, ...]]:
+    project = _project_root()
     root_arg = Path(args.root).expanduser()
-    root = root_arg if root_arg.is_absolute() else (_project_root() / root_arg).resolve()
+    root = root_arg if root_arg.is_absolute() else (project / root_arg).resolve()
     names = args.gallery or list(_PUBLIC_RELEASE_GALLERIES)
-    needles = tuple(sorted({str(Path.home()), str(_project_root())} | set(args.path_needle or [])))
+    needles = tuple(sorted({str(Path.home()), str(project)} | set(args.path_needle or [])))
+    return root, names, needles
+
+
+def _release_preflight_payload_for_root(args) -> dict:
+    root, names, needles = _release_preflight_paths(args)
     galleries = [
         _release_preflight_one(
             (root / name / "gallery.yaml").resolve(),
@@ -630,6 +672,78 @@ def _release_preflight_payload(args) -> dict:
     }
 
 
+def _release_preflight_payload_for_clones(args, clone_base: Path) -> dict:
+    root, names, needles = _release_preflight_paths(args)
+    clone_base.mkdir(parents=True, exist_ok=True)
+    galleries = []
+    for name in names:
+        source_gallery = (root / name / "gallery.yaml").resolve()
+        source_repo = source_gallery.parent
+        source_error = _release_preflight_source_result(source_gallery, allow_dirty=args.allow_dirty)
+        if source_error:
+            source_error["mode"] = "fresh-clone"
+            source_error["source_path"] = str(source_repo)
+            galleries.append(source_error)
+            continue
+        clone_gallery, clone_error = _clone_gallery(source_repo, clone_base)
+        if clone_error or clone_gallery is None:
+            result = _empty_preflight_result(source_repo.name, source_gallery)
+            result.update({
+                "mode": "fresh-clone",
+                "source_path": str(source_repo),
+                "head": _git_output(source_repo, "rev-parse", "--short", "HEAD"),
+                "error": clone_error or "clone failed",
+            })
+            galleries.append(result)
+            continue
+        result = _release_preflight_one(
+            clone_gallery.resolve(),
+            run_smoke=not args.no_smoke,
+            allow_dirty=False,
+            needles=needles,
+        )
+        result.update({
+            "mode": "fresh-clone",
+            "source_path": str(source_repo),
+            "source_head": _git_output(source_repo, "rev-parse", "--short", "HEAD"),
+            "cloned_from": str(source_repo),
+        })
+        galleries.append(result)
+    return {
+        "ok": all(g["ok"] for g in galleries),
+        "root": str(root),
+        "clone_root": str(clone_base),
+        "galleries": galleries,
+        "checks": {
+            "smoke": not args.no_smoke,
+            "allow_dirty": args.allow_dirty,
+            "fresh_clone": True,
+            "path_needles": list(needles),
+        },
+    }
+
+
+def _release_preflight_payload(args) -> dict:
+    if not args.fresh_clone:
+        payload = _release_preflight_payload_for_root(args)
+        payload["checks"]["fresh_clone"] = False
+        return payload
+
+    cleanup = not args.keep_clones
+    if args.clone_root:
+        clone_parent = Path(args.clone_root).expanduser()
+        clone_parent = clone_parent if clone_parent.is_absolute() else (_project_root() / clone_parent).resolve()
+        clone_parent.mkdir(parents=True, exist_ok=True)
+        clone_base = Path(tempfile.mkdtemp(prefix="run-", dir=clone_parent))
+    else:
+        clone_base = Path(tempfile.mkdtemp(prefix="curiator-release-preflight-"))
+    try:
+        return _release_preflight_payload_for_clones(args, clone_base)
+    finally:
+        if cleanup:
+            shutil.rmtree(clone_base, ignore_errors=True)
+
+
 def cmd_release_preflight(args) -> int:
     payload = _release_preflight_payload(args)
     if args.json:
@@ -638,7 +752,10 @@ def cmd_release_preflight(args) -> int:
 
     passed = sum(1 for g in payload["galleries"] if g["ok"])
     total = len(payload["galleries"])
-    print(f"curiator: release preflight {'OK' if payload['ok'] else 'FAILED'} ({passed}/{total} galleries)")
+    mode = "fresh-clone" if payload.get("checks", {}).get("fresh_clone") else "nested"
+    print(f"curiator: release preflight {'OK' if payload['ok'] else 'FAILED'} [{mode}] ({passed}/{total} galleries)")
+    if payload.get("clone_root") and args.keep_clones:
+        print(f"  clone root: {payload['clone_root']}")
     for g in payload["galleries"]:
         status = "OK" if g["ok"] else "FAIL"
         smoke = g.get("smoke") or {}
@@ -1395,6 +1512,9 @@ def main(argv=None) -> int:
     rp.add_argument("--path-needle", action="append",
                     help="extra machine-local path string to reject in tracked files")
     rp.add_argument("--allow-dirty", action="store_true", help="report dirty nested repos without failing")
+    rp.add_argument("--fresh-clone", action="store_true", help="clone each gallery first and preflight the clone")
+    rp.add_argument("--clone-root", help="directory for fresh-clone runs; a unique run-* directory is created inside")
+    rp.add_argument("--keep-clones", action="store_true", help="do not delete fresh-clone run directories")
     rp.add_argument("--no-smoke", action="store_true", help="skip per-app smoke checks")
     rp.add_argument("--json", action="store_true", help="emit machine-readable diagnostics")
     rp.set_defaults(func=cmd_release_preflight)

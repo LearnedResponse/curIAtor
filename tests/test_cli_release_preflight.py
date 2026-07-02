@@ -83,3 +83,45 @@ def test_release_preflight_flags_tracked_machine_paths(tmp_path, monkeypatch, ca
     payload = json.loads(capsys.readouterr().out)
     assert payload["ok"] is False
     assert payload["galleries"][0]["path_hits"][0]["file"] == "README.md"
+
+
+def test_release_preflight_can_check_a_fresh_clone(tmp_path, monkeypatch, capsys):
+    from curiator import cli
+
+    _make_gallery(tmp_path)
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("CURIATOR_GALLERY", raising=False)
+
+    assert cli.main([
+        "release-preflight",
+        "--gallery", "curiator-demo",
+        "--fresh-clone",
+        "--clone-root", "clones",
+        "--keep-clones",
+        "--json",
+    ]) == 0
+    payload = json.loads(capsys.readouterr().out)
+    gallery = payload["galleries"][0]
+    assert payload["checks"]["fresh_clone"] is True
+    assert Path(payload["clone_root"]).exists()
+    assert gallery["mode"] == "fresh-clone"
+    assert gallery["source_path"].endswith("galleries/curiator-demo")
+    assert gallery["path"].startswith(str(tmp_path / "clones"))
+    assert gallery["ok"] is True
+
+
+def test_release_preflight_fresh_clone_fails_dirty_source_by_default(tmp_path, monkeypatch, capsys):
+    from curiator import cli
+
+    repo = _make_gallery(tmp_path)
+    (repo / "apps" / "sample.py").write_text("app = object()\nVALUE = 2\n")
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("CURIATOR_GALLERY", raising=False)
+
+    assert cli.main(["release-preflight", "--gallery", "curiator-demo", "--fresh-clone", "--json"]) == 1
+    payload = json.loads(capsys.readouterr().out)
+    gallery = payload["galleries"][0]
+    assert payload["ok"] is False
+    assert gallery["mode"] == "fresh-clone"
+    assert gallery["dirty"]
+    assert "source repo is dirty" in gallery["error"]

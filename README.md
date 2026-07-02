@@ -119,7 +119,8 @@ git-as-memory commits as human-readable text, JSON, Markdown tables, or CSV rows
 moving a collection, `curiator doctor` flags machine-absolute paths, missing app roots/sources, weak
 smoke coverage, and suspicious proxy commands, then `curiator smoke` runs each app's configured smoke
 command. In this checkout, `curiator release-preflight` runs those checks across the nested public
-example galleries under `galleries/`.
+example galleries under `galleries/`; add `--fresh-clone` to verify the committed state survives a
+same-machine clone.
 
 Already inside an app repo with Claude Code or Codex? Link it once and use the same loop interactively:
 
