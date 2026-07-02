@@ -178,5 +178,6 @@ curiator smoke
 ```
 
 Then run the paper/release evidence commands from `docs/paper/reproducibility.md`, refresh the paper
-release evidence snapshot plus DOI metadata, and create/pin any public GitHub issues from
+release evidence snapshot, run `make paper-pdf`, review the generated
+`release-evidence/curiator-paper.pdf`, update DOI metadata, and create/pin any public GitHub issues from
 `docs/GOOD_FIRST_ISSUES.md` if new starter issues exist.

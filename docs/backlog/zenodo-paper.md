@@ -5,8 +5,8 @@
 > `curiator stats --output` / `curiator release-preflight --output` evidence snapshots have landed.
 > The public-collection publication blocker is cleared at the release-candidate heads; `make paper-stats`
 > now refreshes the paper table from the three published example collections. Paper/DOI publication work
-> is still blocked on the tagged release, Zenodo wiring, and PDF export. A citable software/systems paper,
-> self-archived on **Zenodo** with a DOI. Sequences last:
+> is still blocked on the tagged release, Zenodo wiring, and final PDF review/deposit. A citable
+> software/systems paper, self-archived on **Zenodo** with a DOI. Sequences last:
 > the three public collections are its evaluation, so [public-release](public-release.md) → the
 > collections → this.
 
@@ -71,9 +71,10 @@ the durable record of that conversation.
    and renderer have landed at `docs/paper/figures/ot-rainbow-before-after.png` and
    `docs/paper/figures/render_ot_before_after.py`. The related-work and acknowledgement draft
    placeholders have also been filled. The release-candidate case-study table has been refreshed from
-   `make paper-stats` after public-head preflight passed. Remaining paper work is tag-time evidence
-   refresh if needed, citation refresh, final acknowledgements, PDF export, and Zenodo deposit, not
-   missing draft prose or draft figures.
+   `make paper-stats` after public-head preflight passed, and `make paper-pdf` now exports the ignored
+   manuscript PDF under `release-evidence/` with Pandoc/XeLaTeX. Remaining paper work is tag-time
+   evidence refresh if needed, citation refresh, final acknowledgements, final PDF review, and Zenodo
+   deposit, not missing draft prose or draft figures.
 4. Deposit on Zenodo; DOI badge in the README; decide on the JOSS submission after.
 
 ## Guardrails

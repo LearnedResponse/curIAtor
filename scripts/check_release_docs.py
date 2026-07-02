@@ -92,6 +92,7 @@ def check_release_docs(root: Path = ROOT, *, strict_launch: bool = False) -> lis
         "release-evidence/release-preflight-optional.json",
         "release-evidence/case-study-stats.json",
         "make paper-stats",
+        "make paper-pdf",
     ]:
         if phrase not in release_text:
             failures.append(f"docs/RELEASE.md missing required phrase: {phrase}")
@@ -99,6 +100,7 @@ def check_release_docs(root: Path = ROOT, *, strict_launch: bool = False) -> lis
     for phrase in [
         "make release-evidence",
         "make paper-stats",
+        "make paper-pdf",
         "--output release-evidence/release-preflight.json",
         "--output release-evidence/release-preflight-optional.json",
         "--output release-evidence/case-study-stats.json",
@@ -107,6 +109,7 @@ def check_release_docs(root: Path = ROOT, *, strict_launch: bool = False) -> lis
             failures.append(f"docs/paper/reproducibility.md missing required phrase: {phrase}")
     for phrase in [
         "paper-stats:",
+        "paper-pdf:",
         "scripts/update_paper_stats.py",
     ]:
         if phrase not in makefile_text:

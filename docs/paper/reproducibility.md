@@ -14,6 +14,7 @@ for draft work:
 curiator release-preflight --fresh-clone
 make release-evidence
 make paper-stats
+make paper-pdf
 curiator release-preflight --fresh-clone --json --output release-evidence/release-preflight.json
 curiator release-preflight --include-optional --fresh-clone --json \
   --output release-evidence/release-preflight-optional.json
@@ -33,7 +34,9 @@ snapshots under the gitignored `release-evidence/` directory because they includ
 clone paths; commit only the portable Markdown/table excerpts that the paper actually cites.
 `make release-evidence` refreshes the standard local bundle under `release-evidence/`; `make
 paper-stats` reruns that bundle and refreshes the marked case-study stats block in
-`curiator-paper.md` from the generated Markdown table.
+`curiator-paper.md` from the generated Markdown table. `make paper-pdf` exports
+`release-evidence/curiator-paper.pdf` from the tracked Markdown draft with Pandoc/XeLaTeX; keep that
+PDF out of git and attach/review it as the Zenodo manuscript artifact.
 
 For per-collection appendix tables:
 

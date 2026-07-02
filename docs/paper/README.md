@@ -29,7 +29,7 @@ Release-time checklist:
    evidence set changes.
 6. Regenerate `figures/shell-feedback-panel.png` if the shell layout changes before release.
 7. Regenerate `figures/ot-rainbow-before-after.png` from the release OT collection commit.
-8. Build/export the PDF for Zenodo.
+8. Run `make paper-pdf` and review `release-evidence/curiator-paper.pdf` before Zenodo deposit.
 9. Add the Zenodo concept DOI to `CITATION.cff` and the README badge.
 
 `python scripts/check_release_docs.py --strict-launch` rejects release-time placeholders and the

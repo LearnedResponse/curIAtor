@@ -1,4 +1,4 @@
-.PHONY: install up watch serve demo demo-up demo-gif demo-capture annotation-dogfood narrated-dogfood release-prepare release-check release-launch-check release-evidence paper-stats reset-demo walkthrough test
+.PHONY: install up watch serve demo demo-up demo-gif demo-capture annotation-dogfood narrated-dogfood release-prepare release-check release-launch-check release-evidence paper-stats paper-pdf reset-demo walkthrough test
 install:        ## pip install -e . (editable)
 	pip install -e .
 up:             ## serve the gallery at http://127.0.0.1:8300
@@ -40,6 +40,9 @@ release-evidence:  ## write gitignored JSON/Markdown evidence snapshots under re
 	curiator stats compare galleries/curiator-aviato galleries/curiator-ot galleries/curiator-geometry --json --output release-evidence/case-study-stats.json
 paper-stats: release-evidence  ## refresh the companion paper's tracked case-study stats table
 	python scripts/update_paper_stats.py --stats-file release-evidence/case-study-stats.md
+paper-pdf:  ## export the companion paper PDF into ignored release-evidence/
+	mkdir -p release-evidence
+	pandoc docs/paper/curiator-paper.md --from markdown --pdf-engine=xelatex --resource-path=docs/paper:. --output release-evidence/curiator-paper.pdf
 reset-demo:     ## rewind for another take: re-break aviato, clear the ledger
 	curiator reset-demo
 walkthrough:    ## print the demo recording script

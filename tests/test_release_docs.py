@@ -96,17 +96,26 @@ def test_release_docs_requires_standard_release_evidence_commands(tmp_path):
         "docs/paper/reproducibility.md missing required phrase: "
         "make paper-stats"
     ) in failures
+    assert (
+        "docs/paper/reproducibility.md missing required phrase: "
+        "make paper-pdf"
+    ) in failures
 
 
-def test_release_docs_requires_paper_stats_target(tmp_path):
+def test_release_docs_requires_paper_targets(tmp_path):
     module = _load_script()
     _copy_release_doc_fixture(tmp_path)
     makefile = tmp_path / "Makefile"
-    makefile.write_text(makefile.read_text().replace("paper-stats:", "paper-stats-missing:"))
+    makefile.write_text(
+        makefile.read_text()
+        .replace("paper-stats:", "paper-stats-missing:")
+        .replace("paper-pdf:", "paper-pdf-missing:")
+    )
 
     failures = module.check_release_docs(tmp_path)
 
     assert "Makefile missing required phrase: paper-stats:" in failures
+    assert "Makefile missing required phrase: paper-pdf:" in failures
 
 
 def test_release_docs_requires_paper_stats_markers(tmp_path):
