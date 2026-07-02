@@ -70,7 +70,8 @@ All notable changes to curIAtor are documented here. The format follows
 - `curiator release-preflight` runs doctor/smoke/path checks across the nested public release
   collections, rejects tracked publish-unsafe runtime/auth artifacts such as local user stores, task
   traces, screenshots, SQLite sidecars, env files, and legacy JSON ledgers, and `--fresh-clone` repeats
-  those checks from temporary clones of the committed gallery histories.
+  those checks from temporary clones of the committed gallery histories; `--strict` makes doctor
+  warnings fail release publication gates, and `make release-check` uses that strict fresh-clone mode.
 - `curiator galleries` lists nested `galleries/curiator-*` collection repos with git head, dirty state,
   and the `CURIATOR_GALLERY=...` command for targeting one from the runner checkout; it now also reports
   legacy sibling `curiator-*` checkouts or aliases next to the runner so they can be adopted or archived.

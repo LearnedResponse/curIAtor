@@ -51,6 +51,53 @@ def test_release_preflight_checks_nested_gallery(tmp_path, monkeypatch, capsys):
     assert payload["galleries"][0]["smoke"]["ok"] is True
 
 
+def test_release_preflight_strict_fails_doctor_warnings(tmp_path, monkeypatch, capsys):
+    from curiator import cli
+
+    repo = _make_gallery(tmp_path)
+    (repo / "apps" / "sample").mkdir()
+    (repo / "apps" / "sample" / "index.html").write_text("<h1>Sample</h1>\n")
+    (repo / "gallery.yaml").write_text(textwrap.dedent("""\
+        apps:
+          - name: sample
+            title: Sample
+            root: apps/sample
+            source: .
+            mount: { kind: proxy, cmd: "python -m http.server {port}", port: 8899 }
+        runner:
+          mode: pinned
+        feedback:
+          dir: feedback
+        shell:
+          port: 8399
+    """))
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-q", "-m", "make proxy app warning-only")
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("CURIATOR_GALLERY", raising=False)
+
+    assert cli.main(["release-preflight", "--gallery", "curiator-demo", "--no-smoke", "--json"]) == 0
+    payload = json.loads(capsys.readouterr().out)
+    gallery = payload["galleries"][0]
+    assert payload["ok"] is True
+    assert payload["checks"]["strict"] is False
+    assert gallery["ok"] is True
+    assert gallery["doctor"]["errors"] == 0
+    assert gallery["doctor"]["warnings"] == 1
+
+    assert cli.main(["release-preflight", "--gallery", "curiator-demo", "--no-smoke", "--strict", "--json"]) == 1
+    payload = json.loads(capsys.readouterr().out)
+    gallery = payload["galleries"][0]
+    assert payload["ok"] is False
+    assert payload["checks"]["strict"] is True
+    assert gallery["ok"] is False
+    assert gallery["doctor"]["warnings"] == 1
+
+    assert cli.main(["release-preflight", "--gallery", "curiator-demo", "--no-smoke", "--strict"]) == 1
+    out = capsys.readouterr().out
+    assert "strict=true: doctor warnings block this gallery" in out
+
+
 def test_release_preflight_fails_dirty_gallery_by_default(tmp_path, monkeypatch, capsys):
     from curiator import cli
 

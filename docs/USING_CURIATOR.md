@@ -265,6 +265,7 @@ curiator smoke --app revenue --json
 curiator smoke --jobs 4 --json # run independent app checks concurrently, preserving report order
 curiator release-preflight     # nested public galleries + tracked publish-unsafe runtime/auth artifacts
 curiator release-preflight --fresh-clone
+curiator release-preflight --fresh-clone --strict  # fail on doctor warnings for publication gates
 curiator playground-preflight  # hosted pilot posture: auth, quotas, queue, doctor, smoke
 curiator playground-preflight --strict  # fail on warnings for CI/final pre-pilot gates
 make release-prepare VERSION=0.2.0 DATE=2026-07-02  # updates package, citation, Zenodo, changelog

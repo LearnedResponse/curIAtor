@@ -20,8 +20,8 @@ leave feedback → watch the fix land and the ⚙ reply arrive. Every item below
    app scaffolds, run traces, the interactive `link`/`work`/`done` workflow) as a tagged GitHub
    release. The release workflow builds/attaches artifacts and has a PyPI trusted-publishing job with
    a tag-vs-`pyproject.toml` version guard; `make release-check` now runs the local gate (lint, tests,
-   public-gallery fresh-clone preflight, demo GIF regeneration, package build, and `twine check`). Local
-   gate evidence from July 2, 2026: `make release-check` passed with 208 tests, public-gallery
+   strict public-gallery fresh-clone preflight, demo GIF regeneration, package build, and `twine check`). Local
+   gate evidence from July 2, 2026: `make release-check` passed with 209 tests, public-gallery
    fresh-clone preflight `3/3` with zero publish-artifact hits, regenerated `docs/demo.gif`, built
    sdist/wheel, and `twine check` passed both artifacts.
    Remaining external setup is configuring the PyPI Trusted Publisher, then running

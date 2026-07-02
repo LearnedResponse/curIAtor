@@ -1247,7 +1247,14 @@ def _empty_preflight_result(name: str, gallery: Path) -> dict:
     }
 
 
-def _release_preflight_one(gallery: Path, *, run_smoke: bool, allow_dirty: bool, needles: tuple[str, ...]) -> dict:
+def _release_preflight_one(
+    gallery: Path,
+    *,
+    run_smoke: bool,
+    allow_dirty: bool,
+    needles: tuple[str, ...],
+    strict: bool,
+) -> dict:
     repo = gallery.parent
     result = _empty_preflight_result(repo.name, gallery)
     if not gallery.exists():
@@ -1283,6 +1290,7 @@ def _release_preflight_one(gallery: Path, *, run_smoke: bool, allow_dirty: bool,
     result["ok"] = (
         not result.get("error")
         and result["doctor"]["ok"]
+        and (not strict or result["doctor"]["warnings"] == 0)
         and not result["path_hits"]
         and not result["publish_artifact_hits"]
         and (allow_dirty or not dirty)
@@ -1338,6 +1346,7 @@ def _release_preflight_payload_for_root(args) -> dict:
             run_smoke=not args.no_smoke,
             allow_dirty=args.allow_dirty,
             needles=needles,
+            strict=args.strict,
         )
         for name in names
     ]
@@ -1348,6 +1357,7 @@ def _release_preflight_payload_for_root(args) -> dict:
         "checks": {
             "smoke": not args.no_smoke,
             "allow_dirty": args.allow_dirty,
+            "strict": args.strict,
             "path_needles": list(needles),
         },
     }
@@ -1382,6 +1392,7 @@ def _release_preflight_payload_for_clones(args, clone_base: Path) -> dict:
             run_smoke=not args.no_smoke,
             allow_dirty=False,
             needles=needles,
+            strict=args.strict,
         )
         result.update({
             "mode": "fresh-clone",
@@ -1398,6 +1409,7 @@ def _release_preflight_payload_for_clones(args, clone_base: Path) -> dict:
         "checks": {
             "smoke": not args.no_smoke,
             "allow_dirty": args.allow_dirty,
+            "strict": args.strict,
             "fresh_clone": True,
             "path_needles": list(needles),
         },
@@ -1452,6 +1464,8 @@ def cmd_release_preflight(args) -> int:
             print(f"    error: {g['error']}")
         for issue in g["doctor"]["issues"]:
             print(f"    doctor {issue['severity'].upper()} {issue['where']}: {issue['message']}")
+        if payload.get("checks", {}).get("strict") and g["doctor"].get("warnings"):
+            print("    strict=true: doctor warnings block this gallery")
         for hit in g["path_hits"]:
             print(f"    path {hit['file']}:{hit['line']}: {hit['message']}")
         for hit in g.get("publish_artifact_hits") or []:
@@ -2992,6 +3006,7 @@ def main(argv=None) -> int:
     rp.add_argument("--clone-root", help="directory for fresh-clone runs; a unique run-* directory is created inside")
     rp.add_argument("--keep-clones", action="store_true", help="do not delete fresh-clone run directories")
     rp.add_argument("--no-smoke", action="store_true", help="skip per-app smoke checks")
+    rp.add_argument("--strict", action="store_true", help="fail when doctor warnings are present")
     rp.add_argument("--json", action="store_true", help="emit machine-readable diagnostics")
     rp.set_defaults(func=cmd_release_preflight)
     pp = sub.add_parser("playground-preflight", help="check hosted public-playground readiness")

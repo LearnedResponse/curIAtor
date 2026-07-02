@@ -19,7 +19,7 @@ release-check:  ## local release gate: lint, tests, demo gif, gallery preflight,
 	ruff check curiator tests scripts
 	pytest -q
 	python scripts/check_release_docs.py
-	curiator release-preflight --fresh-clone
+	curiator release-preflight --fresh-clone --strict
 	python scripts/render_demo_gif.py
 	python -m build
 	python -m twine check dist/*
