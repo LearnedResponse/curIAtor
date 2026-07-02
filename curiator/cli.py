@@ -2278,6 +2278,21 @@ def _playground_user_summary(cfg: dict) -> dict:
     }
 
 
+def _playground_oidc_summary(cfg: dict) -> dict:
+    auth_cfg = cfg.get("auth") or {}
+    raw_secret_env = auth_cfg.get("client_secret_env")
+    secret_env = str(raw_secret_env).strip() if raw_secret_env is not None else "CURIATOR_OIDC_SECRET"
+    issuer = str(auth_cfg.get("issuer") or "").strip()
+    client_id = str(auth_cfg.get("client_id") or "").strip()
+    return {
+        "issuer_configured": bool(issuer),
+        "client_id_configured": bool(client_id),
+        "client_secret_env": secret_env or None,
+        "client_secret_set": bool(secret_env and os.environ.get(secret_env)),
+        "scope": auth_cfg.get("scope") or "openid email profile",
+    }
+
+
 def _playground_preflight_issues(cfg: dict, user_summary: dict) -> list[dict]:
     issues: list[dict] = []
     runner = cfg.get("runner") or {}
@@ -2351,6 +2366,33 @@ def _playground_preflight_issues(cfg: dict, user_summary: dict) -> list[dict]:
                 "local-auth playgrounds need at least one active user in auth.admin_groups",
             ))
 
+    if auth_mode == "oidc":
+        oidc_summary = _playground_oidc_summary(cfg)
+        if not oidc_summary["issuer_configured"]:
+            issues.append(_playground_issue(
+                "error",
+                "auth.issuer",
+                "OIDC playgrounds need auth.issuer so curiator can discover the provider metadata",
+            ))
+        if not oidc_summary["client_id_configured"]:
+            issues.append(_playground_issue(
+                "error",
+                "auth.client_id",
+                "OIDC playgrounds need auth.client_id for the hosted client registration",
+            ))
+        if not oidc_summary["client_secret_env"]:
+            issues.append(_playground_issue(
+                "error",
+                "auth.client_secret_env",
+                "OIDC playgrounds need auth.client_secret_env or the default CURIATOR_OIDC_SECRET",
+            ))
+        elif not oidc_summary["client_secret_set"]:
+            issues.append(_playground_issue(
+                "error",
+                "auth.client_secret_env",
+                f"OIDC client secret env var {oidc_summary['client_secret_env']} must be set before hosted preflight can pass",
+            ))
+
     if auth_cfg.get("allow_anonymous"):
         if auth_mode not in {"local", "oidc"}:
             issues.append(_playground_issue(
@@ -2416,6 +2458,14 @@ def _playground_preflight_payload(args) -> dict:
     warnings = [i for i in issues if i.get("severity") == "warning"]
     strict = bool(getattr(args, "strict", False))
     strict_warnings = warnings + doctor_warnings
+    auth_cfg = cfg.get("auth") or {}
+    auth_payload = {
+        "mode": auth_cfg.get("mode"),
+        "allow_anonymous": bool(auth_cfg.get("allow_anonymous")),
+        "admin_groups": auth_cfg.get("admin_groups") or [],
+    }
+    if auth_payload["mode"] == "oidc":
+        auth_payload["oidc"] = _playground_oidc_summary(cfg)
     return {
         "ok": (
             not errors
@@ -2429,11 +2479,7 @@ def _playground_preflight_payload(args) -> dict:
             "http_smoke": bool(args.http_smoke),
         },
         "gallery": cfg.get("gallery_path"),
-        "auth": {
-            "mode": (cfg.get("auth") or {}).get("mode"),
-            "allow_anonymous": bool((cfg.get("auth") or {}).get("allow_anonymous")),
-            "admin_groups": (cfg.get("auth") or {}).get("admin_groups") or [],
-        },
+        "auth": auth_payload,
         "runner": {"mode": (cfg.get("runner") or {}).get("mode")},
         "git": {"commit": bool((cfg.get("git") or {}).get("commit"))},
         "agent": {

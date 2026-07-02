@@ -113,6 +113,8 @@ All notable changes to curIAtor are documented here. The format follows
 - Hosted local-auth preflight now rejects inline `auth.users` password hashes plus tracked, unignored,
   outside-root, or group/world-readable users files; `auth.users_file` must remain the gitignored
   owner-only credential store for public pilots.
+- Hosted OIDC preflight now rejects missing `auth.issuer`, missing `auth.client_id`, and unset
+  `auth.client_secret_env` variables, while reporting only secret presence in JSON evidence.
 - `auth.allow_anonymous: true` for `local`/`oidc` hosted galleries lets logged-out users leave feedback,
   but it is always recorded as `held`; logged-in users keep the normal dispatch path.
 - Anonymous hosted feedback is rate-limited per client IP with `auth.anonymous_feedback_max` and

@@ -328,6 +328,90 @@ def test_playground_preflight_rejects_inline_local_users(collection, capsys):
     assert "auth.users_file, not inline auth.users" in messages
 
 
+def test_playground_preflight_rejects_incomplete_oidc_config(collection, monkeypatch, capsys):
+    from curiator import cli
+
+    monkeypatch.delenv("CURIATOR_OIDC_SECRET", raising=False)
+    (collection / "gallery.yaml").write_text(textwrap.dedent("""\
+        apps:
+          - name: sample
+            title: Sample
+            mount: { kind: dash-inproc, module: sample }
+            source: apps/sample.py
+        runner:
+          mode: pinned
+        git:
+          commit: true
+        auth:
+          mode: oidc
+        agent:
+          autonomy: propose-only
+          dispatch:
+            trusted_groups: [trusted]
+          quotas:
+            per_user_daily: 3
+            global_daily: 25
+    """))
+
+    assert cli.main(["playground-preflight", "--no-smoke", "--json"]) == 1
+    payload = json.loads(capsys.readouterr().out)
+    messages = "\n".join(issue["message"] for issue in payload["issues"])
+    assert payload["auth"]["mode"] == "oidc"
+    assert payload["auth"]["oidc"]["issuer_configured"] is False
+    assert payload["auth"]["oidc"]["client_id_configured"] is False
+    assert payload["auth"]["oidc"]["client_secret_env"] == "CURIATOR_OIDC_SECRET"
+    assert payload["auth"]["oidc"]["client_secret_set"] is False
+    assert "auth.issuer" in "\n".join(issue["where"] for issue in payload["issues"])
+    assert "auth.client_id" in "\n".join(issue["where"] for issue in payload["issues"])
+    assert "OIDC client secret env var CURIATOR_OIDC_SECRET must be set" in messages
+
+
+def test_playground_preflight_accepts_complete_oidc_config(collection, monkeypatch, capsys):
+    from curiator import cli
+
+    monkeypatch.setenv("TEST_CURIATOR_OIDC_SECRET", "not-for-output")
+    (collection / "gallery.yaml").write_text(textwrap.dedent("""\
+        apps:
+          - name: sample
+            title: Sample
+            mount: { kind: dash-inproc, module: sample }
+            source: apps/sample.py
+        runner:
+          mode: pinned
+        git:
+          commit: true
+        auth:
+          mode: oidc
+          issuer: https://idp.example.test/realms/curiator
+          client_id: curiator-playground
+          client_secret_env: TEST_CURIATOR_OIDC_SECRET
+          admin_groups: [admin]
+          allow_anonymous: true
+        agent:
+          autonomy: propose-only
+          dispatch:
+            anonymous: hold
+            trusted_groups: [trusted]
+          quotas:
+            per_user_daily: 3
+            global_daily: 25
+    """))
+
+    assert cli.main(["playground-preflight", "--no-smoke", "--json"]) == 0
+    payload_text = capsys.readouterr().out
+    payload = json.loads(payload_text)
+    assert payload["ok"] is True
+    assert payload["auth"]["allow_anonymous"] is True
+    assert payload["auth"]["oidc"] == {
+        "issuer_configured": True,
+        "client_id_configured": True,
+        "client_secret_env": "TEST_CURIATOR_OIDC_SECRET",
+        "client_secret_set": True,
+        "scope": "openid email profile",
+    }
+    assert "not-for-output" not in payload_text
+
+
 def test_playground_preflight_can_run_http_smoke(collection, monkeypatch, capsys):
     from curiator import auth, cli
 

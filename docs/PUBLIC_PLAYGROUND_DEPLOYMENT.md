@@ -39,13 +39,14 @@ curiator release-preflight --gallery curiator-geometry --fresh-clone
 ```
 
 `curiator playground-preflight` is the hosted-posture gate: it combines `doctor`/`smoke` with checks
-for `runner.mode: pinned`, `git.commit: true`, sign-in, local invite/admin readiness, anonymous-held
-policy, dispatch quotas, and the current held queue count. It does not replace a real hosted pilot or
-backup-restore test. Use `--strict` for CI or the final pre-pilot check; it keeps warnings visible as
-warnings but makes any posture or doctor warning fail the command. Use `--http-smoke` when app
-dependencies are installed in the mounted collection and you want the gate to start proxy apps briefly
-and poll their configured HTTP smoke paths or default app URLs. Use `--output` to write the full JSON
-posture report under gitignored `release-evidence/` for pre-pilot review notes.
+for `runner.mode: pinned`, `git.commit: true`, sign-in, local invite/admin readiness, OIDC
+issuer/client/secret-env readiness, anonymous-held policy, dispatch quotas, and the current held queue
+count. It does not replace a real hosted pilot or backup-restore test. Use `--strict` for CI or the
+final pre-pilot check; it keeps warnings visible as warnings but makes any posture or doctor warning
+fail the command. Use `--http-smoke` when app dependencies are installed in the mounted collection and
+you want the gate to start proxy apps briefly and poll their configured HTTP smoke paths or default app
+URLs. Use `--output` to write the full JSON posture report under gitignored `release-evidence/` for
+pre-pilot review notes.
 
 ## 2. Gate feedback behind sign-in
 
@@ -79,6 +80,26 @@ For `auth.mode: local`, keep password hashes in the gitignored `auth.users_file`
 writes the file with owner-only permissions, and `curiator playground-preflight` rejects hosted-local
 configs whose users file is tracked by git, not ignored, outside the collection root, or
 group/world-readable.
+
+Minimal OIDC configuration:
+
+```yaml
+auth:
+  mode: oidc
+  issuer: https://idp.example.test/realms/curiator
+  client_id: curiator-playground
+  client_secret_env: CURIATOR_OIDC_SECRET
+```
+
+Set the secret in the shell/container environment before running the gate:
+
+```bash
+export CURIATOR_OIDC_SECRET=...
+curiator playground-preflight --strict
+```
+
+The JSON report records whether `issuer`, `client_id`, and the named secret env var are configured,
+but it does not include the secret value.
 
 Do not enable `auth.allow_anonymous` for phase 0 unless a human is actively reviewing the held queue.
 Anonymous public feedback is never allowed to dispatch directly, but it still creates moderation work.

@@ -374,7 +374,19 @@ curiator up        # click the account corner (top-right) → "Log in" → the b
 
 Passwords are stored only as **hashes** (`werkzeug`) in a gitignored `.curiator-users.json` (perms `600`)
 — no plaintext, no extra dependency. The `header` / `oidc` settings live in the same `auth:` block; see
-the `gallery.yaml` comments. `oidc` needs the `[oidc]` extra (`pip install 'curiator[oidc]'`).
+the `gallery.yaml` comments. `oidc` needs the `[oidc]` extra (`pip install 'curiator[oidc]'`) and a
+provider/client config whose secret comes from the environment:
+
+```yaml
+auth:
+  mode: oidc
+  issuer: https://idp.example.test/realms/curiator
+  client_id: curiator-playground
+  client_secret_env: CURIATOR_OIDC_SECRET
+```
+
+`curiator playground-preflight` verifies those OIDC launch fields and records only whether the named
+secret env var is set, not the secret value.
 
 For a hosted gallery where logged-out visitors may leave feedback, keep sign-in enabled and opt into
 held anonymous intake:

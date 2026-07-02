@@ -19,7 +19,9 @@
 > teaches us what hosted moderation actually costs.
 > Local-auth hosted preflight now also rejects inline `auth.users` password hashes plus tracked,
 > unignored, outside-root, or group/world-readable `.curiator-users.json` files, keeping invite
-> credentials in the gitignored owner-only store.
+> credentials in the gitignored owner-only store. OIDC hosted preflight now also rejects missing
+> `auth.issuer`, `auth.client_id`, and unset `auth.client_secret_env` secret variables while keeping
+> secret values out of the JSON evidence report.
 
 ## The idea
 
