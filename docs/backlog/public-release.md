@@ -2,8 +2,7 @@
 
 > **Status:** release infrastructure started 2026-07-01. The decision: release curIAtor externally on
 > GitHub as v0.2.x with **three public example collections** — `curiator-aviato` (mixed frameworks,
-> local and same-machine temp-clone portability preflights now pass; off-machine fresh-clone gate
-> remains), `curiator-ot`
+> local, same-machine temp-clone portability, and published-head preflights now pass), `curiator-ot`
 > ([the OT/HMI flagship](ot-hmi-demo.md), scaffolded in `galleries/curiator-ot`), and a
 > [math/geometry explainer collection](math-geometry-collection.md) (scaffolded in `galleries/curiator-geometry`) — plus a Zenodo-archived,
 > DOI-citable release and a companion paper ([zenodo-paper](zenodo-paper.md)).
@@ -27,9 +26,11 @@ leave feedback → watch the fix land and the ⚙ reply arrive. Every item below
    `docs/demo.gif`, built sdist/wheel, and `twine check` passed both artifacts. The final local launch
    gate, `make release-launch-check`, also passed: strict release docs were clean and required plus
    optional public-shaped galleries passed fresh-clone preflight `5/5`. Release metadata is cut locally
-   for `0.2.0` / `2026-07-02` via `make release-prepare`. Remaining external setup is configuring the
-   PyPI Trusted Publisher, publishing/pushing the example collection repositories, enabling
-   GitHub-to-Zenodo, and pushing the matching `v0.2.0` tag.
+   for `0.2.0` / `2026-07-02` via `make release-prepare`. Public collection publication is now
+   verified for the required three and optional public-shaped collections by the published-head gate.
+   Remaining external setup is pushing the runner repo's release-candidate commits (`origin/main` was
+   still `1d18093` while local `HEAD` was `6cfcd99` on the 2026-07-02 check), configuring the PyPI
+   Trusted Publisher, enabling GitHub-to-Zenodo, and pushing the matching `v0.2.0` tag.
 2. **The hero `docs/demo.gif`** (absorbs the old M3) — done locally. The README now has a committed
    Brave-rendered browser capture at this path, produced by `make demo-capture`: a temporary gallery
    loads the broken `aviato`, feedback plus captured view appears in the rail, the thread moves through
@@ -59,12 +60,13 @@ leave feedback → watch the fix land and the ⚙ reply arrive. Every item below
    release-preflight --fresh-clone` repeats the same gate from temporary clones of the committed
    gallery histories, and `--http-smoke` can add the proxy process + HTTP response check when the app
    dependencies are installed in the tree being checked. `--output <path>` writes the JSON payload as
-   a release/paper evidence artifact. Remaining release work is publishing the example repos, then
-   proving a fresh clone on a machine that isn't this one can run the loop with the released package.
+   a release/paper evidence artifact. The example repos are published at their intended release heads;
+   remaining release work is pushing/tagging the runner and proving a fresh clone on a machine that
+   isn't this one can run the loop with the released package.
 4. **Publish the three example collections** as public sibling repos, each linked from the README's
    Examples section. README links are prepared for `LearnedResponse/curiator-aviato`,
-   `LearnedResponse/curiator-ot`, and `LearnedResponse/curiator-geometry`; publication and
-   fresh-clone verification remain. Sanitize machine paths and anything private, but **keep the feedback→fix
+   `LearnedResponse/curiator-ot`, and `LearnedResponse/curiator-geometry`; their release-candidate
+   heads are now present on those public origins. Sanitize machine paths and anything private, but **keep the feedback→fix
    commits** — the ledger and the git log *are* the demo; a laundered squeaky-clean history shows
    nothing. `curiator-geometry` now has seven public Dash/Plotly apps (including two algebraic-geometry
    explainers filtered from 4+ star Kwisatz taste signals), one completed convex-hull feedback→fix cycle
@@ -81,7 +83,11 @@ leave feedback → watch the fix land and the ⚙ reply arrive. Every item below
    `curiator-phylogenetics` is also a verified paper-linked optional collection at `b1b3586`. To check
    the minimum set plus these optional public-shaped collections, run
    `curiator release-preflight --include-optional --fresh-clone --strict`. The three above remain the
-   minimum release set unless scope expands.
+   minimum release set unless scope expands. On 2026-07-02,
+   `curiator release-preflight --include-optional --fresh-clone --strict --require-public-remotes
+   --require-published-head` passed for all five public-shaped galleries: required
+   `curiator-aviato@3719ac9`, `curiator-ot@36e21cf`, `curiator-geometry@30bb155`, plus optional
+   `curiator-finance@d6270bd` and `curiator-phylogenetics@b1b3586`.
 5. **SECURITY.md — reviewed against current defaults; re-read once at release cut.** The product auto-runs a coding agent against
    feedback text. The first policy now states: one-container-per-collection as the blast-radius unit,
    the autonomy dial, group-gated elevated profiles, dispatch quotas/trusted dispatch groups as admission
@@ -110,7 +116,8 @@ Local publication-prep gate: `curiator release-preflight --fresh-clone --strict
 offline; it proves the local repos are wired to the intended public destinations but does not create or
 push the GitHub repositories. After the repositories are pushed,
 `curiator release-preflight --fresh-clone --strict --require-public-remotes --require-published-head`
-proves each required gallery's exact release-candidate HEAD is present on its origin.
+proves each required gallery's exact release-candidate HEAD is present on its origin; this now passes
+for the required release set.
 
 ## Guardrails
 
