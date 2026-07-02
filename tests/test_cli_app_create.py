@@ -139,6 +139,31 @@ def test_app_create_streamlit_proxy_template(collection):
     assert app["tags"] == ["streamlit"]
 
 
+def test_app_create_gradio_proxy_template(collection):
+    from curiator import cli
+
+    assert cli.main(["app", "create", "demo_gradio", "--template", "gradio"]) == 0
+
+    root = collection / "apps" / "demo_gradio"
+    assert (root / "app.py").exists()
+    assert (root / "requirements.txt").read_text() == "gradio>=4.44\n"
+    app_py = (root / "app.py").read_text()
+    assert "root_path=args.root_path or None" in app_py
+    assert "server_name=\"127.0.0.1\"" in app_py
+    readme = (root / "README.md").read_text()
+    assert "--root-path /app/demo_gradio" in readme
+    assert "preserve_prefix: true" in readme
+
+    data = _gallery(collection)
+    app = next(a for a in data["apps"] if a["name"] == "demo_gradio")
+    assert app["mount"]["kind"] == "proxy"
+    assert app["mount"]["port"] == 8700
+    assert app["mount"]["preserve_prefix"] is True
+    assert "python app.py --port 8700 --root-path /app/{app}" == app["mount"]["cmd"]
+    assert app["smoke"] == "python -m py_compile app.py"
+    assert app["tags"] == ["gradio"]
+
+
 def test_app_create_rejects_duplicate_or_invalid_name(collection):
     from curiator import cli
 

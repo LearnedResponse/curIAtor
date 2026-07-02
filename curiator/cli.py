@@ -1804,6 +1804,17 @@ def _gallery_entry(
             f"    mount: {{ kind: proxy, cmd: \"{serve}\", port: {port} }}\n"
             f"    tags: {_yaml_list(tags)}\n"
         )
+    if template == "gradio":
+        return (
+            f"  - name: {name}\n"
+            f"    title: {json.dumps(title)}\n"
+            f"    root: {root}\n"
+            f"    source: .\n"
+            f"    smoke: python -m py_compile app.py\n"
+            f"    mount: {{ kind: proxy, cmd: \"python app.py --port {port} --root-path /app/{{app}}\", "
+            f"port: {port}, preserve_prefix: true }}\n"
+            f"    tags: {_yaml_list(tags)}\n"
+        )
     if template == "streamlit":
         return (
             f"  - name: {name}\n"
@@ -1845,6 +1856,9 @@ def _app_template_files(name: str, template: str, title: str, package_manager: s
     if template == "streamlit":
         return {rel: content.format(name=name, title=title, title_json=json.dumps(title))
                 for rel, content in _APP_STREAMLIT_TEMPLATE.items()}
+    if template == "gradio":
+        return {rel: content.format(name=name, title=title, title_json=json.dumps(title))
+                for rel, content in _APP_GRADIO_TEMPLATE.items()}
     return {"server.py": _APP_PYTHON_TEMPLATE.format(name=name, title=title)}
 
 
@@ -1866,7 +1880,7 @@ def cmd_app_create(args) -> int:
         return 1
     title = args.title or _title_from_name(name)
     tags = _tags_arg(args.tags, template)
-    proxy_templates = {"static", "python", "react", "svelte", "vue", "streamlit"}
+    proxy_templates = {"static", "python", "react", "svelte", "vue", "streamlit", "gradio"}
     port = args.port if args.port is not None else (_next_proxy_port(cfg) if template in proxy_templates else None)
     package_manager = _resolve_package_manager(repo, args.package_manager) if template in {"react", "svelte", "vue"} else "npm"
 
@@ -2008,22 +2022,22 @@ def main(argv=None) -> int:
     app_sub = app.add_subparsers(dest="action", required=True)
     ac = app_sub.add_parser("create", help="scaffold an app directory and add it to gallery.yaml")
     ac.add_argument("name", help="app key, e.g. orange_picker")
-    ac.add_argument("--template", choices=["dash", "static", "python", "react", "svelte", "vue", "streamlit"], default="dash",
+    ac.add_argument("--template", choices=["dash", "static", "python", "react", "svelte", "vue", "streamlit", "gradio"], default="dash",
                     help="scaffold template (default: dash)")
     ac.add_argument("--title", help="display title")
     ac.add_argument("--tags", help="comma-separated tags; default is the template name")
-    ac.add_argument("--port", type=int, help="proxy port for static/python/react/svelte/vue/streamlit templates")
+    ac.add_argument("--port", type=int, help="proxy port for static/python/react/svelte/vue/streamlit/gradio templates")
     ac.add_argument("--package-manager", choices=["auto", *_JS_PACKAGE_MANAGERS], default="auto",
                     help="JS package manager for react/svelte/vue templates (default: auto)")
     ac.add_argument("--force", action="store_true", help="allow an existing apps/<name> directory")
     ac.set_defaults(func=cmd_app_create)
     ia = sub.add_parser("init-app", help="alias for `curiator app create`")
     ia.add_argument("name", help="app key, e.g. orange_picker")
-    ia.add_argument("--template", choices=["dash", "static", "python", "react", "svelte", "vue", "streamlit"], default="dash",
+    ia.add_argument("--template", choices=["dash", "static", "python", "react", "svelte", "vue", "streamlit", "gradio"], default="dash",
                     help="scaffold template (default: dash)")
     ia.add_argument("--title", help="display title")
     ia.add_argument("--tags", help="comma-separated tags; default is the template name")
-    ia.add_argument("--port", type=int, help="proxy port for static/python/react/svelte/vue/streamlit templates")
+    ia.add_argument("--port", type=int, help="proxy port for static/python/react/svelte/vue/streamlit/gradio templates")
     ia.add_argument("--package-manager", choices=["auto", *_JS_PACKAGE_MANAGERS], default="auto",
                     help="JS package manager for react/svelte/vue templates (default: auto)")
     ia.add_argument("--force", action="store_true", help="allow an existing apps/<name> directory")
@@ -2181,9 +2195,9 @@ Use the scaffold command; it creates `apps/<name>/` and updates `gallery.yaml`:
 
     curiator app create revenue --template dash --title "Revenue dashboard"
 
-Templates: `dash`, `static`, `python`, `react`, `svelte`, `vue`, `streamlit`. React/Svelte/Vue use Vite behind a
-same-origin proxy mount and can auto-detect npm/pnpm/yarn/bun; Streamlit uses its `baseUrlPath` option
-plus a prefix-preserving proxy mount.
+Templates: `dash`, `static`, `python`, `react`, `svelte`, `vue`, `streamlit`, `gradio`.
+React/Svelte/Vue use Vite behind a same-origin proxy mount and can auto-detect npm/pnpm/yarn/bun;
+Streamlit and Gradio use prefix-preserving proxy mounts.
 You can still edit `gallery.yaml` manually for existing apps.
 
 See the consumer guide: https://github.com/LearnedResponse/curiator/blob/main/docs/USING_CURIATOR.md
@@ -2763,6 +2777,86 @@ curIAtor sets `preserve_prefix: true` for this proxy mount so Streamlit receives
 `/app/{name}/`. The built-in curIAtor proxy is intentionally lightweight; if a Streamlit component needs
 WebSocket or production reverse-proxy behavior beyond this local scaffold, keep this app directory and
 put nginx, Caddy, or another full reverse proxy in front of the same command.
+
+The scaffold smoke test is:
+
+```bash
+python -m py_compile app.py
+```
+""",
+}
+
+_APP_GRADIO_TEMPLATE = {
+    "app.py": '''\
+"""Gradio app scaffold generated by `curiator app create {name} --template gradio`."""
+from __future__ import annotations
+
+import argparse
+
+import gradio as gr
+
+TITLE = {title_json}
+
+
+def respond(prompt: str) -> str:
+    prompt = (prompt or "").strip()
+    if not prompt:
+        return "Add a prompt, then use the curIAtor feedback rail to shape this prototype."
+    return f"Prototype response for: {{prompt}}"
+
+
+with gr.Blocks(title=TITLE) as demo:
+    gr.Markdown(f"# {{TITLE}}")
+    gr.Markdown("curIAtor Gradio scaffold served through a same-origin proxy mount.")
+    prompt = gr.Textbox(label="Prompt", placeholder="What should this prototype answer?")
+    output = gr.Textbox(label="Output", interactive=False)
+    run = gr.Button("Run")
+    run.click(respond, inputs=prompt, outputs=output)
+    prompt.submit(respond, inputs=prompt, outputs=output)
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--port", type=int, default=7860)
+    parser.add_argument("--root-path", default="")
+    args = parser.parse_args()
+    demo.launch(
+        server_name="127.0.0.1",
+        server_port=args.port,
+        root_path=args.root_path or None,
+        share=False,
+    )
+
+
+if __name__ == "__main__":
+    main()
+''',
+    "requirements.txt": """\
+gradio>=4.44
+""",
+    "README.md": """\
+# {title}
+
+This Gradio app was scaffolded by curIAtor.
+
+Run it through the gallery:
+
+```bash
+pip install -r requirements.txt
+curiator up
+```
+
+The generated `gallery.yaml` entry runs:
+
+```bash
+python app.py --port <port> --root-path /app/{name}
+```
+
+curIAtor sets `preserve_prefix: true` for this proxy mount so Gradio receives paths under
+`/app/{name}/` and can build URLs with the matching `root_path`. The built-in curIAtor proxy is
+intentionally lightweight; if a Gradio component needs production reverse-proxy behavior beyond this
+local scaffold, keep this app directory and put nginx, Caddy, or another full reverse proxy in front
+of the same command.
 
 The scaffold smoke test is:
 
