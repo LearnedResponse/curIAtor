@@ -1,11 +1,11 @@
-# Backlog
+# Backlog — public roadmap
 
-Scoped-but-not-started ideas and work-orders. Each is a candidate, not a commitment; sequencing is
-deliberate (ship, let the example demos surface what to prioritize).
+Scoped-but-not-started ideas and work-orders for the public curiator product. Each is a candidate, not a
+commitment; sequencing is deliberate (ship, let the example demos surface what to prioritize).
 
-When a work-order is **fully delivered and verified**, retire it: move its file to
-[`completed/`](completed/) and its index line to the **## Shipped** list below. Retiring is a
-deliberate act — the mechanism that keeps done work from sitting next to unstarted work forever.
+> Internal planning (product-direction/moat thinking, engineering refactors, strategy) lives in the
+> **private `curiator-planning` repo**, surfaced to the loop as `.planning/` when present. This file is
+> the public half — the release track and example collections.
 
 ## The release track (in order)
 
@@ -44,35 +44,3 @@ deliberate act — the mechanism that keeps done work from sitting next to unsta
   Dash explorer **and a working Pyodide static port**. A domain-specialized sibling of
   `math-geometry-collection` for the phylo-networks community; first client-side-WASM-compute collection;
   the full eight-item seeded feedback loop is complete through `b1b3586`, and it ships with the paper's outreach.
-- [**annotated-feedback**](annotated-feedback.md) — **core landed**: captured screenshots can be marked
-  up with boxes, arrows, pins, redactions, and per-mark notes; marks burn into the PNG, structured
-  annotation metadata rides through the ledger/task bundle, and the React shell records same-origin DOM
-  targets only for same-origin captures. A reproducible Brave dogfood check now covers
-  capture/draw/save/task-bundle; signed-in reviewers also have a browser-native capture fallback for
-  canvas/WebGL fidelity cases.
-- [**voice-feedback**](voice-feedback.md) — talk through the fix instead of typing it. Three tiers
-  (OS dictation / Web Speech / local Whisper), where the **privacy moat** picks **local Whisper as the
-  default** (on-device, works on Linux, zero egress). North star: **"narrated feedback"** — voice +
-  annotation on a *shared clock*, so a review becomes an ordered, intent-per-mark tour the agent
-  follows. Composes with `annotated-feedback`; accessibility wins for motor/low-vision (voice +
-  DOM-target snapping). Tier 0 dictation is documented; local transcription is command-backed and
-  `curiator voice setup` configures the packaged faster-whisper adapter; explicit public/hosted Web
-  Speech opt-in is available; recording mode aligns
-  annotation marks and transcript segments to one clock, and timed marks with overlapping speech render
-  as persisted `narrative` rows, an ordered `Narrated feedback` task-bundle block, compact prior-feedback summary, and
-  transcript-timed annotation replay, with opt-in retained-audio replay for collections that choose to
-  keep local clips.
-
-## Engineering / health
-
-- [**cli-modularization**](cli-modularization.md) — shrink the **5,259-line `curiator/cli.py`** one
-  command group at a time. First seams landed by moving `curiator voice` into
-  `curiator/voice/cli.py`, `curiator user|auth` into `curiator/auth_cli.py`, and `curiator stats` into
-  `curiator/stats_cli.py`; the rest stays incremental, behavior-preserving, and `test_cli_*`-gated
-  until a final `curiator/cli/` package cut-over is safe.
-
-## Shipped
-
-Fully-delivered work-orders, retired to [`completed/`](completed/) for provenance. See that folder's
-README for the retirement convention. _(None yet — items above are in-flight or "core landed" with open
-follow-ons.)_

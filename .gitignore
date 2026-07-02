@@ -26,3 +26,6 @@ docs/demo.gif
 
 # local release/paper evidence snapshots may include machine-local clone paths
 release-evidence/
+
+# private planning repo (curiator-planning) as a nested subrepo, like galleries/curiator-*; never ships
+/.planning

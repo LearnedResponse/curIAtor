@@ -44,7 +44,8 @@ examples/dash/                # 3 demo apps; `aviato` is DELIBERATELY broken (th
 feedback/                     # runtime state, ALL gitignored: SQLite ledger + shots/ + tasks/ + replies/
 tests/                        # pytest suite; conftest builds a throwaway git collection in tmp
 .github/workflows/            # CI (pytest matrix + ruff + DCO) and release
-docs/                         # DESIGN, USING_CURIATOR, DEMO_SCRIPT, EXTRACTION_SCOPE, backlog/
+docs/                         # DESIGN, USING_CURIATOR, DEMO_SCRIPT, EXTRACTION_SCOPE, backlog/ (public roadmap)
+.planning/                    # private curiator-planning repo — nested subrepo like galleries/ (gitignored): internal backlog/audits/strategy
 ```
 
 ## Run it
@@ -72,9 +73,11 @@ Real collections dogfooding it (nested repos under `galleries/`, ignored by the 
 - `galleries/curiator-geometry` — public-knowledge math/geometry quickstart collection.
 - `galleries/curiator-Kwisatz` — the original private research repo with curIAtor overlaid: 63 generated `dash-inproc` apps.
 
-The backlog (`docs/backlog/`) is now organized around a **public release track**: GitHub release v0.2.x
-with three public example collections (aviato, OT/HMI, math/geometry) + Zenodo DOI + a companion paper.
-See `docs/backlog/README.md` for sequencing.
+The public backlog (`docs/backlog/`) is the **public release track**: GitHub release v0.2.x with three
+public example collections (aviato, OT/HMI, math/geometry) + Zenodo DOI + a companion paper. See
+`docs/backlog/README.md` for sequencing. **Internal** planning (product direction, engineering refactors,
+strategy, audits) lives in the private `curiator-planning` repo, checked out as a nested subrepo (like
+`galleries/`) at the gitignored `.planning/` — read internal work-orders from `.planning/backlog/`.
 
 ## Conventions / guardrails
 
