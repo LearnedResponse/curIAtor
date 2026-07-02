@@ -60,11 +60,14 @@ Two tiers, and the second is the one only curiator can do:
    normalized coordinates plus optional target metadata alongside the burned PNG; redaction marks
    intentionally omit targets.
 3. **A small "Annotations" block in the task bundle** — landed for app, General collection, and runner
-   feedback bundles, e.g.
+   feedback bundles, including optional per-mark notes, e.g.
    *"① box → `#revenue-chart .recharts-legend`: too cramped."* Agent gets the marked image
    **and** the code anchor.
-4. **Per-pin comment lines** — follow-on: numbered pins ↔ optional line-level notes in the feedback UI.
-5. **Graceful fallback.** Same-origin only (already the screenshot moat's requirement); for
+4. **Per-mark note lines** — first pass landed: every mark gets a compact optional note input, and
+   non-empty notes ride with the structured annotation into the ledger/task bundle.
+5. **Richer annotation replay** — follow-on: preserve an editable/replayable overlay view for reviewers
+   rather than only the burned PNG plus task-bundle text.
+6. **Graceful fallback.** Same-origin only (already the screenshot moat's requirement); for
    a cross-origin proxy iframe, fall back to burn-in-only for that mount.
 
 ## Guardrails

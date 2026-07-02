@@ -85,6 +85,8 @@ def test_react_shell_has_burned_screenshot_annotations(web_client):
     assert "function withDomTarget" in js
     assert "function selectorFor" in js
     assert "annotations: screenshot ? annotations : []" in js
+    assert "rshell-annotation-note" in js
+    assert "annotation note " in js
     assert "shotSource" in js
     assert 'setShotSource("capture")' in js
     assert 'setShotSource("upload")' in js
@@ -92,6 +94,7 @@ def test_react_shell_has_burned_screenshot_annotations(web_client):
     assert "tool === \"redact\"" in js
     assert "anonymousHeld ? null" in js
     assert "rshell-annotation-canvas" in css
+    assert ".rshell-annotation-note input" in css
     assert "touch-action: none" in css
 
 
@@ -281,6 +284,7 @@ def test_react_shell_feedback_api_stores_sanitized_annotations(web_client):
                 "y1": 0.2,
                 "x2": 0.9,
                 "y2": 2,
+                "note": "  legend   overlaps\nchart  ",
                 "target": {
                     "selector": "#chart .legend",
                     "tag": "div",
@@ -291,7 +295,8 @@ def test_react_shell_feedback_api_stores_sanitized_annotations(web_client):
                     "text": "not stored",
                 },
             },
-            {"tool": "redact", "x1": 0.1, "y1": 0.1, "x2": 0.2, "y2": 0.2, "target": {"selector": "#secret"}},
+            {"tool": "redact", "x1": 0.1, "y1": 0.1, "x2": 0.2, "y2": 0.2,
+             "note": "private value", "target": {"selector": "#secret"}},
             {"tool": "unknown", "x1": 0.1, "y1": 0.1},
         ],
     })
@@ -299,9 +304,11 @@ def test_react_shell_feedback_api_stores_sanitized_annotations(web_client):
     annotations = r.get_json()["entry"]["annotations"]
     assert len(annotations) == 2
     assert annotations[0]["x1"] == 0.0 and annotations[0]["y2"] == 1.0
+    assert annotations[0]["note"] == "legend overlaps chart"
     assert annotations[0]["target"]["selector"] == "#chart .legend"
     assert annotations[0]["target"]["classes"] == ["plot", "legend", "extra", "ignored", "last"]
     assert "text" not in annotations[0]["target"]
+    assert annotations[1]["note"] == "private value"
     assert "target" not in annotations[1]
 
 

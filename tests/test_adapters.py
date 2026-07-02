@@ -42,9 +42,11 @@ def test_app_bundle_includes_screenshot_annotations(cfg):
                 "x1": 0.25,
                 "y1": 0.4,
                 "n": 1,
+                "note": "legend overlaps chart",
                 "target": {"selector": "#chart .legend", "tag": "div", "data_testid": "legend"},
             },
-            {"tool": "redact", "x1": 0.1, "y1": 0.1, "x2": 0.2, "y2": 0.2, "target": {"selector": "#secret"}},
+            {"tool": "redact", "x1": 0.1, "y1": 0.1, "x2": 0.2, "y2": 0.2,
+             "note": "token hidden", "target": {"selector": "#secret"}},
         ],
     )
 
@@ -52,7 +54,9 @@ def test_app_bundle_includes_screenshot_annotations(cfg):
     assert "## Screenshot annotations" in body
     assert "pin 1: `pin` at x1=0.250, y1=0.400 -> selector `#chart .legend`" in body
     assert "data-testid `legend`" in body
+    assert "legend overlaps chart" in body
     assert "target omitted for redaction" in body
+    assert "token hidden" in body
     assert "#secret" not in body
 
 

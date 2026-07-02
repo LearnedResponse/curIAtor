@@ -475,6 +475,9 @@ def _clean_annotations(raw) -> list[dict]:
                 mark["n"] = max(1, min(99, int(item.get("n") or 1)))
             except (TypeError, ValueError):
                 mark["n"] = 1
+        note = _short_text(item.get("note"), 500)
+        if note:
+            mark["note"] = " ".join(note.split())
         if tool != "redact" and isinstance(item.get("target"), dict):
             target = item["target"]
             clean_target: dict = {}

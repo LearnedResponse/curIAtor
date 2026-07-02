@@ -263,6 +263,18 @@
       setAnnotations(annotations.concat([annotate ? annotate(mark) : mark]));
     }
 
+    function markLabel(mark, idx) {
+      if (mark.tool === "pin") return String(mark.n || idx + 1);
+      if (mark.tool === "box") return "□" + (idx + 1);
+      if (mark.tool === "arrow") return "↗" + (idx + 1);
+      if (mark.tool === "redact") return "█" + (idx + 1);
+      return String(idx + 1);
+    }
+
+    function note(idx, value) {
+      setAnnotations(annotations.map((mark, i) => i === idx ? Object.assign({}, mark, {note: value}) : mark));
+    }
+
     const tools = [["box", "□"], ["arrow", "↗"], ["pin", "①"], ["redact", "█"]];
     return h("div", {className: "rshell-annotator"},
       h("div", {className: "rshell-annotation-toolbar"},
@@ -276,7 +288,13 @@
       h("div", {className: "rshell-annotation-stage"},
         h("img", {ref: imageRef, src: image, onLoad: redraw, style: {display: "none"}, alt: ""}),
         h("canvas", {ref: canvasRef, className: "rshell-annotation-canvas",
-          onPointerDown: down, onPointerMove: move, onPointerUp: up, onPointerCancel: () => setDraft(null)})));
+          onPointerDown: down, onPointerMove: move, onPointerUp: up, onPointerCancel: () => setDraft(null)})),
+      annotations.length ? h("div", {className: "rshell-annotation-notes"},
+        annotations.map((mark, idx) => h("label", {className: "rshell-annotation-note", key: idx},
+          h("span", null, markLabel(mark, idx)),
+          h("input", {value: mark.note || "", maxLength: 500, placeholder: "note…",
+            "aria-label": "annotation note " + markLabel(mark, idx),
+            onChange: (e) => note(idx, e.target.value)})))) : null);
   }
 
   function Catalog({apps, selected, setSelected, search, setSearch, sort, setSort, reverse, setReverse,

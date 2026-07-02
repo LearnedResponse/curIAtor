@@ -169,6 +169,9 @@ def _annotation_block(entry: dict) -> str:
                 bits.append(f"role `{role}`")
             if bits:
                 line += " -> " + "; ".join(bits)
+        note = mark.get("note")
+        if note:
+            line += f" — {note}"
         rows.append(line)
     if not rows:
         return ""

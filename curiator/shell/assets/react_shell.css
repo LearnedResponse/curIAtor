@@ -416,6 +416,44 @@ body {
   touch-action: none;
 }
 
+.rshell-annotation-notes {
+  display: grid;
+  gap: 4px;
+  padding: 5px;
+  border-top: 1px solid #e5e5e5;
+}
+
+.rshell-annotation-note {
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr);
+  align-items: center;
+  gap: 5px;
+  min-height: 26px;
+  font-size: 11px;
+  color: #555;
+}
+
+.rshell-annotation-note span {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 22px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  background: #f7f7f7;
+  font-weight: 700;
+}
+
+.rshell-annotation-note input {
+  min-width: 0;
+  height: 24px;
+  box-sizing: border-box;
+  border: 1px solid #d8d8d8;
+  border-radius: 4px;
+  padding: 3px 6px;
+  font: 12px system-ui, sans-serif;
+}
+
 .rshell-shot {
   max-width: 100%;
   margin-top: 4px;
