@@ -84,8 +84,8 @@ leave feedback → watch the fix land and the ⚙ reply arrive. Every item below
    hosted examples need auth/propose-only or a human-reviewed queue. Screenshot redaction is documented
    as a manual browser-side pre-save tool, not an automatic guarantee. Reread on July 2, 2026 against
    the current config/loop defaults (`runner.mode: pinned`, explicit anonymous held before dispatch,
-   quota enforcement, separate `agent.dispatch.trusted_groups` and `agent.elevated.groups`). Before
-   release, do one final reread against the tag's adapter defaults.
+   quota enforcement, separate `agent.dispatch.trusted_groups` and `agent.elevated.groups`) and again
+   after the local `0.2.0` metadata cut; no policy text changes were needed.
 6. **Repo hygiene** — issue templates are present (bug, feature, example-collection quickstart), labels
    are tracked in `.github/labels.yml`, and the first good-first seed queue has been drained.
    Remaining after publication: README badges for PyPI/DOI and creating/pinning any new GitHub issues.
