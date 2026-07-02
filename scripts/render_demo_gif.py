@@ -16,6 +16,7 @@ except ImportError as exc:  # pragma: no cover - convenience script
 
 ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / "docs" / "demo.gif"
+PLACEHOLDER_MARKER = b"curiator-demo-gif: generated storyboard placeholder"
 W, H = 1120, 630
 BG = "#f7f8fb"
 INK = "#22252a"
@@ -169,6 +170,7 @@ def main() -> None:
         duration=durations,
         loop=0,
         optimize=True,
+        comment=PLACEHOLDER_MARKER,
     )
     print(f"wrote {OUT.relative_to(ROOT)} ({OUT.stat().st_size} bytes)")
 

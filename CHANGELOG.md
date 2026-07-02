@@ -83,7 +83,8 @@ All notable changes to curIAtor are documented here. The format follows
   virtualenvs, `node_modules`, and local editable/path dependency pins in requirements files; `--fresh-clone` repeats
   those checks from temporary clones of the committed gallery histories; `--strict` makes doctor
   warnings fail release publication gates; `--include-optional` adds the finance and phylogenetics
-  public-shaped galleries to the default release set; and `make release-check` uses strict fresh-clone mode.
+  public-shaped galleries to the default release set; `make release-check` uses strict fresh-clone mode;
+  and `make release-launch-check` rejects final-launch placeholders plus optional-gallery drift.
 - `curiator galleries` lists nested `galleries/curiator-*` collection repos with git head, dirty state,
   and the `CURIATOR_GALLERY=...` command for targeting one from the runner checkout; it now also reports
   legacy sibling `curiator-*` checkouts or aliases next to the runner so they can be adopted or archived.
@@ -94,7 +95,8 @@ All notable changes to curIAtor are documented here. The format follows
   `galleries/` while preserving its `.git` history and rewriting the safe checkout-runner path to the
   nested `../..` form.
 - A generated `docs/demo.gif` storyboard now ships at the README hero path, with `make demo-gif` /
-  `scripts/render_demo_gif.py` to regenerate it until the final live browser recording replaces it.
+  `scripts/render_demo_gif.py` to regenerate it until the final live browser recording replaces it;
+  generated storyboards carry a marker that the final launch gate rejects.
 - `SECURITY.md` documents the prompt-injection caveat, collection-level containment boundary, autonomy
   defaults, elevated-run risks, and data-handling expectations for ledgers/screenshots/traces.
 - Local-login accounts can be disabled and re-enabled without deleting the account record, giving

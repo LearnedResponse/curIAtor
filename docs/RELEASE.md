@@ -51,6 +51,16 @@ rm -rf dist build curiator.egg-info
 real browser recording following `docs/DEMO_SCRIPT.md`: feedback on the broken `aviato`, the curator
 fix lands, and the reply appears in the panel.
 
+Then run the final launch-only gate:
+
+```bash
+make release-launch-check
+```
+
+Unlike `make release-check`, this rejects the generated storyboard marker in `docs/demo.gif` and runs
+the optional-gallery fresh-clone preflight. It should pass only after the real browser capture is in
+place and the optional public-shaped collections are still clean.
+
 ## 5. Publish example collections
 
 The required public examples are:

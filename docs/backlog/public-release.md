@@ -33,7 +33,9 @@ leave feedback → watch the fix land and the ⚙ reply arrive. Every item below
    storyboard at this path (`make demo-gif`), so the launch page no longer has a broken image.
    Before release, replace it with the real take per `docs/DEMO_SCRIPT.md`: feedback on the broken
    `aviato` → the fix lands live → the ⚙ reply. Nothing sells the loop faster than watching it close
-   once.
+   once. The generated storyboard now carries an internal placeholder marker, and
+   `make release-launch-check` rejects that marker so the final public-launch pass cannot silently ship
+   the fallback GIF.
 3. **Portability pass — collections must survive leaving this machine.** The `.curiator/app.yaml` part
    is fixed: `curiator link` now writes relative paths when the gallery is reachable relatively. The
    generated task-bundle prompt surface is also fixed for self-contained collections: app roots,

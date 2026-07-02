@@ -18,6 +18,16 @@ def _load_script():
     return module
 
 
+def _copy_release_doc_fixture(tmp_path: Path) -> None:
+    (tmp_path / "docs" / "backlog").mkdir(parents=True)
+    (tmp_path / "docs" / "paper").mkdir(parents=True)
+    shutil.copyfile(ROOT / "README.md", tmp_path / "README.md")
+    shutil.copyfile(ROOT / "SECURITY.md", tmp_path / "SECURITY.md")
+    shutil.copyfile(ROOT / "docs" / "RELEASE.md", tmp_path / "docs" / "RELEASE.md")
+    shutil.copyfile(ROOT / "docs" / "backlog" / "public-release.md",
+                    tmp_path / "docs" / "backlog" / "public-release.md")
+
+
 def test_release_docs_current_repo_pass():
     module = _load_script()
 
@@ -53,6 +63,29 @@ def test_release_docs_detect_draft_paper_placeholders(tmp_path):
     failures = module.check_release_docs(tmp_path)
 
     assert "docs/paper/curiator-paper.md still has TODO(draft) placeholders" in failures
+
+
+def test_release_docs_strict_launch_detects_storyboard_demo_gif(tmp_path):
+    module = _load_script()
+    _copy_release_doc_fixture(tmp_path)
+    (tmp_path / "docs" / "demo.gif").write_bytes(
+        b"GIF89a" + module.PLACEHOLDER_DEMO_MARKER + b"\x3b"
+    )
+
+    failures = module.check_release_docs(tmp_path, strict_launch=True)
+
+    assert (
+        "docs/demo.gif is still the generated storyboard placeholder; "
+        "record the real browser demo before public launch"
+    ) in failures
+
+
+def test_release_docs_strict_launch_accepts_unmarked_demo_gif(tmp_path):
+    module = _load_script()
+    _copy_release_doc_fixture(tmp_path)
+    (tmp_path / "docs" / "demo.gif").write_bytes(b"GIF89a browser capture bytes \x3b")
+
+    assert module.check_release_docs(tmp_path, strict_launch=True) == []
 
 
 def test_release_docs_main_reports_failures(tmp_path, capsys):

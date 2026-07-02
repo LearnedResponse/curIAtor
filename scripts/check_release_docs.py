@@ -1,11 +1,13 @@
 """Validate release-critical public docs before cutting a release."""
 from __future__ import annotations
 
+import argparse
 import sys
 from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
+PLACEHOLDER_DEMO_MARKER = b"curiator-demo-gif: generated storyboard placeholder"
 
 SECURITY_REQUIRED_PHRASES = [
     "feedback is prompt input",
@@ -30,7 +32,7 @@ def _contains(text: str, phrase: str) -> bool:
     return normalized_phrase in normalized_text
 
 
-def check_release_docs(root: Path = ROOT) -> list[str]:
+def check_release_docs(root: Path = ROOT, *, strict_launch: bool = False) -> list[str]:
     """Return release-doc failures; an empty list means the public release docs are coherent enough."""
     failures: list[str] = []
     readme = root / "README.md"
@@ -38,6 +40,7 @@ def check_release_docs(root: Path = ROOT) -> list[str]:
     release = root / "docs" / "RELEASE.md"
     public_release = root / "docs" / "backlog" / "public-release.md"
     paper = root / "docs" / "paper" / "curiator-paper.md"
+    demo_gif = root / "docs" / "demo.gif"
 
     if not readme.exists():
         failures.append("missing README.md")
@@ -80,12 +83,27 @@ def check_release_docs(root: Path = ROOT) -> list[str]:
     if "TODO(draft)" in paper_text:
         failures.append("docs/paper/curiator-paper.md still has TODO(draft) placeholders")
 
+    if strict_launch:
+        if not demo_gif.exists():
+            failures.append("docs/demo.gif missing; record the real browser demo before public launch")
+        elif PLACEHOLDER_DEMO_MARKER in demo_gif.read_bytes():
+            failures.append(
+                "docs/demo.gif is still the generated storyboard placeholder; "
+                "record the real browser demo before public launch"
+            )
+
     return failures
 
 
 def main(argv: list[str] | None = None) -> int:
-    root = Path(argv[0]).resolve() if argv else ROOT
-    failures = check_release_docs(root)
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("root", nargs="?", type=Path, default=ROOT,
+                        help="repository root to check")
+    parser.add_argument("--strict-launch", action="store_true",
+                        help="also reject release-time placeholders such as the generated demo GIF")
+    args = parser.parse_args(argv)
+
+    failures = check_release_docs(args.root.resolve(), strict_launch=args.strict_launch)
     if failures:
         print("curiator: release doc check FAILED")
         for failure in failures:
