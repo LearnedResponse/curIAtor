@@ -28,6 +28,11 @@ Limits:
 The upload button stays as the fallback: if capture fidelity is bad, the user can attach their own
 cropped screenshot.
 
+Captured or uploaded screenshots can be annotated before saving. The current v1 tools burn boxes,
+arrows, numbered pins, and redaction rectangles into the PNG in the browser, before it is posted to
+the feedback ledger. That keeps the existing task-bundle path unchanged while letting the agent read
+a marked-up image directly.
+
 ## Browser screen capture: `getDisplayMedia`
 
 `navigator.mediaDevices.getDisplayMedia()` can capture the real tab/window/screen. It is the best

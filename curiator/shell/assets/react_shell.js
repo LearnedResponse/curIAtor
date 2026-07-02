@@ -1,6 +1,6 @@
 (function () {
   const h = React.createElement;
-  const {useEffect, useMemo, useState} = React;
+  const {useEffect, useMemo, useRef, useState} = React;
   const STATUS = {
     new: "#cc7a00",
     working: "#8e44ad",
@@ -57,6 +57,154 @@
   function excerpt(e) {
     const text = (e.comment || "").replace(/\s+/g, " ").trim() || (e.stars ? "★".repeat(e.stars) : "");
     return text.length > 110 ? text.slice(0, 110) + "…" : text;
+  }
+
+  function drawAnnotation(ctx, mark, width, height) {
+    const x1 = mark.x1 * width;
+    const y1 = mark.y1 * height;
+    const x2 = (mark.x2 == null ? mark.x1 : mark.x2) * width;
+    const y2 = (mark.y2 == null ? mark.y1 : mark.y2) * height;
+    ctx.save();
+    ctx.lineWidth = Math.max(3, Math.round(width / 240));
+    ctx.lineJoin = "round";
+    ctx.lineCap = "round";
+    if (mark.tool === "redact") {
+      ctx.fillStyle = "#111";
+      ctx.fillRect(Math.min(x1, x2), Math.min(y1, y2), Math.abs(x2 - x1), Math.abs(y2 - y1));
+    } else if (mark.tool === "box") {
+      ctx.strokeStyle = "#8e44ad";
+      ctx.strokeRect(Math.min(x1, x2), Math.min(y1, y2), Math.abs(x2 - x1), Math.abs(y2 - y1));
+    } else if (mark.tool === "arrow") {
+      const angle = Math.atan2(y2 - y1, x2 - x1);
+      const head = Math.max(14, Math.round(width / 35));
+      ctx.strokeStyle = "#2980b9";
+      ctx.fillStyle = "#2980b9";
+      ctx.beginPath();
+      ctx.moveTo(x1, y1);
+      ctx.lineTo(x2, y2);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(x2, y2);
+      ctx.lineTo(x2 - head * Math.cos(angle - Math.PI / 6), y2 - head * Math.sin(angle - Math.PI / 6));
+      ctx.lineTo(x2 - head * Math.cos(angle + Math.PI / 6), y2 - head * Math.sin(angle + Math.PI / 6));
+      ctx.closePath();
+      ctx.fill();
+    } else if (mark.tool === "pin") {
+      const radius = Math.max(12, Math.round(width / 36));
+      ctx.fillStyle = "#cc7a00";
+      ctx.strokeStyle = "#fff";
+      ctx.lineWidth = Math.max(2, Math.round(width / 360));
+      ctx.beginPath();
+      ctx.arc(x1, y1, radius, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+      ctx.fillStyle = "#fff";
+      ctx.font = "700 " + Math.max(13, Math.round(radius * .9)) + "px system-ui, sans-serif";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(String(mark.n || 1), x1, y1);
+    }
+    ctx.restore();
+  }
+
+  function composeShot(dataUrl, annotations) {
+    if (!dataUrl || !annotations.length) return Promise.resolve(dataUrl);
+    return new Promise((resolve) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement("canvas");
+        const width = img.naturalWidth || img.width;
+        const height = img.naturalHeight || img.height;
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) {
+          resolve(dataUrl);
+          return;
+        }
+        ctx.drawImage(img, 0, 0, width, height);
+        annotations.forEach((mark) => drawAnnotation(ctx, mark, width, height));
+        resolve(canvas.toDataURL("image/png"));
+      };
+      img.onerror = () => resolve(dataUrl);
+      img.src = dataUrl;
+    });
+  }
+
+  function AnnotationEditor({image, annotations, setAnnotations}) {
+    const canvasRef = useRef(null);
+    const imageRef = useRef(null);
+    const [tool, setTool] = useState("box");
+    const [draft, setDraft] = useState(null);
+
+    function redraw() {
+      const canvas = canvasRef.current;
+      const img = imageRef.current;
+      if (!canvas || !img || !img.complete) return;
+      const width = img.naturalWidth || img.width;
+      const height = img.naturalHeight || img.height;
+      if (!width || !height) return;
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return;
+      ctx.drawImage(img, 0, 0, width, height);
+      annotations.concat(draft ? [draft] : []).forEach((mark) => drawAnnotation(ctx, mark, width, height));
+    }
+
+    useEffect(redraw, [image, annotations, draft]);
+
+    function point(evt) {
+      const rect = canvasRef.current.getBoundingClientRect();
+      const width = Math.max(rect.width, 1);
+      const height = Math.max(rect.height, 1);
+      return {
+        x: Math.max(0, Math.min(1, (evt.clientX - rect.left) / width)),
+        y: Math.max(0, Math.min(1, (evt.clientY - rect.top) / height))
+      };
+    }
+
+    function down(evt) {
+      evt.preventDefault();
+      const p = point(evt);
+      if (tool === "pin") {
+        const n = annotations.filter((m) => m.tool === "pin").length + 1;
+        setAnnotations(annotations.concat([{tool, x1: p.x, y1: p.y, n}]));
+        return;
+      }
+      evt.currentTarget.setPointerCapture(evt.pointerId);
+      setDraft({tool, x1: p.x, y1: p.y, x2: p.x, y2: p.y});
+    }
+
+    function move(evt) {
+      if (!draft) return;
+      const p = point(evt);
+      setDraft(Object.assign({}, draft, {x2: p.x, y2: p.y}));
+    }
+
+    function up(evt) {
+      if (!draft) return;
+      const p = point(evt);
+      const mark = Object.assign({}, draft, {x2: p.x, y2: p.y});
+      setDraft(null);
+      if (Math.abs(mark.x2 - mark.x1) + Math.abs(mark.y2 - mark.y1) < .015) return;
+      setAnnotations(annotations.concat([mark]));
+    }
+
+    const tools = [["box", "□"], ["arrow", "↗"], ["pin", "①"], ["redact", "█"]];
+    return h("div", {className: "rshell-annotator"},
+      h("div", {className: "rshell-annotation-toolbar"},
+        tools.map(([value, label]) => h("button", {key: value,
+          className: "rshell-tool" + (tool === value ? " active" : ""),
+          title: value, onClick: () => setTool(value)}, label)),
+        h("button", {className: "rshell-tool", title: "Undo annotation",
+          disabled: !annotations.length, onClick: () => setAnnotations(annotations.slice(0, -1))}, "↶"),
+        h("button", {className: "rshell-tool", title: "Clear annotations",
+          disabled: !annotations.length, onClick: () => setAnnotations([])}, "×")),
+      h("div", {className: "rshell-annotation-stage"},
+        h("img", {ref: imageRef, src: image, onLoad: redraw, style: {display: "none"}, alt: ""}),
+        h("canvas", {ref: canvasRef, className: "rshell-annotation-canvas",
+          onPointerDown: down, onPointerMove: move, onPointerUp: up, onPointerCancel: () => setDraft(null)})));
   }
 
   function Catalog({apps, selected, setSelected, search, setSearch, sort, setSort, reverse, setReverse,
@@ -168,6 +316,7 @@
     const [stars, setStars] = useState("");
     const [comment, setComment] = useState("");
     const [shot, setShot] = useState(null);
+    const [annotations, setAnnotations] = useState([]);
     const [replyTo, setReplyTo] = useState(null);
     const [msg, setMsg] = useState("");
 
@@ -192,18 +341,22 @@
     }
 
     function save() {
-      const payload = {stars: stars ? Number(stars) : null, comment, screenshot: shot,
-        reply_to: target ? [target.id] : []};
-      if (!payload.stars && !payload.comment.trim() && !payload.screenshot) {
+      if (!stars && !comment.trim() && !shot) {
         setMsg("Add a rating, comment, or screenshot.");
         return;
       }
-      api("/api/feedback/" + encodeURIComponent(selected), {method: "POST", body: JSON.stringify(payload)})
+      setMsg(shot && annotations.length ? "Compositing annotation…" : "");
+      composeShot(shot, annotations).then((screenshot) => {
+        const payload = {stars: stars ? Number(stars) : null, comment, screenshot,
+          reply_to: target ? [target.id] : []};
+        return api("/api/feedback/" + encodeURIComponent(selected), {method: "POST", body: JSON.stringify(payload)});
+      })
         .then((data) => {
           setFeedback(data);
           setStars("");
           setComment("");
           setShot(null);
+          setAnnotations([]);
           setReplyTo(null);
           setMsg("✓ saved (" + data.entry.id + ")" + (data.entry.screenshot ? " +screenshot" : ""));
           reloadApps();
@@ -218,14 +371,20 @@
         return;
       }
       html2canvas(doc.body, {logging: false, backgroundColor: "#ffffff"})
-        .then((canvas) => setShot(canvas.toDataURL("image/png")))
+        .then((canvas) => {
+          setShot(canvas.toDataURL("image/png"));
+          setAnnotations([]);
+        })
         .catch((e) => setMsg("Capture failed: " + e));
     }
 
     function upload(file) {
       if (!file) return;
       const r = new FileReader();
-      r.onload = () => setShot(r.result);
+      r.onload = () => {
+        setShot(r.result);
+        setAnnotations([]);
+      };
       r.readAsDataURL(file);
     }
 
@@ -254,7 +413,7 @@
         h("button", {className: "rshell-button secondary", onClick: capture}, "📷 Capture view"),
         h("label", {className: "rshell-button secondary"}, "⬆ upload",
           h("input", {type: "file", accept: "image/*", style: {display: "none"}, onChange: (e) => upload(e.target.files[0])}))),
-      shot ? h("img", {className: "rshell-preview", src: shot}) : null,
+      shot ? h(AnnotationEditor, {image: shot, annotations, setAnnotations}) : null,
       h("button", {className: "rshell-button primary", onClick: save}, "Save feedback"),
       h("div", {className: "rshell-msg"}, msg),
       h("hr", {style: {border: "none", borderTop: "1px solid #eee"}}),

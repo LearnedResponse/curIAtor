@@ -73,6 +73,17 @@ def test_react_shell_side_rails_are_collapsible(web_client):
     assert ".rshell-edge-tab" in css
 
 
+def test_react_shell_has_burned_screenshot_annotations(web_client):
+    js = web_client.get("/assets/react_shell.js").get_data(as_text=True)
+    css = web_client.get("/assets/react_shell.css").get_data(as_text=True)
+    assert "function AnnotationEditor" in js
+    assert "function composeShot" in js
+    assert "drawAnnotation(ctx, mark" in js
+    assert "tool === \"redact\"" in js
+    assert "rshell-annotation-canvas" in css
+    assert "touch-action: none" in css
+
+
 def test_react_shell_profile_settings_and_collection_home(web_client):
     web_client.post("/api/feedback/sample", json={"comment": "app activity", "stars": 3})
     home = web_client.get("/general").get_data(as_text=True)

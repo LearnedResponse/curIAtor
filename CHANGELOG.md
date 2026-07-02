@@ -24,6 +24,8 @@ All notable changes to curIAtor are documented here. The format follows
   templates.
 - Per-feedback run artifacts: task bundles live under `feedback/tasks/<id>.md`, agent stdout/stderr
   streams live to `feedback/replies/<id>.md`, and feedback status badges link to a scrollable trace view.
+- Screenshot feedback can be annotated in-browser with boxes, arrows, numbered pins, and redaction
+  blocks; annotations are burned into the PNG before it is saved to the ledger.
 - Interactive app-repo workflow: `curiator link`, `status`, `context`, `work`, `done`, `open`, and
   `commands install` let Claude Code/Codex sessions use the same ledger/task/reply/git path without
   spawning a separate headless agent.

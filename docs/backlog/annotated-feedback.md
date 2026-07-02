@@ -1,8 +1,7 @@
 # Backlog — annotated screen captures (point the agent at the element)
 
-> **Status:** scoped, not started. A core feedback-overlay upgrade: draw on the
-> captured screenshot so feedback points at exactly the element it means.
-> **Recommended shape: v1 burn-in first, v2 DOM-mapped as the follow-on.**
+> **Status:** v1 burn-in landed 2026-07-01; v2 DOM-mapped remains follow-on. A core feedback-overlay
+> upgrade: draw on the captured screenshot so feedback points at exactly the element it means.
 > Captured 2026-06-30.
 
 ## The pitch
@@ -36,20 +35,19 @@ Two tiers, and the second is the one only curiator can do:
 
 ## Work-order — v1 (burn-in)
 
-1. **Freeze-then-draw.** After capture, freeze the `html2canvas` image in the overlay and
-   show a small annotation toolbar: **box · arrow · numbered pin (①②③) · redact · undo ·
-   clear**. Keep it dismissible — annotation is optional; the plain-screenshot path stays.
-2. **Composite to one PNG.** Render the annotation layer onto the captured image and
-   export a single PNG (the mark is *in* the pixels the model reads). Numbered pins let
-   the comment say "① move this, ② too small" with the numbers on the image.
-3. **Redact burns in *before* the PNG leaves the browser.** The redact tool paints an
-   opaque rectangle into the export, so nothing sensitive ever reaches the ledger or git.
-4. **Store as the screenshot.** The composited PNG replaces/augments the current
-   screenshot field — **no change to `_shot_path`, the task bundle, or the loop.**
-5. **Element-relative coordinates.** Store draw coords relative to the *captured element*,
-   not the viewport, so they survive re-render/replay.
-6. **Verify by running.** A marked-up feedback item round-trips; the agent's reply
-   references the marked element correctly (diff a "fix the ①-marked legend" item).
+1. **Freeze-then-draw** — landed. After capture/upload, the feedback panel shows a small annotation
+   toolbar: **box · arrow · numbered pin · redact · undo · clear**. Annotation is optional; a plain
+   screenshot still saves normally.
+2. **Composite to one PNG** — landed. `composeShot` renders annotations onto the captured image before
+   the POST, so the mark is *in* the pixels the model reads.
+3. **Redact burns in *before* the PNG leaves the browser** — landed. The redact tool paints an opaque
+   rectangle into the exported PNG.
+4. **Store as the screenshot** — landed. The composited PNG uses the existing `screenshot` field, so
+   `_shot_path`, task bundles, and loop code stay unchanged.
+5. **Element-relative coordinates** — landed for v1. Draw coordinates are normalized against the
+   captured image/canvas, not the viewport.
+6. **Verify by running** — partially covered by asset/parser tests; still dogfood with a real feedback
+   item such as "fix the ①-marked legend" before calling the broader v2 item complete.
 
 ## v2 — DOM-mapped annotations (follow-on)
 
