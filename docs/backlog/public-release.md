@@ -22,23 +22,23 @@ leave feedback → watch the fix land and the ⚙ reply arrive. Every item below
    a tag-vs-`pyproject.toml` version guard; `make release-check` now runs the local gate (lint, tests,
    strict public-gallery fresh-clone preflight, `docs/demo.gif` presence validation, package build, and `twine check`). The
    human release checklist now lives in [`docs/RELEASE.md`](../RELEASE.md). Local gate evidence from
-   July 2, 2026: `make release-check` passed with 237 tests, public-gallery
-   fresh-clone preflight `3/3` with zero publish-artifact hits, validated `docs/demo.gif`, built
-   sdist/wheel, and `twine check` passed both artifacts. The broader optional-public gate
-   `curiator release-preflight --include-optional --fresh-clone --strict` passed `5/5` with all smoke
-   hooks green. Release metadata is cut locally for `0.2.0` / `2026-07-02` via
-   `make release-prepare`. Remaining external setup is configuring the PyPI Trusted Publisher, then
-   pushing the matching `v0.2.0` tag.
-2. **The hero `docs/demo.gif`** (absorbs the old M3) — the README now has a committed generated
-   storyboard at this path (`make demo-gif`), so the launch page no longer has a broken image.
-   Before release, replace it with the real take per `docs/DEMO_SCRIPT.md`: feedback on the broken
-   `aviato` → the fix lands live → the ⚙ reply. Nothing sells the loop faster than watching it close
-   once. The generated storyboard now carries an internal placeholder marker, and
-   `make release-launch-check` rejects that marker so the final public-launch pass cannot silently ship
-   the fallback GIF. `make release-check` validates that the hero GIF path exists but no longer
-   regenerates it, so a real browser capture is not overwritten by the fallback storyboard. The same
-   strict doc gate also rejects `docs/paper/curiator-paper.md` `TODO(release)` placeholders before the
-   paper is published.
+   July 2, 2026: `make release-check` passed with 244 tests, public-gallery
+   fresh-clone preflight `3/3` with zero publish-artifact hits, validated the browser-captured
+   `docs/demo.gif`, built sdist/wheel, and `twine check` passed both artifacts. The final local launch
+   gate, `make release-launch-check`, also passed: strict release docs were clean and required plus
+   optional public-shaped galleries passed fresh-clone preflight `5/5`. Release metadata is cut locally
+   for `0.2.0` / `2026-07-02` via `make release-prepare`. Remaining external setup is configuring the
+   PyPI Trusted Publisher, publishing/pushing the example collection repositories, enabling
+   GitHub-to-Zenodo, and pushing the matching `v0.2.0` tag.
+2. **The hero `docs/demo.gif`** (absorbs the old M3) — done locally. The README now has a committed
+   Brave-rendered browser capture at this path, produced by `make demo-capture`: a temporary gallery
+   loads the broken `aviato`, feedback plus captured view appears in the rail, the thread moves through
+   working/done, and the refreshed app shows axis titles, the legend above the plot, and wider margins.
+   The old generated storyboard remains available via `make demo-gif` as a fallback only; it carries an
+   internal placeholder marker, and `make release-launch-check` rejects that marker so the final
+   public-launch pass cannot silently ship the fallback GIF. The same strict doc gate also rejects
+   `docs/paper/curiator-paper.md` `TODO(release)` placeholders before the paper is published; those
+   placeholders have been replaced with a release-candidate evidence snapshot.
 3. **Portability pass — collections must survive leaving this machine.** The `.curiator/app.yaml` part
    is fixed: `curiator link` now writes relative paths when the gallery is reachable relatively. The
    generated task-bundle prompt surface is also fixed for self-contained collections: app roots,
@@ -59,8 +59,8 @@ leave feedback → watch the fix land and the ⚙ reply arrive. Every item below
    release-preflight --fresh-clone` repeats the same gate from temporary clones of the committed
    gallery histories, and `--http-smoke` can add the proxy process + HTTP response check when the app
    dependencies are installed in the tree being checked. `--output <path>` writes the JSON payload as
-   a release/paper evidence artifact. Remaining release work is the fresh-clone check on a machine that
-   isn't this one, and the loop must close there.
+   a release/paper evidence artifact. Remaining release work is publishing the example repos, then
+   proving a fresh clone on a machine that isn't this one can run the loop with the released package.
 4. **Publish the three example collections** as public sibling repos, each linked from the README's
    Examples section. README links are prepared for `LearnedResponse/curiator-aviato`,
    `LearnedResponse/curiator-ot`, and `LearnedResponse/curiator-geometry`; publication and

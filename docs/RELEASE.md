@@ -61,11 +61,18 @@ Clean local build artifacts after inspection if needed:
 rm -rf dist build curiator.egg-info
 ```
 
-## 4. Record the real demo GIF
+## 4. Refresh the browser demo GIF
 
-`docs/demo.gif` currently has a generated storyboard fallback. Before public launch, replace it with a
-real browser recording following `docs/DEMO_SCRIPT.md`: feedback on the broken `aviato`, the curator
-fix lands, and the reply appears in the panel.
+`docs/demo.gif` should be a real browser-rendered capture, not the generated storyboard fallback.
+Refresh it when the shell, feedback rail, or Aviato demo changes:
+
+```bash
+make demo-capture
+```
+
+The capture uses Brave headless against a temporary curIAtor collection and writes the feedback-to-fix
+loop described in `docs/DEMO_SCRIPT.md`: feedback on the broken `aviato`, the curator reply/thread
+state, and the fixed chart after reload.
 
 Use `make demo-gif` only when you intentionally want to regenerate the fallback storyboard.
 
@@ -138,5 +145,5 @@ curiator smoke
 ```
 
 Then run the paper/release evidence commands from `docs/paper/reproducibility.md`, refresh the paper
-TODOs that are release-blocked, and create/pin any public GitHub issues from
+release evidence snapshot plus DOI metadata, and create/pin any public GitHub issues from
 `docs/GOOD_FIRST_ISSUES.md` if new starter issues exist.

@@ -2,11 +2,11 @@
 
 # 30-second demo — recording script (internal; not part of the public README)
 
-**Goal:** replace the generated storyboard at `docs/demo.gif` with a real browser recording. One
-unbroken take, no terminal on screen (or a tiny corner overlay). The arc is *broken → point at it →
-curator fixes → fixed.* Keep it under 30s.
+**Goal:** keep `docs/demo.gif` as a real Brave-rendered browser recording. One unbroken take, no
+terminal on screen (or a tiny corner overlay). The arc is *broken → point at it → curator fixes →
+fixed.* Keep it under 30s.
 
-Until the live take is recorded, regenerate the committed storyboard with:
+Regenerate the fallback storyboard only when you intentionally need a placeholder:
 
 ```bash
 make demo-gif

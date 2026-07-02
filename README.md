@@ -25,7 +25,7 @@ The feedback loop your dashboards never had.
 
 ---
 
-<!-- ▶ RECORD THIS: run `curiator demo-up`, follow docs/DEMO_SCRIPT.md, and save the gif to docs/demo.gif (this exact path). -->
+<!-- ▶ Refresh with `make demo-capture`; use `make demo-gif` only for the fallback storyboard. -->
 [![curIAtor demo — comment + screenshot a live app, and the curator fixes it](docs/demo.gif)](docs/DEMO_SCRIPT.md)
 
 > *`aviato` loads in the gallery — cramped, no axis labels. You drop a comment + screenshot ("clean up

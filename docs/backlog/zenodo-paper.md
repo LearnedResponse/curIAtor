@@ -59,8 +59,8 @@ the durable record of that conversation.
    Remaining paper work: run it against each public collection after publication and cite the exact
    command/output snapshot.
 3. Draft in `docs/paper/` (markdown → pandoc PDF) — scaffolded with `curiator-paper.md` and
-   `reproducibility.md`, including release-time `curiator stats` commands and TODO markers instead of
-   invented numbers. The loop diagram source has landed at
+   `reproducibility.md`, including release-time `curiator stats` commands and a dated
+   release-candidate evidence snapshot instead of invented numbers. The loop diagram source has landed at
    `docs/paper/figures/feedback-loop.mmd`, and the git-log provenance excerpt has landed at
    `docs/paper/figures/provenance-log-excerpt.md`. The shell feedback-panel figure and renderer have
    landed at `docs/paper/figures/shell-feedback-panel.png` and

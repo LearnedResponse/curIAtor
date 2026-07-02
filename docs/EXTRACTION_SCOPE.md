@@ -54,17 +54,16 @@ curiator release-preflight --include-optional --fresh-clone --strict
 ```
 
 `make release-check` runs lint, tests, release-doc validation, required-gallery fresh-clone preflight,
-package build, and `twine check`. `make release-launch-check` is intentionally stricter and still
-requires the real public-launch demo GIF plus command-backed paper evidence.
+package build, and `twine check`. `make release-launch-check` is intentionally stricter and enforces
+the real public-launch demo GIF plus command-backed paper evidence.
 
 ## Current Boundary
 
-Extraction is complete; public launch is not. The remaining work belongs to the release track:
+Extraction is complete; public launch is not. Local release-candidate evidence is in place: the
+browser demo GIF is captured, and the paper has a dated local evidence snapshot. The remaining work
+belongs to the external release track:
 
-- replace the generated storyboard `docs/demo.gif` with a real browser recording of the feedback-to-fix
-  loop;
-- replace `TODO(release)` placeholders in `docs/paper/curiator-paper.md` with evidence generated from
-  published collection repositories;
+- refresh the paper evidence from the published collection repositories;
 - publish the example collections and verify a fresh clone on a machine that is not this one;
 - configure PyPI Trusted Publishing and GitHub-Zenodo archival before pushing the release tag.
 
