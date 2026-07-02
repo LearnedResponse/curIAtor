@@ -2104,6 +2104,21 @@ def _gallery_entry(
             f"    mount: {{ kind: proxy, cmd: \"{serve}\", port: {port} }}\n"
             f"    tags: {_yaml_list(tags)}\n"
         )
+    if template == "next":
+        smoke = _js_run_command(package_manager, "build")
+        serve = _js_run_command(package_manager, "dev", f"-H 127.0.0.1 -p {port}")
+        preview = _js_run_command(package_manager, "start", f"-H 127.0.0.1 -p {port}")
+        return (
+            f"  - name: {name}\n"
+            f"    title: {json.dumps(title)}\n"
+            f"    root: {root}\n"
+            f"    source: .\n"
+            f"    smoke: {smoke}\n"
+            f"    commands:\n"
+            f"      preview: {json.dumps(preview)}\n"
+            f"    mount: {{ kind: proxy, cmd: \"{serve}\", port: {port}, preserve_prefix: true }}\n"
+            f"    tags: {_yaml_list(tags)}\n"
+        )
     if template == "node":
         return (
             f"  - name: {name}\n"
@@ -2202,6 +2217,9 @@ def _app_template_files(name: str, template: str, title: str, package_manager: s
     if template == "vue":
         return {rel: content.format(name=name, title=title, title_json=json.dumps(title), js_smoke=js_smoke)
                 for rel, content in _APP_VUE_TEMPLATE.items()}
+    if template == "next":
+        return {rel: content.format(name=name, title=title, title_json=json.dumps(title), js_smoke=js_smoke)
+                for rel, content in _APP_NEXT_TEMPLATE.items()}
     if template == "node":
         return {rel: content.format(name=name, title=title, title_json=json.dumps(title))
                 for rel, content in _APP_NODE_TEMPLATE.items()}
@@ -2240,9 +2258,9 @@ def cmd_app_create(args) -> int:
         return 1
     title = args.title or _title_from_name(name)
     tags = _tags_arg(args.tags, template)
-    proxy_templates = {"static", "python", "node", "flask", "fastapi", "rust", "react", "svelte", "vue", "streamlit", "gradio"}
+    proxy_templates = {"static", "python", "node", "flask", "fastapi", "rust", "react", "svelte", "vue", "next", "streamlit", "gradio"}
     port = args.port if args.port is not None else (_next_proxy_port(cfg) if template in proxy_templates else None)
-    package_manager = _resolve_package_manager(repo, args.package_manager) if template in {"react", "svelte", "vue"} else "npm"
+    package_manager = _resolve_package_manager(repo, args.package_manager) if template in {"react", "svelte", "vue", "next"} else "npm"
 
     created, skipped = [], []
     root.mkdir(parents=True, exist_ok=True)
@@ -2402,24 +2420,24 @@ def main(argv=None) -> int:
     app_sub = app.add_subparsers(dest="action", required=True)
     ac = app_sub.add_parser("create", help="scaffold an app directory and add it to gallery.yaml")
     ac.add_argument("name", help="app key, e.g. orange_picker")
-    ac.add_argument("--template", choices=["dash", "static", "python", "node", "flask", "fastapi", "rust", "react", "svelte", "vue", "streamlit", "gradio"], default="dash",
+    ac.add_argument("--template", choices=["dash", "static", "python", "node", "flask", "fastapi", "rust", "react", "svelte", "vue", "next", "streamlit", "gradio"], default="dash",
                     help="scaffold template (default: dash)")
     ac.add_argument("--title", help="display title")
     ac.add_argument("--tags", help="comma-separated tags; default is the template name")
-    ac.add_argument("--port", type=int, help="proxy port for static/python/node/flask/fastapi/rust/react/svelte/vue/streamlit/gradio templates")
+    ac.add_argument("--port", type=int, help="proxy port for static/python/node/flask/fastapi/rust/react/svelte/vue/next/streamlit/gradio templates")
     ac.add_argument("--package-manager", choices=["auto", *_JS_PACKAGE_MANAGERS], default="auto",
-                    help="JS package manager for react/svelte/vue templates (default: auto)")
+                    help="JS package manager for react/svelte/vue/next templates (default: auto)")
     ac.add_argument("--force", action="store_true", help="allow an existing apps/<name> directory")
     ac.set_defaults(func=cmd_app_create)
     ia = sub.add_parser("init-app", help="alias for `curiator app create`")
     ia.add_argument("name", help="app key, e.g. orange_picker")
-    ia.add_argument("--template", choices=["dash", "static", "python", "node", "flask", "fastapi", "rust", "react", "svelte", "vue", "streamlit", "gradio"], default="dash",
+    ia.add_argument("--template", choices=["dash", "static", "python", "node", "flask", "fastapi", "rust", "react", "svelte", "vue", "next", "streamlit", "gradio"], default="dash",
                     help="scaffold template (default: dash)")
     ia.add_argument("--title", help="display title")
     ia.add_argument("--tags", help="comma-separated tags; default is the template name")
-    ia.add_argument("--port", type=int, help="proxy port for static/python/node/flask/fastapi/rust/react/svelte/vue/streamlit/gradio templates")
+    ia.add_argument("--port", type=int, help="proxy port for static/python/node/flask/fastapi/rust/react/svelte/vue/next/streamlit/gradio templates")
     ia.add_argument("--package-manager", choices=["auto", *_JS_PACKAGE_MANAGERS], default="auto",
-                    help="JS package manager for react/svelte/vue templates (default: auto)")
+                    help="JS package manager for react/svelte/vue/next templates (default: auto)")
     ia.add_argument("--force", action="store_true", help="allow an existing apps/<name> directory")
     ia.set_defaults(func=cmd_app_create)
     r = sub.add_parser("reply", help="(agent) post a ⚙ note + set status")
@@ -2575,9 +2593,9 @@ Use the scaffold command; it creates `apps/<name>/` and updates `gallery.yaml`:
 
     curiator app create revenue --template dash --title "Revenue dashboard"
 
-Templates: `dash`, `static`, `python`, `node`, `flask`, `fastapi`, `rust`, `react`, `svelte`, `vue`, `streamlit`, `gradio`.
+Templates: `dash`, `static`, `python`, `node`, `flask`, `fastapi`, `rust`, `react`, `svelte`, `vue`, `next`, `streamlit`, `gradio`.
 Node, Flask, FastAPI, and Rust use lightweight server scaffolds behind same-origin proxy mounts.
-React/Svelte/Vue use Vite and can auto-detect npm/pnpm/yarn/bun; Streamlit and Gradio use prefix-preserving proxy mounts.
+React/Svelte/Vue use Vite; React/Svelte/Vue/Next can auto-detect npm/pnpm/yarn/bun. Next, Streamlit, and Gradio use prefix-preserving proxy mounts.
 You can still edit `gallery.yaml` manually for existing apps.
 
 See the consumer guide: https://github.com/LearnedResponse/curiator/blob/main/docs/USING_CURIATOR.md
@@ -3103,6 +3121,184 @@ p {{
   color: #6c747d;
   font-size: 13px;
 }}
+""",
+}
+
+_APP_NEXT_TEMPLATE = {
+    "package.json": """\
+{{
+  "name": "{name}",
+  "private": true,
+  "version": "0.0.0",
+  "scripts": {{
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start"
+  }},
+  "dependencies": {{
+    "next": "^14.2.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  }},
+  "devDependencies": {{}}
+}}
+""",
+    "next.config.mjs": """\
+const app = process.env.CURIATOR_APP || "";
+const basePath = app ? `/app/${{app}}` : "";
+
+/** @type {{import("next").NextConfig}} */
+const nextConfig = {{
+  basePath,
+}};
+
+export default nextConfig;
+""",
+    "app/layout.jsx": """\
+import "./globals.css";
+
+export const metadata = {{
+  title: {title_json},
+}};
+
+export default function RootLayout({{ children }}) {{
+  return (
+    <html lang="en">
+      <body>{{children}}</body>
+    </html>
+  );
+}}
+""",
+    "app/page.jsx": """\
+const title = {title_json};
+
+async function loadStatus() {{
+  return {{
+    routes: ["/", "/api/status"],
+    mode: "server component",
+    feedback: "ready",
+  }};
+}}
+
+export default async function Page() {{
+  const status = await loadStatus();
+  return (
+    <main className="surface">
+      <p className="eyebrow">curIAtor Next.js scaffold</p>
+      <h1>{{title}}</h1>
+      <p>
+        This Next.js app is served through a prefix-preserving same-origin proxy mount. Use the feedback
+        rail to shape the server-rendered view; the curator edits files in this directory and
+        smoke-tests with <code>{js_smoke}</code>.
+      </p>
+      <section className="metricGrid" aria-label="demo metrics">
+        <div><b>{{status.routes.length}}</b><span>routes</span></div>
+        <div><b>RSC</b><span>{{status.mode}}</span></div>
+        <div><b>OK</b><span>{{status.feedback}}</span></div>
+      </section>
+    </main>
+  );
+}}
+""",
+    "app/api/status/route.js": """\
+export function GET() {{
+  return Response.json({{
+    ok: true,
+    app: "{name}",
+    runtime: "next",
+  }});
+}}
+""",
+    "app/globals.css": """\
+:root {{
+  color: #22272e;
+  background: #f6f7f8;
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}}
+
+body {{
+  margin: 0;
+}}
+
+.surface {{
+  max-width: 900px;
+  padding: 32px;
+}}
+
+.eyebrow {{
+  margin: 0 0 8px;
+  color: #8e44ad;
+  font-size: 13px;
+  font-weight: 700;
+}}
+
+h1 {{
+  margin: 0 0 12px;
+  font-size: 32px;
+}}
+
+p {{
+  color: #5e6670;
+  line-height: 1.55;
+}}
+
+.metricGrid {{
+  display: grid;
+  grid-template-columns: repeat(3, minmax(120px, 1fr));
+  gap: 12px;
+  margin-top: 24px;
+  max-width: 620px;
+}}
+
+.metricGrid div {{
+  border: 1px solid #d9dde2;
+  border-radius: 8px;
+  background: white;
+  padding: 14px;
+}}
+
+.metricGrid b {{
+  display: block;
+  font-size: 24px;
+}}
+
+.metricGrid span {{
+  color: #6c747d;
+  font-size: 13px;
+}}
+""",
+    "README.md": """\
+# {title}
+
+This Next.js app was scaffolded by curIAtor. It uses the App Router, a server-rendered page, and a
+small JSON route while staying behind the same-origin gallery proxy.
+
+Run it through the gallery:
+
+```bash
+npm install
+curiator up
+```
+
+The generated `gallery.yaml` entry runs:
+
+```bash
+npm run dev -- -H 127.0.0.1 -p <port>
+```
+
+curIAtor sets `preserve_prefix: true` for this proxy mount and exports `CURIATOR_APP={name}`. The
+generated `next.config.mjs` turns that into `basePath: "/app/{name}"`, so routes and framework assets
+stay under the gallery path.
+
+The scaffold smoke test is:
+
+```bash
+npm run build
+```
+
+Next's development server may use WebSocket/HMR. curIAtor's built-in proxy keeps the app same-origin
+and shows a diagnostic for upgrade requests; use `commands.preview` after a build or a full reverse
+proxy when live HMR is required.
 """,
 }
 

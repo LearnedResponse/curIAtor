@@ -239,11 +239,54 @@ def test_app_create_react_svelte_and_vue_proxy_templates(collection, capsys):
     assert "- preview: `npm run preview -- --host 127.0.0.1 --port 8700`" in out
 
 
+def test_app_create_next_proxy_template(collection, capsys):
+    from curiator import cli
+    from curiator.config import app_spec, load_config
+
+    assert cli.main(["app", "create", "next_board", "--template", "next"]) == 0
+
+    root = collection / "apps" / "next_board"
+    assert (root / "package.json").exists()
+    assert (root / "next.config.mjs").exists()
+    assert (root / "app" / "layout.jsx").exists()
+    assert (root / "app" / "page.jsx").exists()
+    assert (root / "app" / "api" / "status" / "route.js").exists()
+    config = (root / "next.config.mjs").read_text()
+    assert "const basePath = app ? `/app/${app}` : \"\"" in config
+    assert "basePath," in config
+    page = (root / "app" / "page.jsx").read_text()
+    assert "server component" in page
+    assert "npm run build" in page
+    readme = (root / "README.md").read_text()
+    assert "preserve_prefix: true" in readme
+    assert 'basePath: "/app/next_board"' in readme
+    assert "WebSocket/HMR" in readme
+
+    data = _gallery(collection)
+    app = next(a for a in data["apps"] if a["name"] == "next_board")
+    assert app["mount"] == {
+        "kind": "proxy",
+        "cmd": "npm run dev -- -H 127.0.0.1 -p 8700",
+        "port": 8700,
+        "preserve_prefix": True,
+    }
+    assert app["smoke"] == "npm run build"
+    assert app["commands"]["preview"] == "npm run start -- -H 127.0.0.1 -p 8700"
+    assert app["tags"] == ["next"]
+    assert app_spec(load_config(), "next_board")["commands"]["preview"] == "npm run start -- -H 127.0.0.1 -p 8700"
+
+    assert cli.main(["context", "--app", "next_board", "--limit", "1"]) == 0
+    out = capsys.readouterr().out
+    assert "- smoke: `npm run build`" in out
+    assert "- preview: `npm run start -- -H 127.0.0.1 -p 8700`" in out
+
+
 def test_app_create_js_package_manager_detection_and_override(collection):
     from curiator import cli
 
     (collection / "pnpm-lock.yaml").write_text("lockfileVersion: '9.0'\n")
     assert cli.main(["app", "create", "react_pnpm", "--template", "react"]) == 0
+    assert cli.main(["app", "create", "next_pnpm", "--template", "next"]) == 0
     assert cli.main([
         "app", "create", "svelte_yarn",
         "--template", "svelte",
@@ -257,18 +300,24 @@ def test_app_create_js_package_manager_detection_and_override(collection):
 
     data = _gallery(collection)
     react = next(a for a in data["apps"] if a["name"] == "react_pnpm")
+    next_app = next(a for a in data["apps"] if a["name"] == "next_pnpm")
     svelte = next(a for a in data["apps"] if a["name"] == "svelte_yarn")
     vue = next(a for a in data["apps"] if a["name"] == "vue_bun")
     assert react["smoke"] == "pnpm run build"
     assert react["mount"]["cmd"] == "pnpm run dev -- --host 127.0.0.1 --port 8700"
     assert react["commands"]["preview"] == "pnpm run preview -- --host 127.0.0.1 --port 8700"
+    assert next_app["smoke"] == "pnpm run build"
+    assert next_app["mount"]["cmd"] == "pnpm run dev -- -H 127.0.0.1 -p 8701"
+    assert next_app["mount"]["preserve_prefix"] is True
+    assert next_app["commands"]["preview"] == "pnpm run start -- -H 127.0.0.1 -p 8701"
     assert svelte["smoke"] == "yarn run build"
-    assert svelte["mount"]["cmd"] == "yarn run dev --host 127.0.0.1 --port 8701"
-    assert svelte["commands"]["preview"] == "yarn run preview --host 127.0.0.1 --port 8701"
+    assert svelte["mount"]["cmd"] == "yarn run dev --host 127.0.0.1 --port 8702"
+    assert svelte["commands"]["preview"] == "yarn run preview --host 127.0.0.1 --port 8702"
     assert vue["smoke"] == "bun run build"
-    assert vue["mount"]["cmd"] == "bun run dev -- --host 127.0.0.1 --port 8702"
-    assert vue["commands"]["preview"] == "bun run preview -- --host 127.0.0.1 --port 8702"
+    assert vue["mount"]["cmd"] == "bun run dev -- --host 127.0.0.1 --port 8703"
+    assert vue["commands"]["preview"] == "bun run preview -- --host 127.0.0.1 --port 8703"
     assert "pnpm run build" in (collection / "apps" / "react_pnpm" / "src" / "App.jsx").read_text()
+    assert "pnpm run build" in (collection / "apps" / "next_pnpm" / "app" / "page.jsx").read_text()
     assert "yarn run build" in (collection / "apps" / "svelte_yarn" / "src" / "App.svelte").read_text()
     assert "bun run build" in (collection / "apps" / "vue_bun" / "src" / "App.vue").read_text()
 

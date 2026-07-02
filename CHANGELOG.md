@@ -21,8 +21,9 @@ All notable changes to curIAtor are documented here. The format follows
   need their own base path.
 - `curiator app create` / `curiator init-app` to scaffold app directories and register them in
   `gallery.yaml` using Dash, static, tiny Python-server, dependency-light Node, Flask, FastAPI, Rust,
-  React/Vite, Svelte/Vite, Vue/Vite, Streamlit, or Gradio templates; React/Svelte/Vue scaffolds can
-  auto-detect or explicitly set npm/pnpm/yarn/bun commands.
+  React/Vite, Svelte/Vite, Vue/Vite, Next.js, Streamlit, or Gradio templates; JS scaffolds can
+  auto-detect or explicitly set npm/pnpm/yarn/bun commands, and the Next scaffold uses a
+  prefix-preserving proxy mount with `basePath`.
 - Per-feedback run artifacts: task bundles live under `feedback/tasks/<id>.md`, agent stdout/stderr
   streams live to `feedback/replies/<id>.md`, and feedback status badges link to a scrollable trace view.
 - Screenshot feedback can be annotated in-browser with boxes, arrows, numbered pins, and redaction
