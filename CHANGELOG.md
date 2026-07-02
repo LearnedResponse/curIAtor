@@ -37,6 +37,11 @@ All notable changes to curIAtor are documented here. The format follows
 - `curiator smoke` runs each app's configured smoke command or fallback import check across a collection,
   with `--app`, `--json`, and configurable `smoke_timeout` / `smoke.timeout` limits for release
   preflight automation.
+- `curiator release-preflight` runs doctor/smoke/path checks across the nested public release
+  collections, and `--fresh-clone` repeats those checks from temporary clones of the committed gallery
+  histories.
+- A generated `docs/demo.gif` storyboard now ships at the README hero path, with `make demo-gif` /
+  `scripts/render_demo_gif.py` to regenerate it until the final live browser recording replaces it.
 - `SECURITY.md` documents the prompt-injection caveat, collection-level containment boundary, autonomy
   defaults, elevated-run risks, and data-handling expectations for ledgers/screenshots/traces.
 - `CITATION.cff` provides machine-readable software citation metadata for GitHub and Zenodo.
@@ -55,6 +60,10 @@ All notable changes to curIAtor are documented here. The format follows
   `context`, and `feedback show` do not dirty git-tracked collection ledgers.
 - Git-as-memory replies no longer mutate the SQLite ledger after creating a curator commit; the commit
   SHA is printed and remains queryable from git, while the collection stays clean after `curiator done`.
+- `SECURITY.md` now distinguishes clone-and-run public examples (`auth.mode: none` plus `auto-small`)
+  from hosted public feedback forms, which require authentication/propose-only or human review.
+- Package metadata now uses SPDX license fields and explicitly packages shell assets, removing
+  setuptools release-build deprecation warnings.
 
 ## [0.1.0] — 2026-06-29
 
