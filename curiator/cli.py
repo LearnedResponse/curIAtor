@@ -15,6 +15,7 @@
     curiator galleries  # list nested curiator-* collection repos under ./galleries
     curiator galleries clone https://github.com/org/curiator-demo.git # clone a collection under ./galleries
     curiator galleries adopt ../curiator-demo # move an existing collection repo under ./galleries
+    curiator app templates # list supported scaffold/import templates
     curiator app import <repo-or-url> <name> # copy/clone an existing app repo into apps/<name>
     curiator release-preflight # run doctor/smoke/path checks across release galleries or fresh clones
     curiator playground-preflight # check hosted public-playground posture
@@ -2615,7 +2616,95 @@ def _next_proxy_port(cfg: dict, start: int = 8700) -> int:
     return port
 
 
+_APP_TEMPLATE_CHOICES = (
+    "dash",
+    "static",
+    "python",
+    "node",
+    "flask",
+    "fastapi",
+    "rust",
+    "react",
+    "svelte",
+    "vue",
+    "next",
+    "streamlit",
+    "gradio",
+)
+_PROXY_APP_TEMPLATES = frozenset(t for t in _APP_TEMPLATE_CHOICES if t != "dash")
+_JS_APP_TEMPLATES = frozenset({"react", "svelte", "vue", "next"})
 _JS_PACKAGE_MANAGERS = ("npm", "pnpm", "yarn", "bun")
+_APP_TEMPLATE_INFO = {
+    "dash": {
+        "mount": "dash-inproc",
+        "toolchain": "python+dash",
+        "summary": "in-process Dash app directory",
+    },
+    "static": {
+        "mount": "proxy",
+        "toolchain": "python stdlib",
+        "summary": "static HTML via python -m http.server",
+    },
+    "python": {
+        "mount": "proxy",
+        "toolchain": "python stdlib",
+        "summary": "dependency-light Python HTTP server",
+    },
+    "node": {
+        "mount": "proxy",
+        "toolchain": "node stdlib",
+        "summary": "dependency-light Node HTTP server",
+    },
+    "flask": {
+        "mount": "proxy",
+        "toolchain": "flask",
+        "summary": "server-rendered Flask app",
+    },
+    "fastapi": {
+        "mount": "proxy",
+        "toolchain": "fastapi+uvicorn",
+        "summary": "ASGI app with root-path support",
+    },
+    "rust": {
+        "mount": "proxy",
+        "toolchain": "cargo",
+        "summary": "dependency-light Rust HTTP server",
+    },
+    "react": {
+        "mount": "proxy",
+        "toolchain": "vite+react",
+        "summary": "Vite React app with CURIATOR_APP base path",
+    },
+    "svelte": {
+        "mount": "proxy",
+        "toolchain": "vite+svelte",
+        "summary": "Vite Svelte app with CURIATOR_APP base path",
+    },
+    "vue": {
+        "mount": "proxy",
+        "toolchain": "vite+vue",
+        "summary": "Vite Vue app with CURIATOR_APP base path",
+    },
+    "next": {
+        "mount": "proxy preserve-prefix",
+        "toolchain": "next",
+        "summary": "Next.js App Router with basePath from CURIATOR_APP",
+    },
+    "streamlit": {
+        "mount": "proxy preserve-prefix",
+        "toolchain": "streamlit",
+        "summary": "Streamlit app with server.baseUrlPath",
+    },
+    "gradio": {
+        "mount": "proxy preserve-prefix",
+        "toolchain": "gradio",
+        "summary": "Gradio app with root_path",
+    },
+}
+
+
+def _template_choices_help() -> str:
+    return " | ".join(_APP_TEMPLATE_CHOICES)
 
 
 def _detect_package_manager(repo: Path) -> str:
@@ -2923,6 +3012,34 @@ def _app_template_files(name: str, template: str, title: str, package_manager: s
     return {"server.py": _APP_PYTHON_TEMPLATE.format(name=name, title=title)}
 
 
+def cmd_app_templates(args) -> int:
+    """List supported app scaffold/import templates."""
+    rows = [
+        {
+            "name": name,
+            **_APP_TEMPLATE_INFO[name],
+        }
+        for name in _APP_TEMPLATE_CHOICES
+    ]
+    if args.json:
+        print(json.dumps(rows, indent=2))
+        return 0
+
+    print(f"curiator: {len(rows)} app templates")
+    name_w = max(len(row["name"]) for row in rows)
+    mount_w = max(len(row["mount"]) for row in rows)
+    tool_w = max(len(row["toolchain"]) for row in rows)
+    for row in rows:
+        print(
+            f"  {row['name']:<{name_w}}  {row['mount']:<{mount_w}}  "
+            f"{row['toolchain']:<{tool_w}}  {row['summary']}"
+        )
+    print("use:")
+    print("  curiator app create <name> --template <template>")
+    print("  curiator app import <repo-or-dir> <name> --template <template>")
+    return 0
+
+
 def cmd_app_create(args) -> int:
     """Create an app directory and register it in gallery.yaml."""
     cfg = load_config()
@@ -2941,9 +3058,8 @@ def cmd_app_create(args) -> int:
         return 1
     title = args.title or _title_from_name(name)
     tags = _tags_arg(args.tags, template)
-    proxy_templates = {"static", "python", "node", "flask", "fastapi", "rust", "react", "svelte", "vue", "next", "streamlit", "gradio"}
-    port = args.port if args.port is not None else (_next_proxy_port(cfg) if template in proxy_templates else None)
-    package_manager = _resolve_package_manager(repo, args.package_manager) if template in {"react", "svelte", "vue", "next"} else "npm"
+    port = args.port if args.port is not None else (_next_proxy_port(cfg) if template in _PROXY_APP_TEMPLATES else None)
+    package_manager = _resolve_package_manager(repo, args.package_manager) if template in _JS_APP_TEMPLATES else "npm"
 
     created, skipped = [], []
     root.mkdir(parents=True, exist_ok=True)
@@ -2992,8 +3108,7 @@ def cmd_app_import(args) -> int:
 
     title = args.title or _title_from_name(name)
     tags = _tags_arg(args.tags, template)
-    proxy_templates = {"static", "python", "node", "flask", "fastapi", "rust", "react", "svelte", "vue", "next", "streamlit", "gradio"}
-    port = args.port if args.port is not None else (_next_proxy_port(cfg) if template in proxy_templates else None)
+    port = args.port if args.port is not None else (_next_proxy_port(cfg) if template in _PROXY_APP_TEMPLATES else None)
 
     try:
         action, source = _copy_or_clone_app_source(args.source, root)
@@ -3001,7 +3116,7 @@ def cmd_app_import(args) -> int:
         print(f"curiator: app import FAILED — {exc}")
         return 1
 
-    package_manager = _resolve_package_manager(root, args.package_manager) if template in {"react", "svelte", "vue", "next"} else "npm"
+    package_manager = _resolve_package_manager(root, args.package_manager) if template in _JS_APP_TEMPLATES else "npm"
     gallery = Path(cfg["gallery_path"])
     entry = _gallery_entry(name, template, title, tags, port, package_manager)
     gallery.write_text(_append_app_entry(gallery.read_text(), entry))
@@ -3163,13 +3278,16 @@ def main(argv=None) -> int:
     cmds.set_defaults(func=cmd_commands)
     app = sub.add_parser("app", help="manage apps in this collection")
     app_sub = app.add_subparsers(dest="action", required=True)
+    at = app_sub.add_parser("templates", help="list supported app scaffold/import templates")
+    at.add_argument("--json", action="store_true", help="emit machine-readable template metadata")
+    at.set_defaults(func=cmd_app_templates)
     ac = app_sub.add_parser("create", help="scaffold an app directory and add it to gallery.yaml")
     ac.add_argument("name", help="app key, e.g. orange_picker")
-    ac.add_argument("--template", choices=["dash", "static", "python", "node", "flask", "fastapi", "rust", "react", "svelte", "vue", "next", "streamlit", "gradio"], default="dash",
-                    help="scaffold template (default: dash)")
+    ac.add_argument("--template", choices=_APP_TEMPLATE_CHOICES, default="dash",
+                    help=f"scaffold template (default: dash; choices: {_template_choices_help()})")
     ac.add_argument("--title", help="display title")
     ac.add_argument("--tags", help="comma-separated tags; default is the template name")
-    ac.add_argument("--port", type=int, help="proxy port for static/python/node/flask/fastapi/rust/react/svelte/vue/next/streamlit/gradio templates")
+    ac.add_argument("--port", type=int, help="proxy port for non-Dash templates")
     ac.add_argument("--package-manager", choices=["auto", *_JS_PACKAGE_MANAGERS], default="auto",
                     help="JS package manager for react/svelte/vue/next templates (default: auto)")
     ac.add_argument("--force", action="store_true", help="allow an existing apps/<name> directory")
@@ -3177,21 +3295,21 @@ def main(argv=None) -> int:
     ai = app_sub.add_parser("import", help="copy/clone an existing app repo and add it to gallery.yaml")
     ai.add_argument("source", help="local app directory or git URL to copy/clone")
     ai.add_argument("name", help="app key, e.g. orange_picker")
-    ai.add_argument("--template", choices=["dash", "static", "python", "node", "flask", "fastapi", "rust", "react", "svelte", "vue", "next", "streamlit", "gradio"], required=True,
-                    help="mount template to register for the imported app")
+    ai.add_argument("--template", choices=_APP_TEMPLATE_CHOICES, required=True,
+                    help=f"mount template to register for the imported app; choices: {_template_choices_help()}")
     ai.add_argument("--title", help="display title")
     ai.add_argument("--tags", help="comma-separated tags; default is the template name")
-    ai.add_argument("--port", type=int, help="proxy port for static/python/node/flask/fastapi/rust/react/svelte/vue/next/streamlit/gradio templates")
+    ai.add_argument("--port", type=int, help="proxy port for non-Dash templates")
     ai.add_argument("--package-manager", choices=["auto", *_JS_PACKAGE_MANAGERS], default="auto",
                     help="JS package manager for react/svelte/vue/next templates (default: auto)")
     ai.set_defaults(func=cmd_app_import)
     ia = sub.add_parser("init-app", help="alias for `curiator app create`")
     ia.add_argument("name", help="app key, e.g. orange_picker")
-    ia.add_argument("--template", choices=["dash", "static", "python", "node", "flask", "fastapi", "rust", "react", "svelte", "vue", "next", "streamlit", "gradio"], default="dash",
-                    help="scaffold template (default: dash)")
+    ia.add_argument("--template", choices=_APP_TEMPLATE_CHOICES, default="dash",
+                    help=f"scaffold template (default: dash; choices: {_template_choices_help()})")
     ia.add_argument("--title", help="display title")
     ia.add_argument("--tags", help="comma-separated tags; default is the template name")
-    ia.add_argument("--port", type=int, help="proxy port for static/python/node/flask/fastapi/rust/react/svelte/vue/next/streamlit/gradio templates")
+    ia.add_argument("--port", type=int, help="proxy port for non-Dash templates")
     ia.add_argument("--package-manager", choices=["auto", *_JS_PACKAGE_MANAGERS], default="auto",
                     help="JS package manager for react/svelte/vue/next templates (default: auto)")
     ia.add_argument("--force", action="store_true", help="allow an existing apps/<name> directory")

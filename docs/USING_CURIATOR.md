@@ -87,6 +87,7 @@ curiator` should stay on `runner: { mode: pinned }`.
 **Add an app with the CLI:** this creates an app directory and updates `gallery.yaml`:
 
 ```bash
+curiator app templates
 curiator app create revenue --template dash --title "Revenue dashboard" --tags finance
 # alias: curiator init-app revenue --template dash
 ```
@@ -111,7 +112,8 @@ the updated app gitlink. The app keeps its own history, while the collection kee
 and provenance receipt. `curiator status --app <name>` shows the nested app repo branch/dirty state
 when that two-repo workflow applies.
 
-Templates today: `dash` (in-process Dash), `static` (same-origin proxy using `http.server`), `python`
+`curiator app templates` prints the current scaffold/import menu, including mount kind, toolchain, and
+the intended use for each template. Templates today: `dash` (in-process Dash), `static` (same-origin proxy using `http.server`), `python`
 (tiny proxy-served Python HTTP app), `node` (dependency-light Node HTTP server), `flask`
 (server-rendered Flask app), `fastapi` (API-backed ASGI app), `rust` (dependency-light Rust HTTP
 server), `react` (Vite + React), `svelte` (Vite + Svelte), `vue` (Vite + Vue), `next` (Next.js App

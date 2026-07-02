@@ -31,6 +31,8 @@ All notable changes to curIAtor are documented here. The format follows
   mount, smoke, and preview metadata in `gallery.yaml`, with immediate doctor-style warnings for visible
   HMR, dependency-manifest, and framework base/root-path issues; git-as-memory now commits source
   changes inside nested imported app repos before committing the collection ledger plus updated gitlink.
+- `curiator app templates` lists the supported scaffold/import templates with their mount kind,
+  toolchain, and intended use, and exposes the same metadata as JSON for agents and docs.
 - Per-feedback run artifacts: task bundles live under `feedback/tasks/<id>.md`, agent stdout/stderr
   streams live to `feedback/replies/<id>.md`, and feedback status badges link to a scrollable trace view.
 - Screenshot feedback can be annotated in-browser with boxes, arrows, numbered pins, and redaction

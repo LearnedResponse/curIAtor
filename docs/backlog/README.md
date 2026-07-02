@@ -31,8 +31,9 @@ deliberate (ship, let the example demos surface what to prioritize).
 ## Direction
 
 - [**general-app-hosting**](general-app-hosting.md) — host *any* framework and *multi-file* apps.
-  **Core landed & proven** (`curiator-aviato` runs React SSR + Rust via `proxy` mounts); what remains is
-  scaffold templates, base-path/HMR ergonomics, and publishing the proof.
+  **Core landed & proven** (`curiator-aviato` runs React SSR + Rust via `proxy` mounts); framework
+  scaffolds and a discoverable template menu now exist, so what remains is deeper per-framework
+  hardening, live-HMR proxy ergonomics, and publishing the proof.
 - [**phylogenetics-collection**](phylogenetics-collection.md) — scaffolded in
   `galleries/curiator-phylogenetics` as a **public-first** interactive companion to the tropical
   displayed-trees paper (displayed trees / tree-of-blobs / NC = D / TINNiK), seeded from an already-built

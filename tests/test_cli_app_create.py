@@ -1,6 +1,7 @@
 """CLI app scaffolding: create app directories and update gallery.yaml."""
 from __future__ import annotations
 
+import json
 import subprocess
 
 import yaml
@@ -59,6 +60,39 @@ def _next_app_repo(path):
     _git(path, "add", "-A")
     _git(path, "commit", "-q", "-m", "init next app")
     return path
+
+
+def test_app_templates_lists_supported_template_contract(capsys):
+    from curiator import cli
+
+    assert cli.main(["app", "templates"]) == 0
+    out = capsys.readouterr().out
+    assert "curiator: 13 app templates" in out
+    assert "dash" in out and "dash-inproc" in out
+    assert "react" in out and "vite+react" in out
+    assert "next" in out and "proxy preserve-prefix" in out
+    assert "curiator app create <name> --template <template>" in out
+
+    assert cli.main(["app", "templates", "--json"]) == 0
+    rows = json.loads(capsys.readouterr().out)
+    assert [row["name"] for row in rows] == list(cli._APP_TEMPLATE_CHOICES)
+    assert {row["name"] for row in rows} == {
+        "dash",
+        "static",
+        "python",
+        "node",
+        "flask",
+        "fastapi",
+        "rust",
+        "react",
+        "svelte",
+        "vue",
+        "next",
+        "streamlit",
+        "gradio",
+    }
+    assert next(row for row in rows if row["name"] == "dash")["mount"] == "dash-inproc"
+    assert next(row for row in rows if row["name"] == "gradio")["mount"] == "proxy preserve-prefix"
 
 
 def test_app_create_dash_directory_updates_gallery(collection):
