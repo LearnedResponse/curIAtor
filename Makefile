@@ -18,6 +18,7 @@ release-check:  ## local release gate: lint, tests, demo gif, gallery preflight,
 	rm -rf dist build curiator.egg-info
 	ruff check curiator tests scripts
 	pytest -q
+	python scripts/check_release_docs.py
 	curiator release-preflight --fresh-clone
 	python scripts/render_demo_gif.py
 	python -m build
