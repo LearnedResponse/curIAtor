@@ -58,8 +58,9 @@ All notable changes to curIAtor are documented here. The format follows
   with `--app`, `--jobs`, `--json`, and configurable `smoke_timeout` / `smoke.timeout` limits for
   release preflight automation.
 - `curiator release-preflight` runs doctor/smoke/path checks across the nested public release
-  collections, and `--fresh-clone` repeats those checks from temporary clones of the committed gallery
-  histories.
+  collections, rejects tracked publish-unsafe runtime/auth artifacts such as local user stores, task
+  traces, screenshots, SQLite sidecars, env files, and legacy JSON ledgers, and `--fresh-clone` repeats
+  those checks from temporary clones of the committed gallery histories.
 - `curiator galleries` lists nested `galleries/curiator-*` collection repos with git head, dirty state,
   and the `CURIATOR_GALLERY=...` command for targeting one from the runner checkout.
 - `curiator galleries adopt <repo>` moves or copies an existing sibling collection repo under

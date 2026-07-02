@@ -1075,6 +1075,36 @@ def _machine_path_hits(repo: Path, needles: tuple[str, ...]) -> list[dict]:
     return hits
 
 
+_SAFE_ENV_TEMPLATE_NAMES = {".env.example", ".env.sample", ".env.template"}
+_PUBLISH_RUNTIME_PREFIXES = ("feedback/shots/", "feedback/tasks/", "feedback/replies/")
+_PUBLISH_SQLITE_SIDECARS = ("feedback/app_feedback.sqlite-wal", "feedback/app_feedback.sqlite-shm")
+
+
+def _publish_artifact_message(rel: str) -> str | None:
+    rel = rel.replace("\\", "/")
+    name = rel.rsplit("/", 1)[-1]
+    if rel == ".curiator-users.json":
+        return "tracked local user store; do not publish hosted-login users or password hashes"
+    if rel == "feedback/app_feedback.json":
+        return "tracked legacy feedback JSON; SQLite is the feedback source of truth"
+    if rel in _PUBLISH_SQLITE_SIDECARS:
+        return "tracked SQLite sidecar; publish the committed ledger, not live WAL/SHM files"
+    if any(rel.startswith(prefix) for prefix in _PUBLISH_RUNTIME_PREFIXES):
+        return "tracked runtime feedback artifact; audit and publish intentionally outside release preflight"
+    if name == ".env" or (name.startswith(".env.") and name not in _SAFE_ENV_TEMPLATE_NAMES):
+        return "tracked environment file; keep secrets and local deployment settings out of public examples"
+    return None
+
+
+def _publish_artifact_hits(repo: Path) -> list[dict]:
+    hits: list[dict] = []
+    for rel in _tracked_files(repo):
+        message = _publish_artifact_message(rel)
+        if message:
+            hits.append({"file": rel, "message": message})
+    return hits
+
+
 def _empty_preflight_result(name: str, gallery: Path) -> dict:
     return {
         "name": name,
@@ -1084,6 +1114,7 @@ def _empty_preflight_result(name: str, gallery: Path) -> dict:
         "head": None,
         "dirty": [],
         "path_hits": [],
+        "publish_artifact_hits": [],
         "doctor": {"ok": False, "errors": 0, "warnings": 0, "issues": []},
         "smoke": {"ok": None, "results": []},
     }
@@ -1103,6 +1134,7 @@ def _release_preflight_one(gallery: Path, *, run_smoke: bool, allow_dirty: bool,
     dirty = _git_text(repo, "status", "--porcelain", "--untracked-files=all").splitlines()
     result["dirty"] = dirty
     result["path_hits"] = _machine_path_hits(repo, needles)
+    result["publish_artifact_hits"] = _publish_artifact_hits(repo)
 
     try:
         cfg = _load_config_for_gallery(gallery)
@@ -1125,6 +1157,7 @@ def _release_preflight_one(gallery: Path, *, run_smoke: bool, allow_dirty: bool,
         not result.get("error")
         and result["doctor"]["ok"]
         and not result["path_hits"]
+        and not result["publish_artifact_hits"]
         and (allow_dirty or not dirty)
         and (not run_smoke or result["smoke"]["ok"] is True)
     )
@@ -1285,7 +1318,8 @@ def cmd_release_preflight(args) -> int:
         print(
             f"  {status} {g['name']} {g.get('head') or '-'} "
             f"doctor={g['doctor']['errors']}e/{g['doctor']['warnings']}w "
-            f"smoke={smoke_label} dirty={len(g['dirty'])} paths={len(g['path_hits'])}"
+            f"smoke={smoke_label} dirty={len(g['dirty'])} paths={len(g['path_hits'])} "
+            f"artifacts={len(g.get('publish_artifact_hits') or [])}"
         )
         if g.get("error"):
             print(f"    error: {g['error']}")
@@ -1293,6 +1327,8 @@ def cmd_release_preflight(args) -> int:
             print(f"    doctor {issue['severity'].upper()} {issue['where']}: {issue['message']}")
         for hit in g["path_hits"]:
             print(f"    path {hit['file']}:{hit['line']}: {hit['message']}")
+        for hit in g.get("publish_artifact_hits") or []:
+            print(f"    artifact {hit['file']}: {hit['message']}")
         for line in g["dirty"][:8]:
             print(f"    dirty {line}")
         if len(g["dirty"]) > 8:

@@ -21,9 +21,9 @@ leave feedback → watch the fix land and the ⚙ reply arrive. Every item below
    release. The release workflow builds/attaches artifacts and has a PyPI trusted-publishing job with
    a tag-vs-`pyproject.toml` version guard; `make release-check` now runs the local gate (lint, tests,
    public-gallery fresh-clone preflight, demo GIF regeneration, package build, and `twine check`). Local
-   gate evidence from July 2, 2026: `make release-check` passed with 191 tests, public-gallery
-   fresh-clone preflight `3/3`, regenerated `docs/demo.gif`, built sdist/wheel, and `twine check`
-   passed both artifacts.
+   gate evidence from July 2, 2026: `make release-check` passed with 192 tests, public-gallery
+   fresh-clone preflight `3/3` with zero publish-artifact hits, regenerated `docs/demo.gif`, built
+   sdist/wheel, and `twine check` passed both artifacts.
    Remaining external setup is configuring the PyPI Trusted Publisher, then running
    `make release-prepare VERSION=0.2.0 DATE=<release-date>` and pushing the matching `v0.2.0` tag.
 2. **The hero `docs/demo.gif`** (absorbs the old M3) — the README now has a committed generated
@@ -42,12 +42,14 @@ leave feedback → watch the fix land and the ⚙ reply arrive. Every item below
    `curiator-geometry` `30bb155` on `curiator/auto`). `curiator doctor` now gives a local preflight for
    machine-absolute paths, missing app roots/sources, weak smoke coverage, suspicious proxy port wiring,
    likely HMR dev-server proxy commands, missing framework base/root-path config, missing command
-   executables, and common missing dependency manifests; `curiator smoke` runs the same per-app smoke hooks used by git-as-memory commits. From the
-   runner checkout,
-   `curiator release-preflight` runs those checks across the nested public galleries and also rejects
-   dirty nested repos or tracked machine-local paths; `curiator release-preflight --fresh-clone` repeats
-   the same gate from temporary clones of the committed gallery histories. Remaining release work is
-   the fresh-clone check on a machine that isn't this one, and the loop must close there.
+   executables, and common missing dependency manifests; `curiator smoke` runs the same per-app smoke
+   hooks used by git-as-memory commits. From the runner checkout, `curiator release-preflight` runs
+   those checks across the nested public galleries and also rejects dirty nested repos, tracked
+   machine-local paths, and tracked publish-unsafe runtime/auth artifacts such as local user stores,
+   task/reply traces, screenshots, SQLite sidecars, env files, and legacy JSON ledgers; `curiator
+   release-preflight --fresh-clone` repeats the same gate from temporary clones of the committed
+   gallery histories. Remaining release work is the fresh-clone check on a machine that isn't this one,
+   and the loop must close there.
 4. **Publish the three example collections** as public sibling repos, each linked from the README's
    Examples section. README links are prepared for `LearnedResponse/curiator-aviato`,
    `LearnedResponse/curiator-ot`, and `LearnedResponse/curiator-geometry`; publication and

@@ -104,8 +104,10 @@ example collection.
 
 For the three release example collections, run `curiator release-preflight --fresh-clone` from the
 runner checkout before publishing. It catches dirty source repos, missing app paths, weak smoke
-coverage, tracked machine-local paths, and smoke failures in the committed state. It is not a secrets
-scanner; still review ledgers, screenshots, traces, commits, and app data manually.
+coverage, tracked machine-local paths, tracked local user stores, task/reply traces, screenshots,
+SQLite sidecars, env files, and smoke failures in the committed state. The committed SQLite feedback
+ledger may still be published intentionally as part of a demo history. This preflight is not a full
+secrets scanner; still review ledgers, screenshots, traces, commits, and app data manually.
 
 ## Public Internet Use
 

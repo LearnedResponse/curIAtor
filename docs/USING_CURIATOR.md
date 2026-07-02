@@ -223,12 +223,12 @@ curiator stats compare galleries/curiator-aviato galleries/curiator-ot galleries
 Before moving or publishing a collection, run the portability preflight:
 
 ```bash
-curiator doctor                # errors on absolute/missing paths; warns on weak smoke/proxy/HMR/dependencies
+curiator doctor                # errors on absolute/missing paths; warns on weak smoke/proxy/HMR/deps
 curiator doctor --json
 curiator smoke                 # runs each app's configured smoke command/fallback import
 curiator smoke --app revenue --json
 curiator smoke --jobs 4 --json # run independent app checks concurrently, preserving report order
-curiator release-preflight     # from a runner checkout: checks nested public galleries
+curiator release-preflight     # nested public galleries + tracked publish-unsafe runtime/auth artifacts
 curiator release-preflight --fresh-clone
 make release-prepare VERSION=0.2.0 DATE=2026-07-02  # updates package, citation, Zenodo, changelog
 ```

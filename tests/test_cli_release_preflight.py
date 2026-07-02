@@ -85,6 +85,43 @@ def test_release_preflight_flags_tracked_machine_paths(tmp_path, monkeypatch, ca
     assert payload["galleries"][0]["path_hits"][0]["file"] == "README.md"
 
 
+def test_release_preflight_flags_publish_unsafe_runtime_artifacts(tmp_path, monkeypatch, capsys):
+    from curiator import cli
+
+    repo = _make_gallery(tmp_path)
+    (repo / "feedback" / "tasks").mkdir()
+    (repo / "feedback" / "replies").mkdir()
+    (repo / "feedback" / "shots").mkdir()
+    (repo / ".curiator-users.json").write_text('{"users": []}\n')
+    (repo / ".env.local").write_text("OPENAI_API_KEY=sk-local\n")
+    (repo / ".env.example").write_text("OPENAI_API_KEY=\n")
+    (repo / "feedback" / "tasks" / "abc.md").write_text("task bundle\n")
+    (repo / "feedback" / "replies" / "abc.md").write_text("agent trace\n")
+    (repo / "feedback" / "shots" / "abc.png").write_bytes(b"not really png")
+    (repo / "feedback" / "app_feedback.json").write_text("[]\n")
+    (repo / "feedback" / "app_feedback.sqlite").write_bytes(b"intentional ledger")
+    (repo / "feedback" / "app_feedback.sqlite-wal").write_bytes(b"live sidecar")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-q", "-m", "add runtime artifacts")
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("CURIATOR_GALLERY", raising=False)
+
+    assert cli.main(["release-preflight", "--gallery", "curiator-demo", "--json"]) == 1
+    payload = json.loads(capsys.readouterr().out)
+    gallery = payload["galleries"][0]
+    files = {hit["file"] for hit in gallery["publish_artifact_hits"]}
+    assert payload["ok"] is False
+    assert ".curiator-users.json" in files
+    assert ".env.local" in files
+    assert "feedback/tasks/abc.md" in files
+    assert "feedback/replies/abc.md" in files
+    assert "feedback/shots/abc.png" in files
+    assert "feedback/app_feedback.json" in files
+    assert "feedback/app_feedback.sqlite-wal" in files
+    assert "feedback/app_feedback.sqlite" not in files
+    assert ".env.example" not in files
+
+
 def test_release_preflight_can_check_a_fresh_clone(tmp_path, monkeypatch, capsys):
     from curiator import cli
 
