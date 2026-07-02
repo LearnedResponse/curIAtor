@@ -108,7 +108,9 @@ Local publication-prep gate: `curiator release-preflight --fresh-clone --strict
 --require-public-remotes` now checks the required galleries have `origin` remotes matching
 `github.com/LearnedResponse/<gallery-name>` before the release tag is pushed. This is intentionally
 offline; it proves the local repos are wired to the intended public destinations but does not create or
-push the GitHub repositories.
+push the GitHub repositories. After the repositories are pushed,
+`curiator release-preflight --fresh-clone --strict --require-public-remotes --require-published-head`
+proves each required gallery's exact release-candidate HEAD is present on its origin.
 
 ## Guardrails
 

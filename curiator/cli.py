@@ -1218,6 +1218,44 @@ def _public_remote_result(repo: Path, name: str, owner: str) -> dict:
     }
 
 
+def _published_head_result(repo: Path) -> dict:
+    head = _git_output(repo, "rev-parse", "HEAD") or ""
+    short = _git_output(repo, "rev-parse", "--short", "HEAD") or head[:7]
+    r = subprocess.run(["git", "ls-remote", "origin"], cwd=repo, capture_output=True, text=True)
+    if r.returncode != 0:
+        detail = " ".join((r.stderr or r.stdout or f"git ls-remote exited {r.returncode}").split())
+        return {
+            "ok": False,
+            "head": head,
+            "short": short,
+            "ref_count": 0,
+            "matching_refs": [],
+            "message": f"origin is not readable: {detail}",
+        }
+    matches = []
+    ref_count = 0
+    for line in r.stdout.splitlines():
+        parts = line.split()
+        if len(parts) < 2:
+            continue
+        ref_count += 1
+        if parts[0] == head:
+            matches.append(parts[1])
+    ok = bool(matches)
+    return {
+        "ok": ok,
+        "head": head,
+        "short": short,
+        "ref_count": ref_count,
+        "matching_refs": matches,
+        "message": (
+            f"origin contains HEAD {short} at {', '.join(matches)}"
+            if ok else
+            f"origin is readable but does not contain HEAD {short}; push this gallery before release"
+        ),
+    }
+
+
 def _load_config_for_gallery(gallery: Path) -> dict:
     """Load exactly this gallery, insulated from a caller's linked-app cwd."""
     old_gallery = os.environ.get("CURIATOR_GALLERY")
@@ -1386,6 +1424,7 @@ def _empty_preflight_result(name: str, gallery: Path) -> dict:
         "path_hits": [],
         "publish_artifact_hits": [],
         "public_remote": None,
+        "published_head": None,
         "doctor": {"ok": False, "errors": 0, "warnings": 0, "issues": []},
         "smoke": {"ok": None, "results": []},
     }
@@ -1401,6 +1440,7 @@ def _release_preflight_one(
     strict: bool,
     require_public_remotes: bool = False,
     public_remote_owner: str = _PUBLIC_RELEASE_OWNER,
+    require_published_head: bool = False,
 ) -> dict:
     repo = gallery.parent
     result = _empty_preflight_result(repo.name, gallery)
@@ -1418,6 +1458,8 @@ def _release_preflight_one(
     result["publish_artifact_hits"] = _publish_artifact_hits(repo)
     if require_public_remotes:
         result["public_remote"] = _public_remote_result(repo, repo.name, public_remote_owner)
+    if require_published_head:
+        result["published_head"] = _published_head_result(repo)
 
     try:
         cfg = _load_config_for_gallery(gallery)
@@ -1443,6 +1485,7 @@ def _release_preflight_one(
         and not result["path_hits"]
         and not result["publish_artifact_hits"]
         and (not require_public_remotes or (result.get("public_remote") or {}).get("ok"))
+        and (not require_published_head or (result.get("published_head") or {}).get("ok"))
         and (allow_dirty or not dirty)
         and (not run_smoke or result["smoke"]["ok"] is True)
     )
@@ -1467,6 +1510,7 @@ def _release_preflight_source_result(
     allow_dirty: bool,
     require_public_remotes: bool = False,
     public_remote_owner: str = _PUBLIC_RELEASE_OWNER,
+    require_published_head: bool = False,
 ) -> dict | None:
     source_repo = source_gallery.parent
     result = _empty_preflight_result(source_repo.name, source_gallery)
@@ -1483,6 +1527,11 @@ def _release_preflight_source_result(
         result["public_remote"] = _public_remote_result(source_repo, source_repo.name, public_remote_owner)
         if not result["public_remote"]["ok"]:
             result["error"] = result["public_remote"]["message"]
+            return result
+    if require_published_head:
+        result["published_head"] = _published_head_result(source_repo)
+        if not result["published_head"]["ok"]:
+            result["error"] = result["published_head"]["message"]
             return result
     if dirty and not allow_dirty:
         result["error"] = "source repo is dirty; commit, stash, or pass --allow-dirty before fresh-clone preflight"
@@ -1516,6 +1565,7 @@ def _release_preflight_payload_for_root(args) -> dict:
             strict=args.strict,
             require_public_remotes=args.require_public_remotes,
             public_remote_owner=args.public_remote_owner,
+            require_published_head=args.require_published_head,
         )
         for name in names
     ]
@@ -1532,6 +1582,7 @@ def _release_preflight_payload_for_root(args) -> dict:
             "include_optional": bool(args.include_optional),
             "require_public_remotes": bool(args.require_public_remotes),
             "public_remote_owner": args.public_remote_owner,
+            "require_published_head": bool(args.require_published_head),
         },
     }
 
@@ -1548,6 +1599,7 @@ def _release_preflight_payload_for_clones(args, clone_base: Path) -> dict:
             allow_dirty=args.allow_dirty,
             require_public_remotes=args.require_public_remotes,
             public_remote_owner=args.public_remote_owner,
+            require_published_head=args.require_published_head,
         )
         if source_error:
             source_error["mode"] = "fresh-clone"
@@ -1575,6 +1627,8 @@ def _release_preflight_payload_for_clones(args, clone_base: Path) -> dict:
         )
         if args.require_public_remotes:
             result["public_remote"] = _public_remote_result(source_repo, source_repo.name, args.public_remote_owner)
+        if args.require_published_head:
+            result["published_head"] = _published_head_result(source_repo)
         result.update({
             "mode": "fresh-clone",
             "source_path": str(source_repo),
@@ -1597,6 +1651,7 @@ def _release_preflight_payload_for_clones(args, clone_base: Path) -> dict:
             "include_optional": bool(args.include_optional),
             "require_public_remotes": bool(args.require_public_remotes),
             "public_remote_owner": args.public_remote_owner,
+            "require_published_head": bool(args.require_published_head),
         },
     }
 
@@ -1659,9 +1714,12 @@ def cmd_release_preflight(args) -> int:
             f"artifacts={len(g.get('publish_artifact_hits') or [])}"
             + (f" remote={'OK' if (g.get('public_remote') or {}).get('ok') else 'FAIL'}"
                if payload.get("checks", {}).get("require_public_remotes") else "")
+            + (f" published={'OK' if (g.get('published_head') or {}).get('ok') else 'FAIL'}"
+               if payload.get("checks", {}).get("require_published_head") else "")
         )
         remote = g.get("public_remote") or {}
-        if g.get("error") and g.get("error") != remote.get("message"):
+        published = g.get("published_head") or {}
+        if g.get("error") and g.get("error") not in {remote.get("message"), published.get("message")}:
             print(f"    error: {g['error']}")
         for issue in g["doctor"]["issues"]:
             print(f"    doctor {issue['severity'].upper()} {issue['where']}: {issue['message']}")
@@ -1676,6 +1734,11 @@ def cmd_release_preflight(args) -> int:
             print(f"    remote: {remote.get('message')}")
             for url in remote.get("origin") or []:
                 print(f"    remote origin {url}")
+        if payload.get("checks", {}).get("require_published_head") and not published.get("ok"):
+            print(f"    published: {published.get('message')}")
+        if payload.get("checks", {}).get("require_published_head") and published.get("ok"):
+            refs = ", ".join(published.get("matching_refs") or [])
+            print(f"    published: HEAD {published.get('short')} found at {refs}")
         for line in g["dirty"][:8]:
             print(f"    dirty {line}")
         if len(g["dirty"]) > 8:
@@ -3548,6 +3611,8 @@ def main(argv=None) -> int:
     rp.add_argument("--strict", action="store_true", help="fail when doctor warnings are present")
     rp.add_argument("--require-public-remotes", action="store_true",
                     help="also require each gallery's origin remote to match its expected public GitHub repo")
+    rp.add_argument("--require-published-head", action="store_true",
+                    help="also require each gallery's exact HEAD commit to be present on origin")
     rp.add_argument("--public-remote-owner", default=_PUBLIC_RELEASE_OWNER,
                     help=f"GitHub owner/org for --require-public-remotes (default: {_PUBLIC_RELEASE_OWNER})")
     rp.add_argument("--output", help="write the JSON preflight payload to a file")

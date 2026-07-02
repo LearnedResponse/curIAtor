@@ -112,8 +112,14 @@ curiator release-preflight --fresh-clone --strict --require-public-remotes
 This checks each required gallery has an `origin` remote matching
 `github.com/LearnedResponse/<gallery-name>` without pushing anything.
 
-After pushing the collection repositories, verify from a separate fresh clone that the quickstart works
-with the released package, not only the local checkout.
+After pushing the collection repositories, prove the remote contains each release-candidate commit:
+
+```bash
+curiator release-preflight --fresh-clone --strict --require-public-remotes --require-published-head
+```
+
+Then verify from a separate fresh clone that the quickstart works with the released package, not only
+the local checkout.
 
 ## 6. Configure external release services
 
