@@ -36,6 +36,12 @@ CURIATOR_GALLERY=galleries/curiator-geometry/gallery.yaml curiator stats --csv
 `figures/feedback-loop.mmd` is the source for the feedback-loop diagram. Regenerate or embed it from
 the Mermaid source at release time; do not hand-redraw a divergent copy.
 
+Regenerate the shell and feedback-panel figure with:
+
+```bash
+python docs/paper/figures/render_shell_feedback_panel.py
+```
+
 `figures/provenance-log-excerpt.md` is the source for the git-as-memory excerpt. Refresh it from a
 published collection with:
 
