@@ -85,7 +85,7 @@ All notable changes to curIAtor are documented here. The format follows
   warnings fail release publication gates; `--include-optional` adds the finance and phylogenetics
   public-shaped galleries to the default release set; `--http-smoke` also runs the proxy HTTP response
   check during nested or dependency-prepared preflight; `make release-check` uses strict fresh-clone mode; and
-  `make release-launch-check` rejects final-launch placeholders plus optional-gallery drift.
+  `make release-launch-check` rejects final-launch demo/paper placeholders plus optional-gallery drift.
 - `curiator galleries` lists nested `galleries/curiator-*` collection repos with git head, dirty state,
   and the `CURIATOR_GALLERY=...` command for targeting one from the runner checkout; it now also reports
   legacy sibling `curiator-*` checkouts or aliases next to the runner so they can be adopted or archived.

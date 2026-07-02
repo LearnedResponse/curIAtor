@@ -28,3 +28,6 @@ Release-time checklist:
 7. Regenerate `figures/ot-rainbow-before-after.png` from the release OT collection commit.
 8. Build/export the PDF for Zenodo.
 9. Add the Zenodo concept DOI to `CITATION.cff` and the README badge.
+
+`python scripts/check_release_docs.py --strict-launch` fails while `curiator-paper.md` still contains
+`TODO(release)` placeholders; the normal release-doc check allows them until the public evidence exists.

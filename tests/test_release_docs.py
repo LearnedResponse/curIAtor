@@ -65,6 +65,16 @@ def test_release_docs_detect_draft_paper_placeholders(tmp_path):
     assert "docs/paper/curiator-paper.md still has TODO(draft) placeholders" in failures
 
 
+def test_release_docs_default_allows_release_paper_placeholders(tmp_path):
+    module = _load_script()
+    _copy_release_doc_fixture(tmp_path)
+    (tmp_path / "docs" / "paper" / "curiator-paper.md").write_text(
+        "# Paper\n\nTODO(release): waits for public evidence.\n"
+    )
+
+    assert module.check_release_docs(tmp_path) == []
+
+
 def test_release_docs_strict_launch_detects_storyboard_demo_gif(tmp_path):
     module = _load_script()
     _copy_release_doc_fixture(tmp_path)
@@ -77,6 +87,22 @@ def test_release_docs_strict_launch_detects_storyboard_demo_gif(tmp_path):
     assert (
         "docs/demo.gif is still the generated storyboard placeholder; "
         "record the real browser demo before public launch"
+    ) in failures
+
+
+def test_release_docs_strict_launch_detects_release_paper_placeholders(tmp_path):
+    module = _load_script()
+    _copy_release_doc_fixture(tmp_path)
+    (tmp_path / "docs" / "demo.gif").write_bytes(b"GIF89a browser capture bytes \x3b")
+    (tmp_path / "docs" / "paper" / "curiator-paper.md").write_text(
+        "# Paper\n\nTODO(release): waits for public evidence.\n"
+    )
+
+    failures = module.check_release_docs(tmp_path, strict_launch=True)
+
+    assert (
+        "docs/paper/curiator-paper.md still has TODO(release) placeholders; "
+        "replace them with command-backed release evidence before publishing the paper"
     ) in failures
 
 

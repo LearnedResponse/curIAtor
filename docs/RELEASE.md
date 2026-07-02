@@ -61,9 +61,10 @@ Then run the final launch-only gate:
 make release-launch-check
 ```
 
-Unlike `make release-check`, this rejects the generated storyboard marker in `docs/demo.gif` and runs
-the optional-gallery fresh-clone preflight. It should pass only after the real browser capture is in
-place and the optional public-shaped collections are still clean.
+Unlike `make release-check`, this rejects the generated storyboard marker in `docs/demo.gif`, rejects
+`TODO(release)` placeholders in `docs/paper/curiator-paper.md`, and runs the optional-gallery
+fresh-clone preflight. It should pass only after the real browser capture is in place, the paper's
+release evidence placeholders are filled, and the optional public-shaped collections are still clean.
 
 ## 5. Publish example collections
 

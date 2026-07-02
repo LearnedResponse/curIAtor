@@ -91,6 +91,11 @@ def check_release_docs(root: Path = ROOT, *, strict_launch: bool = False) -> lis
                 "docs/demo.gif is still the generated storyboard placeholder; "
                 "record the real browser demo before public launch"
             )
+        if "TODO(release)" in paper_text:
+            failures.append(
+                "docs/paper/curiator-paper.md still has TODO(release) placeholders; "
+                "replace them with command-backed release evidence before publishing the paper"
+            )
 
     return failures
 

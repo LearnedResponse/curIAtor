@@ -23,7 +23,7 @@ release-check:  ## local release gate: lint, tests, demo gif, gallery preflight,
 	python scripts/render_demo_gif.py
 	python -m build
 	python -m twine check dist/*
-release-launch-check:  ## final public-launch gate: reject generated placeholders and optional-gallery drift
+release-launch-check:  ## final public-launch gate: reject generated/paper placeholders and optional-gallery drift
 	python scripts/check_release_docs.py --strict-launch
 	curiator release-preflight --include-optional --fresh-clone --strict
 reset-demo:     ## rewind for another take: re-break aviato, clear the ledger
