@@ -38,7 +38,7 @@ deliberate (ship, let the example demos surface what to prioritize).
   displayed-trees paper (displayed trees / tree-of-blobs / NC = D / TINNiK), seeded from an already-built
   Dash explorer **and a working Pyodide static port**. A domain-specialized sibling of
   `math-geometry-collection` for the phylo-networks community; first client-side-WASM-compute collection;
-  first curator receipt landed at `bb597ed`, and it ships with the paper's outreach.
+  two curator receipts have landed through `0b3983f`, and it ships with the paper's outreach.
 - [**annotated-feedback**](annotated-feedback.md) — draw on the captured screenshot (box / arrow / numbered
   pin / redact) so feedback points at the exact element. **v1 burns the marks into the PNG** (rides the
   existing Read-the-PNG path, front-end only); **v2 resolves each mark to its DOM element** via same-origin
