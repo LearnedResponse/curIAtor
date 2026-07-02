@@ -51,6 +51,8 @@ All notable changes to curIAtor are documented here. The format follows
   issues with scopes and done criteria.
 - The release workflow now publishes tagged builds through PyPI trusted publishing and blocks tags
   whose `vX.Y.Z` does not match `pyproject.toml`.
+- CI now builds the sdist/wheel and runs `twine check`, so package metadata regressions are caught
+  before a release tag is pushed.
 
 ### Fixed
 - `curiator commands install` now writes the Codex repo skill to `.agents/skills/curiator/SKILL.md`,

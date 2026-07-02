@@ -29,6 +29,20 @@ jobs:
       - name: Tests (pytest)
         run: pytest -q
 
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install build tooling
+        run: pip install -e ".[dev]"
+      - name: Build sdist + wheel
+        run: python -m build
+      - name: Check package metadata
+        run: twine check dist/*
+
   dco:
     # The project accepts contributions under the DCO — every commit in a PR must be signed off.
     runs-on: ubuntu-latest
