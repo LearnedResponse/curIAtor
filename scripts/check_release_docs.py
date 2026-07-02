@@ -93,6 +93,7 @@ def check_release_docs(root: Path = ROOT, *, strict_launch: bool = False) -> lis
     for phrase in [
         "make release-evidence",
         "--output release-evidence/release-preflight.json",
+        "--output release-evidence/release-preflight-optional.json",
         "--output release-evidence/case-study-stats.json",
     ]:
         if phrase not in reproducibility_text:

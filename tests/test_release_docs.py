@@ -83,6 +83,10 @@ def test_release_docs_requires_standard_release_evidence_commands(tmp_path):
     ) in failures
     assert (
         "docs/paper/reproducibility.md missing required phrase: "
+        "--output release-evidence/release-preflight-optional.json"
+    ) in failures
+    assert (
+        "docs/paper/reproducibility.md missing required phrase: "
         "--output release-evidence/case-study-stats.json"
     ) in failures
 
@@ -95,6 +99,8 @@ def test_release_docs_rejects_tracked_raw_paper_evidence(tmp_path):
         "make release-evidence\n"
         "curiator release-preflight --fresh-clone --json "
         "--output release-evidence/release-preflight.json\n"
+        "curiator release-preflight --include-optional --fresh-clone --json "
+        "--output release-evidence/release-preflight-optional.json\n"
         "curiator stats compare galleries/curiator-aviato galleries/curiator-ot "
         "galleries/curiator-geometry --json "
         "--output release-evidence/case-study-stats.json\n"

@@ -12,6 +12,8 @@ or checked out under `galleries/`:
 curiator release-preflight --fresh-clone
 make release-evidence
 curiator release-preflight --fresh-clone --json --output release-evidence/release-preflight.json
+curiator release-preflight --include-optional --fresh-clone --json \
+  --output release-evidence/release-preflight-optional.json
 curiator stats compare galleries/curiator-aviato galleries/curiator-ot galleries/curiator-geometry --markdown
 curiator stats compare galleries/curiator-aviato galleries/curiator-ot galleries/curiator-geometry --json
 curiator stats compare galleries/curiator-aviato galleries/curiator-ot galleries/curiator-geometry \
