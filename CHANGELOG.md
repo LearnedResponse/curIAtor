@@ -128,7 +128,7 @@ All notable changes to curIAtor are documented here. The format follows
   replacement, collection publication, PyPI Trusted Publishing, Zenodo, tag push, and post-release
   smoke checks.
 - The release workflow now publishes tagged builds through PyPI trusted publishing and blocks tags
-  whose `vX.Y.Z` does not match `pyproject.toml` or whose release docs fail the local gate.
+  unless version matching, lint, tests, release-doc checks, package build, and `twine check` pass.
 - CI now lints runner code, tests, and scripts, runs the release-doc check, builds the sdist/wheel, and
   runs `twine check`, so package metadata and launch-doc regressions are caught before a release tag is pushed.
 - `make release-check` runs the local release gate: lint, tests, public-gallery fresh-clone preflight,

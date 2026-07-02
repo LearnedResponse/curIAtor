@@ -99,15 +99,16 @@ After Zenodo creates the concept DOI, add it to `CITATION.cff` and add the DOI b
 
 ## 7. Push the tag
 
-The release workflow is tag-driven and checks that the tag version matches `pyproject.toml`:
+The release workflow is tag-driven and checks that the tag version matches `pyproject.toml`, then runs
+lint, tests, release-doc checks, package build, and `twine check` before publishing:
 
 ```bash
 git tag v0.2.0
 git push origin v0.2.0
 ```
 
-The workflow builds the wheel and sdist, attaches them to the GitHub release, and publishes to PyPI via
-Trusted Publishing.
+If those gates pass, the workflow attaches the wheel and sdist to the GitHub release and publishes to
+PyPI via Trusted Publishing.
 
 ## 8. Post-release checks
 
