@@ -3,10 +3,11 @@
 > **Status:** scaffolded 2026-07-02 in nested repo `galleries/curiator-phylogenetics`.
 > Seed commit `713b39e` carries a **public-first** collection seeded from an already-built
 > displayed-trees viz suite: a Pyodide static proxy app (`tinnik_static`) and a Dash local
-> explorer (`tinnik_dash`). Four static-app curator receipts have landed on `curiator/auto` through
-> `7410acb`: the CF ternary now explains <i>D</i>, boot status is phased, the network selector has a
-> public-example caveat, and the strictness witness is labeled "induced blob but not in D." Captured
-> 2026-06-30; first scaffold landed 2026-07-02.
+> explorer (`tinnik_dash`). The seeded feedback loop is complete on `curiator/auto` through `b1b3586`:
+> five static-app receipts and three Dash receipts cover the CF ternary explanation, boot-status
+> phases, network-selector caveat, strictness-witness label, CF triple classifier, gamma-control copy,
+> claim-boundary panel, and paper-story section map. Captured 2026-06-30; first scaffold landed
+> 2026-07-02.
 
 ## The pitch
 
@@ -76,11 +77,11 @@ server, no re-implementation.
    own quartet CFs," "add a species-tree toggle," "collapse trivial blobs," "make the
    TINNiK inference (CFs → tree-of-blobs) interactive," "explain why it's structure not
    weights," "show the min-plus envelope over displayed trees as the reticulation mixture."*
-   First seed file landed with eight reviewer items.
+   First seed file landed with eight reviewer items; all eight are now done.
 6. **Run the loop** — `curiator seed && curiator watch`: the curator evolves each app
    fix-by-fix, committing per fix with `Feedback-From` trailers → the git log *is* the
-   gallery growing from paper-figures into an explorable public companion. Four loop receipts
-   have landed through `7410acb`; four seeded reviewer items remain open.
+   gallery growing from paper-figures into an explorable public companion. Eight loop receipts
+   have landed through `b1b3586`; no seeded reviewer items remain open.
 7. **Verify by running** (not asserting): the static apps load in-browser (Pyodide boots,
    panels compute, clicks work); the Dash explorer mounts; the seeded feedback actually
    transforms them (diff before → after); a fresh public deploy serves the improved gallery.
@@ -91,14 +92,14 @@ server, no re-implementation.
   errors or warnings.
 - `CURIATOR_GALLERY=galleries/curiator-phylogenetics/gallery.yaml curiator smoke`: passing for both
   apps (`tinnik_static`, `tinnik_dash`).
-- `curiator stats --json`: 8 cycles, 4 replied/done cycles, 4 curator commits, latest `7410acb`.
+- `curiator stats --json`: 8 cycles, 8 replied/done cycles, 8 curator commits, latest `b1b3586`.
 - `curiator release-preflight --gallery curiator-phylogenetics --fresh-clone --json`: passing at
-  `7410acb`; the temp clone runs both app smoke hooks and finds no tracked machine-local paths.
+  `b1b3586`; the temp clone runs both app smoke hooks and finds no tracked machine-local paths.
 - Static app checks: `python -m py_compile ...` and `node --check app.js` passed; a temporary
   `python -m http.server` on port 8751 returned HTTP 200 for `/`.
 - Dash app check: `python -m compileall -q apps/tinnik_dash_explorer` passed.
 - `galleries/curiator-phylogenetics` is initialized as its own git repo with seed commit `713b39e`;
-  the current `curiator/auto` head is `7410acb`.
+  the current `curiator/auto` head is `b1b3586`.
 
 ## Expansion apps (beyond the seed)
 
