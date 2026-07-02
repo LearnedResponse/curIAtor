@@ -347,6 +347,10 @@ This maps onto the deployment modes: a **personal container** (`headless-cc`, `a
 > pre-release runner, build from a checkout with `--build-arg CURIATOR_PIP=<path-or-spec>` (see the
 > comments in the `Dockerfile`).
 
+For a hosted invite-only playground, use the phase-0 deployment runbook in
+[`PUBLIC_PLAYGROUND_DEPLOYMENT.md`](PUBLIC_PLAYGROUND_DEPLOYMENT.md): sign-in first, one container per
+collection, TLS at the edge, backups of the mounted collection, and weekly `curiator stats` review.
+
 ## 7. Adapters & autonomy (recap)
 
 ```yaml

@@ -8,11 +8,13 @@
 > static example repos are the pitch; this is the live complement — **a hosted public collection where
 > anyone can leave feedback and watch the curator work**, without handing an autonomous agent to the
 > open internet. It is the mechanism behind SECURITY.md's "Public Internet Use" policy (queue + human
-> review for unauthenticated feedback), which today is stated but not enforced by the runner.
+> review for unauthenticated feedback), now backed by the runner's held queue and dispatch quotas.
 > **Rollout starts velvet-gated (2026-07-01):** an invite-only hosted collection needs ~zero new runner
 > features — `auth.mode: local|oidc` already gates feedback behind login, and the invite list is both
-> the rate limit and the trust vetting. The anonymous tier + held pool is a later phase, built only
-> after the velvet phase teaches us what hosted moderation actually costs.
+> the rate limit and the trust vetting. A phase-0 deployment runbook now exists in
+> [`docs/PUBLIC_PLAYGROUND_DEPLOYMENT.md`](../PUBLIC_PLAYGROUND_DEPLOYMENT.md); the actual hosted pilot
+> remains to run. The anonymous tier + held pool is a later phase, built only after the velvet phase
+> teaches us what hosted moderation actually costs.
 
 ## The idea
 
@@ -37,11 +39,11 @@ behind login (`auth.mode: local`, accounts created per invite with `curiator use
 `auth.mode: header` behind oauth2-proxy with an email/org allowlist, which is a velvet rope with zero
 password management). Everyone inside the rope is effectively the "account" tier; the invite list *is*
 the rate limit, the vetting, and the abuse policy. `curiator user disable|enable` now gives local-login
-deployments a non-destructive revocation lever. Remaining phase-0 work is deployment: a container +
-TLS reverse proxy, ledger/shots backups, and someone watching `curiator stats` weekly. **What it
-answers before phase 1:** real hosting cost per feedback→fix cycle,
-how often reverts are actually needed, and whether strangers' feedback breaks the task-bundle
-assumptions.
+deployments a non-destructive revocation lever, and the deployment runbook now spells out the container,
+TLS reverse proxy, mounted-state backups, and weekly `curiator stats` checks. Remaining phase-0 work is
+actually running the hosted pilot. **What it answers before phase 1:** real hosting cost per
+feedback→fix cycle, how often reverts are actually needed, and whether strangers' feedback breaks the
+task-bundle assumptions.
 
 **Phase 1 — self-serve accounts + quotas.** Open signup (or "Sign in with GitHub" via the existing
 OIDC mode — identity dedupe plus a free reputation prior), and the quota knobs become real
