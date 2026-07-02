@@ -668,7 +668,9 @@
     const [previewEntry, setPreviewEntry] = useState(null);
     const [msg, setMsg] = useState("");
     const [recording, setRecording] = useState(false);
+    const [dictating, setDictating] = useState(false);
     const recorderRef = useRef(null);
+    const speechRef = useRef(null);
     const audioChunksRef = useRef([]);
     const narrativeClockRef = useRef(null);
     const recordingOffsetRef = useRef(0);
@@ -683,6 +685,11 @@
     useEffect(() => () => {
       const active = recorderRef.current;
       if (active && active.stream) stopCaptureStream(active.stream);
+      const speech = speechRef.current;
+      if (speech) {
+        speech.onend = null;
+        speech.abort();
+      }
     }, []);
     useEffect(() => {
       if (replyTo && replyTo.key !== selected) setReplyTo(null);
@@ -839,6 +846,61 @@
         .catch((e) => setMsg(e.error || "Transcription failed."));
     }
 
+    function browserSpeechCtor() {
+      return window.SpeechRecognition || window.webkitSpeechRecognition || null;
+    }
+
+    function startBrowserSpeech() {
+      if (!voice.web_speech) {
+        setMsg("Browser dictation is not enabled for this collection.");
+        return;
+      }
+      const Speech = browserSpeechCtor();
+      if (!Speech) {
+        setMsg("Browser dictation is unavailable in this browser.");
+        return;
+      }
+      try {
+        const recognition = new Speech();
+        recognition.continuous = true;
+        recognition.interimResults = true;
+        if (voice.web_speech_lang) recognition.lang = voice.web_speech_lang;
+        recognition.onresult = (event) => {
+          for (let i = event.resultIndex; i < event.results.length; i += 1) {
+            const result = event.results[i];
+            if (result && result.isFinal && result[0] && result[0].transcript) {
+              appendTranscript(result[0].transcript);
+            }
+          }
+        };
+        recognition.onerror = (event) => {
+          speechRef.current = null;
+          setDictating(false);
+          setMsg("Browser dictation failed: " + ((event && event.error) || "unknown error"));
+        };
+        recognition.onend = () => {
+          speechRef.current = null;
+          setDictating(false);
+          setMsg("Browser dictation stopped.");
+        };
+        speechRef.current = recognition;
+        recognition.start();
+        setDictating(true);
+        setMsg("Browser dictation active…");
+      } catch (e) {
+        speechRef.current = null;
+        setDictating(false);
+        setMsg("Browser dictation failed: " + (e && e.message ? e.message : e));
+      }
+    }
+
+    function stopBrowserSpeech() {
+      const active = speechRef.current;
+      if (!active) return;
+      setMsg("Stopping browser dictation…");
+      active.stop();
+    }
+
     function startVoice() {
       const media = navigator.mediaDevices || {};
       if (!voice.local_transcribe) {
@@ -952,6 +1014,10 @@
         voice.local_transcribe ? h("button", {className: "rshell-button secondary" + (recording ? " active" : ""),
           title: "Local voice transcription", onClick: recording ? stopVoice : startVoice},
           recording ? "■ Stop" : "🎤 Record") : null,
+        voice.web_speech ? h("button", {className: "rshell-button secondary" + (dictating ? " active" : ""),
+          title: "Browser Web Speech dictation; may use browser speech services",
+          onClick: dictating ? stopBrowserSpeech : startBrowserSpeech},
+          dictating ? "■ Dictation" : "🎙 Dictate") : null,
         anonymousHeld ? null : h("button", {className: "rshell-button secondary",
           title: "Browser screen capture", onClick: nativeCapture}, "▣ Native"),
         anonymousHeld ? null : h("label", {className: "rshell-button secondary"}, "⬆ upload",

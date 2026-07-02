@@ -48,6 +48,7 @@ def test_react_shell_index_and_bootstrap(web_client):
     assert data["general"]["key"] == "__general__"
     assert data["auth"]["is_admin"] is True
     assert data["voice"]["local_transcribe"] is False
+    assert data["voice"]["web_speech"] is False
     sample = next(a for a in data["apps"] if a["key"] == "sample")
     assert sample["revision"] == 0
 
@@ -150,8 +151,14 @@ def test_react_shell_has_local_voice_transcription(web_client):
     assert "MediaRecorder" in js
     assert "getUserMedia" in js
     assert 'fetch("/api/transcribe"' in js
-    assert "SpeechRecognition" not in js
+    assert "function startBrowserSpeech" in js
+    assert "function stopBrowserSpeech" in js
+    assert "SpeechRecognition" in js
+    assert "webkitSpeechRecognition" in js
     assert "voice.local_transcribe" in js
+    assert "voice.web_speech" in js
+    assert "Browser Web Speech dictation; may use browser speech services" in js
+    assert "Browser dictation is not enabled for this collection." in js
     assert "transcriptSegments" in js
     assert "transcript_segments: transcriptSegments" in js
     assert "function ensureNarrativeClock" in js
@@ -160,6 +167,21 @@ def test_react_shell_has_local_voice_transcription(web_client):
     assert "clockStart: narrativeClockStart" in js
     assert "clockRef.current = clockStart || performance.now()" in js
     assert ".rshell-button.secondary.active" in css
+
+
+def test_react_shell_can_expose_opt_in_browser_speech(collection, monkeypatch):
+    (collection / "gallery.yaml").write_text((collection / "gallery.yaml").read_text() + """
+voice:
+  web_speech: true
+  web_speech_lang: en-US
+""")
+    mod = _load_web_mod(monkeypatch)
+    client = mod.build_flask_app().test_client()
+
+    boot = client.get("/api/bootstrap").get_json()
+    assert boot["voice"]["local_transcribe"] is False
+    assert boot["voice"]["web_speech"] is True
+    assert boot["voice"]["web_speech_lang"] == "en-US"
 
 
 def test_react_shell_transcribe_api_runs_configured_local_command(collection, monkeypatch):

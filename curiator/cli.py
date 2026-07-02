@@ -2932,6 +2932,20 @@ def cmd_voice(args) -> int:
         print(f"curiator: voice.transcribe_cmd = {command or 'null'}  ({gallery})")
         print(f"curiator: voice.transcribe_timeout = {voice.get('transcribe_timeout')}")
         print(f"curiator: voice.transcribe_max_bytes = {voice.get('transcribe_max_bytes')}")
+        print(f"curiator: voice.web_speech = {bool(voice.get('web_speech'))}")
+        print(f"curiator: voice.web_speech_lang = {voice.get('web_speech_lang') or 'null'}")
+        return 0
+
+    if args.action == "web-speech":
+        enabled = args.state == "on"
+        text = gallery.read_text()
+        text = set_block_key(text, "voice", "web_speech", enabled)
+        if args.lang is not None:
+            text = set_block_key(text, "voice", "web_speech_lang", args.lang)
+        gallery.write_text(text)
+        print(f"curiator: browser Web Speech dictation {'enabled' if enabled else 'disabled'} in {gallery}")
+        if enabled:
+            print("note: browser Web Speech may use the browser provider's speech service; use only for public/hosted collections.")
         return 0
 
     command = _VOICE_FASTER_WHISPER_CMD
@@ -3831,6 +3845,10 @@ def main(argv=None) -> int:
     vsetup.add_argument("--max-bytes", type=int, default=25 * 1024 * 1024, help="maximum uploaded audio bytes")
     vsetup.add_argument("--force", action="store_true", help="overwrite an existing voice.transcribe_cmd")
     vsetup.set_defaults(func=cmd_voice)
+    vweb = vc_sub.add_parser("web-speech", help="enable or disable browser Web Speech dictation")
+    vweb.add_argument("state", choices=["on", "off"])
+    vweb.add_argument("--lang", default=None, help="optional BCP-47 recognition language, such as en-US")
+    vweb.set_defaults(func=cmd_voice)
     rv = sub.add_parser("revert", help="(git-as-memory) undo a curator commit; record + thread stay intact")
     rv.add_argument("target", help="a feedback id or a commit SHA")
     rv.add_argument("--reason", default=None, help="why (recorded in the ⚙ note + revert commit)")

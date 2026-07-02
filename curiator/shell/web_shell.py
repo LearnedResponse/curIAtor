@@ -175,8 +175,11 @@ def _voice_int(key: str, default: int, *, low: int, high: int) -> int:
 
 
 def _voice_payload() -> dict:
+    cfg = _voice_cfg()
     return {
-        "local_transcribe": bool(_voice_cfg().get("transcribe_cmd")),
+        "local_transcribe": bool(cfg.get("transcribe_cmd")),
+        "web_speech": bool(cfg.get("web_speech")),
+        "web_speech_lang": str(cfg.get("web_speech_lang") or ""),
         "max_bytes": _voice_int("transcribe_max_bytes", 25 * 1024 * 1024, low=1, high=200 * 1024 * 1024),
         "timeout": _voice_int("transcribe_timeout", 60, low=1, high=600),
     }

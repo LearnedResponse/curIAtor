@@ -48,6 +48,29 @@ voice:
     )
 
 
+def test_voice_web_speech_toggle_is_explicit(collection, monkeypatch, capsys):
+    from curiator import cli
+    from curiator.config import load_config
+
+    monkeypatch.chdir(collection)
+    assert cli.main(["voice", "web-speech", "on", "--lang", "en-US"]) == 0
+    out = capsys.readouterr().out
+    assert "browser Web Speech dictation enabled" in out
+    assert "public/hosted collections" in out
+    data = yaml.safe_load((collection / "gallery.yaml").read_text())
+    assert data["voice"]["web_speech"] is True
+    assert data["voice"]["web_speech_lang"] == "en-US"
+    assert load_config()["voice"]["web_speech"] is True
+
+    assert cli.main(["voice", "show"]) == 0
+    shown = capsys.readouterr().out
+    assert "voice.web_speech = True" in shown
+    assert "voice.web_speech_lang = en-US" in shown
+
+    assert cli.main(["voice", "web-speech", "off"]) == 0
+    assert yaml.safe_load((collection / "gallery.yaml").read_text())["voice"]["web_speech"] is False
+
+
 def test_faster_whisper_adapter_payload_formats_segments():
     from curiator.voice.faster_whisper import payload_from_segments
 

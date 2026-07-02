@@ -242,6 +242,18 @@ when there are segments but no timed marks. When you annotate while recording, t
 recording start as the shared clock zero, so mark timestamps and transcript segments line up in the UI
 and task bundle.
 
+For public or hosted collections that can accept browser-provider speech services, enable the optional
+Web Speech dictation button explicitly:
+
+```bash
+curiator voice web-speech on --lang en-US
+curiator up
+```
+
+This adds a **Dictate** button that streams final browser speech-recognition phrases into the comment
+box. It does not produce reliable segment timestamps and therefore does not replace local Whisper for
+narrated feedback.
+
 ## 3. Work Interactively From An App Repo
 
 If you are already inside Claude Code, Codex, or another coding agent in an app repo, use the same

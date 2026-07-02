@@ -51,6 +51,7 @@ deliberate (ship, let the example demos surface what to prioritize).
   annotation on a *shared clock*, so a review becomes an ordered, intent-per-mark tour the agent
   follows. Composes with `annotated-feedback`; accessibility wins for motor/low-vision (voice +
   DOM-target snapping). Tier 0 dictation is documented; local transcription is command-backed and
-  `curiator voice setup` configures the packaged faster-whisper adapter; recording mode aligns
+  `curiator voice setup` configures the packaged faster-whisper adapter; explicit public/hosted Web
+  Speech opt-in is available; recording mode aligns
   annotation marks and transcript segments to one clock, and timed marks with overlapping speech render
   as an ordered `Narrated feedback` task-bundle block and compact prior-feedback summary.

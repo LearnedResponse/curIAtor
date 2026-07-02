@@ -1,8 +1,8 @@
 # Backlog — voice + narrated feedback (talk through the fix)
 
-> **Status:** Tier 0, command-backed local transcription, packaged faster-whisper setup, shared-clock
-> mark/transcript timing, segment persistence, task-bundle narrative merge, and visible feedback
-> narrative summaries landed
+> **Status:** Tier 0, command-backed local transcription, packaged faster-whisper setup, explicit
+> public/hosted Web Speech opt-in, shared-clock mark/transcript timing, segment persistence,
+> task-bundle narrative merge, and visible feedback narrative summaries landed
 > 2026-07-02. **North star:
 > "narrated feedback"** — voice + annotation on a shared clock, so a review is an
 > *ordered, intent-per-mark tour* the agent can follow.
@@ -16,8 +16,10 @@
 > comment box, and stores returned segment timestamps on the feedback entry so agents see
 > `Voice transcript segments` plus a derived `Narrated feedback` block when timed marks overlap timed
 > speech. Prior feedback threads now show the compact `Narrated feedback` summary, with a `Voice
-> transcript` fallback when saved speech has no timed marks. When recording is active, annotation marks
-> and transcript segments share the recording start as `t=0`.
+> transcript` fallback when saved speech has no timed marks. Browser Web Speech dictation is available
+> only behind explicit `voice.web_speech: true` / `curiator voice web-speech on` opt-in, because it may
+> use browser-provider speech services and does not provide reliable segment timestamps. When recording
+> is active, annotation marks and transcript segments share the recording start as `t=0`.
 > Composes with `annotated-feedback.md`, not a separate feature. Captured 2026-07-02.
 
 ## The pitch
@@ -44,10 +46,11 @@ difference between handing the agent a picture with notes and *walking it throug
 - **Tier 0 — OS dictation (zero code).** The comment box is a `<textarea>`, so macOS **Dictation** and
   Windows **Win+H** already dictate into it. Document it. Caveat: per-reviewer, OS-dependent, and
   **no turnkey Linux equivalent** — helps mac/Windows reviewers, not a Linux dev box.
-- **Tier 1 — Web Speech API (~30 lines).** A 🎤 button → `SpeechRecognition` → live transcript into
-  the comment. Chrome/Edge/Safari; **not Firefox**. The catch: **Chrome ships the audio to Google's
-  servers** — real network egress. **Public/hosted collections only**; it violates the private/OT
-  collections' no-egress stance. Also its timing is too fuzzy for the north star.
+- **Tier 1 — Web Speech API.** A Dictate button → `SpeechRecognition` → final phrases into the
+  comment. Chrome/Edge/Safari; **not Firefox**. This has landed behind explicit
+  `voice.web_speech: true` / `curiator voice web-speech on` opt-in. The catch: **Chrome ships the
+  audio to Google's servers** — real network egress. **Public/hosted collections only**; it violates
+  the private/OT collections' no-egress stance. Also its timing is too fuzzy for the north star.
 - **Tier 2 — local Whisper (the moat-consistent default).** `getUserMedia` + `MediaRecorder` → POST
   the clip to a curiator route running `faster-whisper` / `whisper.cpp` → transcript back. **On-device,
   any browser, works on Linux, zero egress**, and it's the same "a local model does the work" pattern
@@ -89,8 +92,9 @@ to retrofit.
    `MediaRecorder`-captures → POSTs → drops the transcript into the comment. Local, any browser.
    `curiator voice setup` now writes the default packaged `faster-whisper` adapter command; a
    `whisper.cpp` wrapper remains future polish.
-3. **Tier 1 (optional)** — a Web Speech mic button **gated to public/hosted collections** (a config
-   flag), never the private/OT ones.
+3. **Tier 1 (optional)** — landed as an explicit Web Speech dictation button gated by
+   `voice.web_speech: true` or `curiator voice web-speech on`; never enable it for private/OT
+   collections.
 4. **Shared-clock data model** — annotation mark timestamps landed as optional `start_ms` / `end_ms`
    fields, and `/api/transcribe` accepts/returns segment timestamps. Transcript segments are now
    persisted into the feedback ledger and task bundle, and React recording mode aligns marks plus
