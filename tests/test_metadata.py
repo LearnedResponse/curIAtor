@@ -67,6 +67,16 @@ def test_labels_cover_issue_templates_and_good_first_issues():
     assert "add new entries here when a scoped starter issue is identified" in issue_seed
 
 
+def test_release_evidence_target_writes_ignored_artifacts():
+    makefile = Path("Makefile").read_text()
+    gitignore = Path(".gitignore").read_text()
+
+    assert "release-evidence:" in makefile
+    assert "release-evidence/release-preflight.json" in makefile
+    assert "release-evidence/case-study-stats.json" in makefile
+    assert "release-evidence/" in gitignore
+
+
 def test_release_workflow_publishes_with_version_guard():
     data = yaml.safe_load(Path(".github/workflows/release.yml").read_text())
     jobs = data["jobs"]

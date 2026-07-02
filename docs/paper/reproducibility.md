@@ -10,6 +10,7 @@ or checked out under `galleries/`:
 
 ```bash
 curiator release-preflight --fresh-clone
+make release-evidence
 curiator release-preflight --fresh-clone --json --output release-evidence/release-preflight.json
 curiator stats compare galleries/curiator-aviato galleries/curiator-ot galleries/curiator-geometry --markdown
 curiator stats compare galleries/curiator-aviato galleries/curiator-ot galleries/curiator-geometry --json
@@ -25,6 +26,7 @@ recalculate those columns by hand. The `--output` form is preferred for the fina
 snapshot because it records the exact command product without shell-specific redirection. Keep raw JSON
 snapshots under the gitignored `release-evidence/` directory because they include local checkout and
 clone paths; commit only the portable Markdown/table excerpts that the paper actually cites.
+`make release-evidence` refreshes the standard local bundle under `release-evidence/`.
 
 For per-collection appendix tables:
 

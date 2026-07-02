@@ -1,4 +1,4 @@
-.PHONY: install up watch serve demo demo-up demo-gif release-prepare release-check release-launch-check reset-demo walkthrough test
+.PHONY: install up watch serve demo demo-up demo-gif release-prepare release-check release-launch-check release-evidence reset-demo walkthrough test
 install:        ## pip install -e . (editable)
 	pip install -e .
 up:             ## serve the gallery at http://127.0.0.1:8300
@@ -27,6 +27,11 @@ release-launch-check:  ## final public-launch gate: reject generated/paper place
 	python scripts/check_release_docs.py --strict-launch; docs_status=$$?; \
 	curiator release-preflight --include-optional --fresh-clone --strict; preflight_status=$$?; \
 	exit $$((docs_status || preflight_status))
+release-evidence:  ## write gitignored JSON/Markdown evidence snapshots under release-evidence/
+	curiator release-preflight --fresh-clone --strict --json --output release-evidence/release-preflight.json
+	curiator release-preflight --include-optional --fresh-clone --strict --json --output release-evidence/release-preflight-optional.json
+	curiator stats compare galleries/curiator-aviato galleries/curiator-ot galleries/curiator-geometry --markdown --output release-evidence/case-study-stats.md
+	curiator stats compare galleries/curiator-aviato galleries/curiator-ot galleries/curiator-geometry --json --output release-evidence/case-study-stats.json
 reset-demo:     ## rewind for another take: re-break aviato, clear the ledger
 	curiator reset-demo
 walkthrough:    ## print the demo recording script
