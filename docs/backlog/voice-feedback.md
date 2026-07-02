@@ -1,7 +1,7 @@
 # Backlog — voice + narrated feedback (talk through the fix)
 
-> **Status:** Tier 0, annotation mark clock fields, command-backed local transcription, transcript
-> segment persistence, and the first task-bundle narrative merge landed 2026-07-02. **North star:
+> **Status:** Tier 0, command-backed local transcription, shared-clock mark/transcript timing, segment
+> persistence, and the first task-bundle narrative merge landed 2026-07-02. **North star:
 > "narrated feedback"** — voice + annotation on a shared clock, so a review is an
 > *ordered, intent-per-mark tour* the agent can follow.
 > **Recommended shape: local-Whisper default** (moat-consistent, works on Linux), Web-Speech for the
@@ -11,7 +11,8 @@
 > a local `voice.transcribe_cmd` so the React shell records mic audio with `MediaRecorder`, POSTs it to
 > `/api/transcribe`, appends the returned transcript to the comment box, and stores returned segment
 > timestamps on the feedback entry so agents see `Voice transcript segments` plus a derived
-> `Narrated feedback` block when timed marks overlap timed speech.
+> `Narrated feedback` block when timed marks overlap timed speech. When recording is active, annotation
+> marks and transcript segments share the recording start as `t=0`.
 > Composes with `annotated-feedback.md`, not a separate feature. Captured 2026-07-02.
 
 ## The pitch
@@ -54,7 +55,9 @@ difference between handing the agent a picture with notes and *walking it throug
 The whole thing hinges on **one shared clock**:
 
 1. A **record mode** starts the mic and the annotation-event log at the same instant, timestamping
-   both from `t=0` (`performance.now()` zero point; audio and marks on the same timeline).
+   both from `t=0` (`performance.now()` zero point; audio and marks on the same timeline). A first
+   React-shell pass now uses recording start as the shared clock for marks drawn while recording and
+   offsets returned transcript segments into that same clock.
 2. Draw + talk simultaneously. Annotation events already have optional mark timestamps; Whisper
    returns transcript **segments with `[start, end]`** on the same clock.
 3. **Merge** the two timelines: each mark at time `t` pairs with the transcript segment(s) overlapping
@@ -84,11 +87,11 @@ to retrofit.
    flag), never the private/OT ones.
 4. **Shared-clock data model** — annotation mark timestamps landed as optional `start_ms` / `end_ms`
    fields, and `/api/transcribe` accepts/returns segment timestamps. Transcript segments are now
-   persisted into the feedback ledger and task bundle. A first task-bundle narrative merge now pairs
-   timed marks with overlapping transcript segments into an ordered `Narrated feedback` block.
-5. **Narrated feedback** — remaining: record mode → automatically stamp marks and transcript from the
-   same `t=0`, persist any richer narrative metadata that proves useful, and upgrade the replay overlay
-   to narrated replay.
+   persisted into the feedback ledger and task bundle, and React recording mode aligns marks plus
+   transcript segments to the same `t=0`.
+5. **Narrated feedback** — first task-bundle merge landed: timed marks pair with overlapping transcript
+   segments into an ordered `Narrated feedback` block. Remaining: persist any richer narrative metadata
+   that proves useful and upgrade the replay overlay to narrated replay.
 6. **Verify by running** — a spoken-while-drawing review round-trips; the agent's reply follows the
    ordered narrative and lands the marks in sequence.
 

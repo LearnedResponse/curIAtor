@@ -149,6 +149,11 @@ def test_react_shell_has_local_voice_transcription(web_client):
     assert "voice.local_transcribe" in js
     assert "transcriptSegments" in js
     assert "transcript_segments: transcriptSegments" in js
+    assert "function ensureNarrativeClock" in js
+    assert "function offsetTranscriptSegments" in js
+    assert "recordingOffsetRef.current" in js
+    assert "clockStart: narrativeClockStart" in js
+    assert "clockRef.current = clockStart || performance.now()" in js
     assert ".rshell-button.secondary.active" in css
 
 

@@ -340,16 +340,16 @@
     return target ? Object.assign({}, mark, {target}) : mark;
   }
 
-  function AnnotationEditor({image, annotations, setAnnotations, annotate}) {
+  function AnnotationEditor({image, annotations, setAnnotations, annotate, clockStart}) {
     const canvasRef = useRef(null);
     const imageRef = useRef(null);
-    const clockRef = useRef(performance.now());
+    const clockRef = useRef(clockStart || performance.now());
     const [tool, setTool] = useState("box");
     const [draft, setDraft] = useState(null);
 
     useEffect(() => {
-      clockRef.current = performance.now();
-    }, [image]);
+      clockRef.current = clockStart || performance.now();
+    }, [image, clockStart]);
 
     function elapsedMs() {
       return Math.max(0, Math.round((performance.now() - clockRef.current) * 10) / 10);
@@ -551,12 +551,15 @@
     const [shotSource, setShotSource] = useState(null);
     const [annotations, setAnnotations] = useState([]);
     const [transcriptSegments, setTranscriptSegments] = useState([]);
+    const [narrativeClockStart, setNarrativeClockStart] = useState(null);
     const [replyTo, setReplyTo] = useState(null);
     const [previewEntry, setPreviewEntry] = useState(null);
     const [msg, setMsg] = useState("");
     const [recording, setRecording] = useState(false);
     const recorderRef = useRef(null);
     const audioChunksRef = useRef([]);
+    const narrativeClockRef = useRef(null);
+    const recordingOffsetRef = useRef(0);
 
     useEffect(() => {
       window.curiatorShell = window.curiatorShell || {};
@@ -573,6 +576,8 @@
       if (replyTo && replyTo.key !== selected) setReplyTo(null);
       if (previewEntry) setPreviewEntry(null);
       if (transcriptSegments.length) setTranscriptSegments([]);
+      narrativeClockRef.current = null;
+      if (narrativeClockStart !== null) setNarrativeClockStart(null);
     }, [selected]);
 
     const items = feedback.items || [];
@@ -610,6 +615,8 @@
           setShotSource(null);
           setAnnotations([]);
           setTranscriptSegments([]);
+          narrativeClockRef.current = null;
+          setNarrativeClockStart(null);
           setReplyTo(null);
           setMsg(data.entry.status === "held"
             ? "✓ queued for review (" + data.entry.id + ")" + (data.entry.screenshot ? " +screenshot" : "")
@@ -687,7 +694,24 @@
       setComment((current) => current.trim() ? current.replace(/\s*$/, "\n\n") + clean : clean);
     }
 
-    function transcribeBlob(blob) {
+    function ensureNarrativeClock() {
+      if (narrativeClockRef.current == null) {
+        narrativeClockRef.current = performance.now();
+        setNarrativeClockStart(narrativeClockRef.current);
+      }
+      return narrativeClockRef.current;
+    }
+
+    function offsetTranscriptSegments(segments, offsetMs) {
+      return (segments || []).map((seg) => {
+        const out = Object.assign({}, seg);
+        if (Number.isFinite(Number(out.start_ms))) out.start_ms = Number(out.start_ms) + offsetMs;
+        if (Number.isFinite(Number(out.end_ms))) out.end_ms = Number(out.end_ms) + offsetMs;
+        return out;
+      });
+    }
+
+    function transcribeBlob(blob, offsetMs) {
       const form = new FormData();
       form.append("audio", blob, "feedback.webm");
       setMsg("Transcribing feedback…");
@@ -695,7 +719,7 @@
         .then((r) => r.ok ? r.json() : r.json().catch(() => ({})).then((j) => Promise.reject(j)))
         .then((data) => {
           appendTranscript(data.text || "");
-          const segments = data.segments || [];
+          const segments = offsetTranscriptSegments(data.segments || [], offsetMs || 0);
           setTranscriptSegments((current) => current.concat(segments));
           const count = segments.length;
           setMsg(data.text ? "Transcript added" + (count ? " (" + count + " segments)" : "") + "." : "No speech detected.");
@@ -717,6 +741,8 @@
         const recorder = new MediaRecorder(stream);
         audioChunksRef.current = [];
         recorderRef.current = {recorder, stream};
+        const clockStart = ensureNarrativeClock();
+        recordingOffsetRef.current = Math.max(0, performance.now() - clockStart);
         recorder.ondataavailable = (e) => {
           if (e.data && e.data.size) audioChunksRef.current.push(e.data);
         };
@@ -731,7 +757,7 @@
             setMsg("No audio recorded.");
             return;
           }
-          transcribeBlob(blob);
+          transcribeBlob(blob, recordingOffsetRef.current);
         };
         recorder.start();
         setRecording(true);
@@ -818,7 +844,8 @@
           title: "Browser screen capture", onClick: nativeCapture}, "▣ Native"),
         anonymousHeld ? null : h("label", {className: "rshell-button secondary"}, "⬆ upload",
           h("input", {type: "file", accept: "image/*", style: {display: "none"}, onChange: (e) => upload(e.target.files[0])}))),
-      shot ? h(AnnotationEditor, {image: shot, annotations, setAnnotations, annotate}) : null,
+      shot ? h(AnnotationEditor, {image: shot, annotations, setAnnotations, annotate,
+        clockStart: narrativeClockStart}) : null,
       h("button", {className: "rshell-button primary", onClick: save}, "Save feedback"),
       h("div", {className: "rshell-msg"}, msg),
       h("hr", {style: {border: "none", borderTop: "1px solid #eee"}}),
