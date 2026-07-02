@@ -33,6 +33,29 @@ def test_app_bundle_paths_and_commands(cfg, collection):
     assert "SMOKE OK" in body                               # smoke-test recipe
 
 
+def test_app_bundle_includes_screenshot_annotations(cfg):
+    entry = _entry(
+        screenshot="shots/sample_f1.png",
+        annotations=[
+            {
+                "tool": "pin",
+                "x1": 0.25,
+                "y1": 0.4,
+                "n": 1,
+                "target": {"selector": "#chart .legend", "tag": "div", "data_testid": "legend"},
+            },
+            {"tool": "redact", "x1": 0.1, "y1": 0.1, "x2": 0.2, "y2": 0.2, "target": {"selector": "#secret"}},
+        ],
+    )
+
+    body = Path(build_task(cfg, "sample", entry).task_file).read_text()
+    assert "## Screenshot annotations" in body
+    assert "pin 1: `pin` at x1=0.250, y1=0.400 -> selector `#chart .legend`" in body
+    assert "data-testid `legend`" in body
+    assert "target omitted for redaction" in body
+    assert "#secret" not in body
+
+
 def test_runner_routing_checkout_vs_pinned(cfg):
     g = build_task(cfg, GENERAL_KEY, _entry(id="g1", comment="the shell chrome is ugly"))
     body = Path(g.task_file).read_text()

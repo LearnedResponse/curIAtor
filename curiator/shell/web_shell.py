@@ -368,6 +368,7 @@ def build_flask_app() -> Flask:
                 user=u,
                 reply_to=reply_to,
                 status=status,
+                annotations=body.get("annotations"),
             )
             return jsonify({"entry": _safe_entry(entry), **_feedback_payload(key)})
         return jsonify(_feedback_payload(key))

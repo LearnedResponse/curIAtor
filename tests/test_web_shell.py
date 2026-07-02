@@ -82,6 +82,9 @@ def test_react_shell_has_burned_screenshot_annotations(web_client):
     css = web_client.get("/assets/react_shell.css").get_data(as_text=True)
     assert "function AnnotationEditor" in js
     assert "function composeShot" in js
+    assert "function withDomTarget" in js
+    assert "function selectorFor" in js
+    assert "annotations: screenshot ? annotations : []" in js
     assert "shotSource" in js
     assert 'setShotSource("capture")' in js
     assert 'setShotSource("upload")' in js
@@ -264,6 +267,42 @@ def test_react_shell_feedback_api_threads_replies(web_client):
     assert child["reply_to"] == [parent]
     data = web_client.get("/api/feedback/sample").get_json()
     assert [e["comment"] for e in data["items"]] == ["original", "reply"]
+
+
+def test_react_shell_feedback_api_stores_sanitized_annotations(web_client):
+    r = web_client.post("/api/feedback/sample", json={
+        "comment": "marked chart",
+        "screenshot": "data:image/png;base64,aGVsbG8=",
+        "screenshot_source": "capture",
+        "annotations": [
+            {
+                "tool": "box",
+                "x1": -1,
+                "y1": 0.2,
+                "x2": 0.9,
+                "y2": 2,
+                "target": {
+                    "selector": "#chart .legend",
+                    "tag": "div",
+                    "id": "chart",
+                    "data_testid": "legend",
+                    "role": "img",
+                    "classes": ["plot", "legend", "extra", "ignored", "last", "dropped"],
+                    "text": "not stored",
+                },
+            },
+            {"tool": "redact", "x1": 0.1, "y1": 0.1, "x2": 0.2, "y2": 0.2, "target": {"selector": "#secret"}},
+            {"tool": "unknown", "x1": 0.1, "y1": 0.1},
+        ],
+    })
+    assert r.status_code == 200
+    annotations = r.get_json()["entry"]["annotations"]
+    assert len(annotations) == 2
+    assert annotations[0]["x1"] == 0.0 and annotations[0]["y2"] == 1.0
+    assert annotations[0]["target"]["selector"] == "#chart .legend"
+    assert annotations[0]["target"]["classes"] == ["plot", "legend", "extra", "ignored", "last"]
+    assert "text" not in annotations[0]["target"]
+    assert "target" not in annotations[1]
 
 
 def test_react_shell_trace_and_app_mount(collection, web_mod):

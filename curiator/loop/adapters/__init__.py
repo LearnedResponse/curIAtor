@@ -132,6 +132,49 @@ def _shot_path(cfg: dict, entry: dict) -> str | None:
     return str(Path(fb_dir) / shot).replace("\\", "/")
 
 
+def _annotation_block(entry: dict) -> str:
+    """Prompt-facing structured annotation hints, if the screenshot was marked up."""
+    marks = entry.get("annotations") or []
+    if not isinstance(marks, list):
+        return ""
+    rows = []
+    for idx, mark in enumerate(marks[:50], start=1):
+        if not isinstance(mark, dict):
+            continue
+        tool = mark.get("tool") or "mark"
+        label = f"pin {mark.get('n')}" if tool == "pin" and mark.get("n") else f"mark {idx}"
+        coords = []
+        for field in ("x1", "y1", "x2", "y2"):
+            if isinstance(mark.get(field), (int, float)):
+                coords.append(f"{field}={mark[field]:.3f}")
+        line = f"- {label}: `{tool}`"
+        if coords:
+            line += " at " + ", ".join(coords)
+        target = mark.get("target") if isinstance(mark.get("target"), dict) else {}
+        if tool == "redact":
+            line += " (target omitted for redaction)"
+        elif target:
+            bits = []
+            selector = target.get("selector")
+            if selector:
+                bits.append(f"selector `{selector}`")
+            tag = target.get("tag")
+            if tag:
+                bits.append(f"tag `{tag}`")
+            testid = target.get("data_testid")
+            if testid:
+                bits.append(f"data-testid `{testid}`")
+            role = target.get("role")
+            if role:
+                bits.append(f"role `{role}`")
+            if bits:
+                line += " -> " + "; ".join(bits)
+        rows.append(line)
+    if not rows:
+        return ""
+    return "\n## Screenshot annotations\n" + "\n".join(rows)
+
+
 def _entry_label(entry: dict) -> str:
     who = "agent" if entry.get("kind") == "system" or entry.get("author") == "claude" else "user"
     status = entry.get("status") or "?"
@@ -280,6 +323,9 @@ def _collection_bundle(cfg: dict, entry: dict, eid: str, shot_path: str | None, 
         f"- reply after a fix:  `{_reply_cmd(cfg, GENERAL_KEY, eid, '<what changed + why>', 'done')}`",
         f"- reply with a plan:  `{_reply_cmd(cfg, GENERAL_KEY, eid, '<plan + recommendation>', 'awaiting_approval')}`",
     ]
+    annotations = _annotation_block(entry)
+    if annotations:
+        body.append(annotations)
     if approval_followup:
         body.append(
             "\n**APPROVAL/FOLLOW-UP RUN** — the user has replied to a prior collection/app request. "
@@ -321,6 +367,9 @@ def _runner_bundle(cfg: dict, entry: dict, eid: str, shot_path: str | None) -> t
         f"- runner mode: **{mode}**",
         "",
     ]
+    annotations = _annotation_block(entry)
+    if annotations:
+        head.append(annotations)
     if mode == "checkout":
         root = _runner_root(cfg)
         root_display = _repo_display(cfg, root)
@@ -382,6 +431,9 @@ def _app_bundle(cfg: dict, key: str, entry: dict, eid: str, shot_path: str | Non
         f"- screenshot (Read this PNG): `{shot_path}`" if shot_path else "- screenshot: (none)",
         f"- feedback id (reply_to this): `{eid}`",
     ]
+    annotations = _annotation_block(entry)
+    if annotations:
+        body.append(annotations)
     lessons = _lessons_for(cfg, key)
     if lessons:
         body.append(f"\n## Prior lessons for `{key}` (curator git history — what stuck / got reverted)\n{lessons}")

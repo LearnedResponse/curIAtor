@@ -133,7 +133,76 @@
     });
   }
 
-  function AnnotationEditor({image, annotations, setAnnotations}) {
+  function cssEscape(value) {
+    if (window.CSS && window.CSS.escape) return window.CSS.escape(String(value));
+    return String(value).replace(/[^a-zA-Z0-9_-]/g, (ch) => "\\" + ch);
+  }
+
+  function attrValue(value) {
+    return String(value).replace(/\\/g, "\\\\").replace(/"/g, "\\\"");
+  }
+
+  function selectorFor(el) {
+    if (!el || !el.tagName) return null;
+    const parts = [];
+    let cur = el;
+    while (cur && cur.nodeType === 1 && cur.tagName && cur.tagName.toLowerCase() !== "html" && parts.length < 5) {
+      const tag = cur.tagName.toLowerCase();
+      const testid = cur.getAttribute("data-testid") || cur.getAttribute("data-test") || cur.getAttribute("data-cy");
+      let part = tag;
+      if (cur.id) {
+        part += "#" + cssEscape(cur.id);
+        parts.unshift(part);
+        break;
+      }
+      if (testid) part += '[data-testid="' + attrValue(testid) + '"]';
+      else Array.from(cur.classList || []).slice(0, 2).forEach((cls) => { part += "." + cssEscape(cls); });
+      const parent = cur.parentElement;
+      if (parent) {
+        const siblings = Array.from(parent.children || []).filter((node) => node.tagName === cur.tagName);
+        if (siblings.length > 1) part += ":nth-of-type(" + (siblings.indexOf(cur) + 1) + ")";
+      }
+      parts.unshift(part);
+      cur = parent;
+    }
+    return parts.join(" > ");
+  }
+
+  function targetForElement(el) {
+    if (!el || !el.tagName) return null;
+    const testid = el.getAttribute("data-testid") || el.getAttribute("data-test") || el.getAttribute("data-cy");
+    const target = {
+      selector: selectorFor(el),
+      tag: el.tagName.toLowerCase()
+    };
+    if (el.id) target.id = el.id;
+    if (testid) target.data_testid = testid;
+    const role = el.getAttribute("role");
+    if (role) target.role = role;
+    const classes = Array.from(el.classList || []).slice(0, 5);
+    if (classes.length) target.classes = classes;
+    return target;
+  }
+
+  function withDomTarget(mark, doc) {
+    if (!mark || mark.tool === "redact" || !doc || !doc.elementFromPoint) return mark;
+    const docEl = doc.documentElement || {};
+    const body = doc.body || {};
+    const pageW = Math.max(body.scrollWidth || 0, docEl.scrollWidth || 0, body.offsetWidth || 0, docEl.clientWidth || 0, 1);
+    const pageH = Math.max(body.scrollHeight || 0, docEl.scrollHeight || 0, body.offsetHeight || 0, docEl.clientHeight || 0, 1);
+    const win = doc.defaultView || {};
+    const x = ((mark.x1 || 0) + (mark.x2 == null ? mark.x1 || 0 : mark.x2)) / 2;
+    const y = ((mark.y1 || 0) + (mark.y2 == null ? mark.y1 || 0 : mark.y2)) / 2;
+    const clientX = x * pageW - (win.pageXOffset || docEl.scrollLeft || body.scrollLeft || 0);
+    const clientY = y * pageH - (win.pageYOffset || docEl.scrollTop || body.scrollTop || 0);
+    if (clientX < 0 || clientY < 0 || clientX > (docEl.clientWidth || pageW) || clientY > (docEl.clientHeight || pageH)) {
+      return mark;
+    }
+    const target = targetForElement(doc.elementFromPoint(clientX, clientY));
+    return target ? Object.assign({}, mark, {target}) : mark;
+  }
+
+  function AnnotationEditor({image, annotations, setAnnotations, annotate}) {
     const canvasRef = useRef(null);
     const imageRef = useRef(null);
     const [tool, setTool] = useState("box");
@@ -171,7 +240,8 @@
       const p = point(evt);
       if (tool === "pin") {
         const n = annotations.filter((m) => m.tool === "pin").length + 1;
-        setAnnotations(annotations.concat([{tool, x1: p.x, y1: p.y, n}]));
+        const mark = {tool, x1: p.x, y1: p.y, n};
+        setAnnotations(annotations.concat([annotate ? annotate(mark) : mark]));
         return;
       }
       evt.currentTarget.setPointerCapture(evt.pointerId);
@@ -190,7 +260,7 @@
       const mark = Object.assign({}, draft, {x2: p.x, y2: p.y});
       setDraft(null);
       if (Math.abs(mark.x2 - mark.x1) + Math.abs(mark.y2 - mark.y1) < .015) return;
-      setAnnotations(annotations.concat([mark]));
+      setAnnotations(annotations.concat([annotate ? annotate(mark) : mark]));
     }
 
     const tools = [["box", "□"], ["arrow", "↗"], ["pin", "①"], ["redact", "█"]];
@@ -355,6 +425,7 @@
       composeShot(shot, annotations).then((screenshot) => {
         const payload = {stars: stars ? Number(stars) : null, comment, screenshot,
           screenshot_source: screenshot ? shotSource : null,
+          annotations: screenshot ? annotations : [],
           reply_to: target ? [target.id] : []};
         return api("/api/feedback/" + encodeURIComponent(selected), {method: "POST", body: JSON.stringify(payload)});
       })
@@ -400,6 +471,16 @@
       r.readAsDataURL(file);
     }
 
+    function annotate(mark) {
+      try {
+        const iframe = document.getElementById("app-frame");
+        const doc = iframe && (iframe.contentDocument || (iframe.contentWindow && iframe.contentWindow.document));
+        return withDomTarget(mark, doc);
+      } catch (e) {
+        return mark;
+      }
+    }
+
     function action(value, replyToId) {
       api("/api/action", {method: "POST", body: JSON.stringify({key: selected, value, reply_to: replyToId})})
         .then((data) => {
@@ -431,7 +512,7 @@
         h("button", {className: "rshell-button secondary", onClick: capture}, "📷 Capture view"),
         anonymousHeld ? null : h("label", {className: "rshell-button secondary"}, "⬆ upload",
           h("input", {type: "file", accept: "image/*", style: {display: "none"}, onChange: (e) => upload(e.target.files[0])}))),
-      shot ? h(AnnotationEditor, {image: shot, annotations, setAnnotations}) : null,
+      shot ? h(AnnotationEditor, {image: shot, annotations, setAnnotations, annotate}) : null,
       h("button", {className: "rshell-button primary", onClick: save}, "Save feedback"),
       h("div", {className: "rshell-msg"}, msg),
       h("hr", {style: {border: "none", borderTop: "1px solid #eee"}}),

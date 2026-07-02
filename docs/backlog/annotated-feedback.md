@@ -1,7 +1,8 @@
 # Backlog — annotated screen captures (point the agent at the element)
 
-> **Status:** v1 burn-in landed 2026-07-01; v2 DOM-mapped remains follow-on. A core feedback-overlay
-> upgrade: draw on the captured screenshot so feedback points at exactly the element it means.
+> **Status:** v1 burn-in landed 2026-07-01; v2 structured annotation metadata started 2026-07-02.
+> A core feedback-overlay upgrade: draw on the captured screenshot so feedback points at exactly the
+> element it means.
 > Captured 2026-06-30.
 
 ## The pitch
@@ -51,13 +52,19 @@ Two tiers, and the second is the one only curiator can do:
 
 ## v2 — DOM-mapped annotations (follow-on)
 
-1. **At draw-time, resolve the target.** For each annotation, `document.elementFromPoint`
-   under it → capture `{selector, tag, nearest id/data-testid, component hint}`.
-2. **Structured annotations in the ledger** alongside the burned PNG (provenance + replay).
-3. **A small "Annotations" block in the task bundle**, e.g.
+1. **At draw-time, resolve the target** — first pass landed for the React shell. For non-redaction
+   annotations, `document.elementFromPoint` under the mark captures a sanitized target hint
+   (`selector`, `tag`, nearest `id`/`data-testid`, `role`, classes). Same-origin failures degrade to
+   a mark without a target.
+2. **Structured annotations in the ledger** — first pass landed. The saved entry carries sanitized
+   normalized coordinates plus optional target metadata alongside the burned PNG; redaction marks
+   intentionally omit targets.
+3. **A small "Annotations" block in the task bundle** — landed for app, General collection, and runner
+   feedback bundles, e.g.
    *"① box → `#revenue-chart .recharts-legend`: too cramped."* Agent gets the marked image
-   **and** the code anchor; numbered pins ↔ per-pin comment lines.
-4. **Graceful fallback.** Same-origin only (already the screenshot moat's requirement); for
+   **and** the code anchor.
+4. **Per-pin comment lines** — follow-on: numbered pins ↔ optional line-level notes in the feedback UI.
+5. **Graceful fallback.** Same-origin only (already the screenshot moat's requirement); for
    a cross-origin proxy iframe, fall back to burn-in-only for that mount.
 
 ## Guardrails
