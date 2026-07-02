@@ -54,6 +54,10 @@ For shared/team use:
   submission limit enabled.
 - Use `agent.autonomy: propose-only` for feedback from broad groups.
 - Gate elevated profiles to trusted admin groups only.
+- Keep dispatch trust separate from execution trust. `agent.dispatch.trusted_groups` is a quota/admission
+  control knob: in the current watcher it bypasses the per-user daily quota but still counts against the
+  global daily quota. It does not grant elevated tool, sandbox, or filesystem permissions unless the same
+  group is deliberately also listed under `agent.elevated.groups`.
 - Give the agent least-privilege credentials. Mount provider tokens read-only and avoid host-wide
   secrets in the collection container.
 - Treat `danger-full-access`, bypassed approvals, package installation, and shell/network access as
@@ -113,4 +117,6 @@ rejected feedback closes as `rejected` with a ledger note. Anonymous held intake
 `auth.anonymous_feedback_max` over `auth.anonymous_feedback_window_seconds`; this limits queue spam, it
 does not make public prompt input trusted. For account-based public feedback, set
 `agent.quotas.per_user_daily` and `agent.quotas.global_daily`; the watcher degrades over-budget items
-to `held` before launching an agent.
+to `held` before launching an agent. If you use `agent.dispatch.trusted_groups` for staff or sponsor
+accounts, treat it as a dispatch-budget setting only; elevated execution still belongs behind
+`agent.elevated.groups`.

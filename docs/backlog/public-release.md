@@ -64,13 +64,16 @@ leave feedback → watch the fix land and the ⚙ reply arrive. Every item below
    (`curiator-finance` can join as a fourth if the cleanup is cheap; the three above are the release set.)
 5. **SECURITY.md — reviewed against current defaults; re-read once at release cut.** The product auto-runs a coding agent against
    feedback text. The first policy now states: one-container-per-collection as the blast-radius unit,
-   the autonomy dial, group-gated elevated profiles, deny-lists — and the **prompt-injection caveat
+   the autonomy dial, group-gated elevated profiles, dispatch quotas/trusted dispatch groups as admission
+   controls rather than elevated execution rights, deny-lists — and the **prompt-injection caveat
    plainly** (public feedback is untrusted input to an agent with edit rights; `auth.mode` +
    `propose-only` are mitigations, not a solved problem). The release-example nuance is now explicit:
    `auth.mode: none` + `auto-small` is acceptable for clone-and-run examples, not hosted public forms;
    hosted examples need auth/propose-only or a human-reviewed queue. Screenshot redaction is documented
-   as a manual browser-side pre-save tool, not an automatic guarantee. Before release, do one final
-   reread against the tag's adapter defaults.
+   as a manual browser-side pre-save tool, not an automatic guarantee. Reread on July 2, 2026 against
+   the current config/loop defaults (`runner.mode: pinned`, explicit anonymous held before dispatch,
+   quota enforcement, separate `agent.dispatch.trusted_groups` and `agent.elevated.groups`). Before
+   release, do one final reread against the tag's adapter defaults.
 6. **Repo hygiene** — issue templates are present (bug, feature, example-collection quickstart), labels
    are tracked in `.github/labels.yml`, and the first good-first seed queue has been drained.
    Remaining after publication: README badges for PyPI/DOI and creating/pinning any new GitHub issues.
