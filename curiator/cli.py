@@ -36,6 +36,7 @@ import os
 import re
 import shutil
 import shlex
+import stat
 import subprocess
 import sys
 import tempfile
@@ -2210,16 +2211,31 @@ def _playground_user_summary(cfg: dict) -> dict:
 
     auth_cfg = cfg.get("auth") or {}
     users: dict = {}
+    inline_users = list(auth_cfg.get("users") or [])
     if auth_cfg.get("mode") == "local":
         users.update(auth.load_users_file(auth_cfg.get("users_file")))
-        for user in auth_cfg.get("users") or []:
+        for user in inline_users:
             email = user.get("email")
             if email:
                 users[email] = user
     admin_groups = set(auth_cfg.get("admin_groups") or ["admin"])
     active = [u for u in users.values() if not u.get("disabled")]
+    users_file = auth_cfg.get("users_file")
+    users_file_mode = None
+    users_file_owner_only = None
+    if users_file and Path(users_file).exists():
+        try:
+            mode = stat.S_IMODE(Path(users_file).stat().st_mode)
+        except OSError:
+            mode = None
+        if mode is not None:
+            users_file_mode = oct(mode)
+            users_file_owner_only = (mode & 0o077) == 0
     return {
-        "users_file": auth_cfg.get("users_file"),
+        "users_file": users_file,
+        "users_file_mode": users_file_mode,
+        "users_file_owner_only": users_file_owner_only,
+        "inline_users": len(inline_users),
         "total": len(users),
         "active": len(active),
         "disabled": sum(1 for u in users.values() if u.get("disabled")),
@@ -2257,6 +2273,18 @@ def _playground_preflight_issues(cfg: dict, user_summary: dict) -> list[dict]:
             "hosted playgrounds must require sign-in with auth.mode: local, header, or oidc",
         ))
     if auth_mode == "local":
+        if user_summary["inline_users"]:
+            issues.append(_playground_issue(
+                "error",
+                "auth.users",
+                "hosted local-auth playgrounds should store password hashes in auth.users_file, not inline auth.users",
+            ))
+        if user_summary["users_file_mode"] and user_summary["users_file_owner_only"] is False:
+            issues.append(_playground_issue(
+                "error",
+                "auth.users_file",
+                "local-auth users_file contains password hashes and must be owner-only (0600)",
+            ))
         if user_summary["active"] == 0:
             issues.append(_playground_issue(
                 "error",

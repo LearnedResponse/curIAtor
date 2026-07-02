@@ -74,6 +74,11 @@ Revoke access without deleting the audit trail:
 CURIATOR_GALLERY=/collection/gallery.yaml curiator user disable bob@example.com
 ```
 
+For `auth.mode: local`, keep password hashes in the gitignored `auth.users_file`
+(`.curiator-users.json` by default), not inline `auth.users` in `gallery.yaml`. `curiator user add`
+writes the file with owner-only permissions, and `curiator playground-preflight` rejects hosted-local
+configs whose users file is group/world-readable.
+
 Do not enable `auth.allow_anonymous` for phase 0 unless a human is actively reviewing the held queue.
 Anonymous public feedback is never allowed to dispatch directly, but it still creates moderation work.
 

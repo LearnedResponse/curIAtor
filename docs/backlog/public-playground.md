@@ -17,6 +17,8 @@
 > [`docs/PUBLIC_PLAYGROUND_DEPLOYMENT.md`](../PUBLIC_PLAYGROUND_DEPLOYMENT.md); the actual hosted pilot
 > remains to run. The anonymous tier + held pool is a later phase, built only after the velvet phase
 > teaches us what hosted moderation actually costs.
+> Local-auth hosted preflight now also rejects inline `auth.users` password hashes and group/world-readable
+> `.curiator-users.json` files, keeping invite credentials in the gitignored owner-only store.
 
 ## The idea
 

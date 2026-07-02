@@ -70,6 +70,9 @@ def test_playground_preflight_accepts_phase0_local_auth_config(collection, capsy
     assert payload["auth"]["allow_anonymous"] is True
     assert payload["user_store"]["active"] == 1
     assert payload["user_store"]["admins"] == 1
+    assert payload["user_store"]["inline_users"] == 0
+    assert payload["user_store"]["users_file_mode"] == "0o600"
+    assert payload["user_store"]["users_file_owner_only"] is True
     assert payload["doctor"]["ok"] is True
     assert payload["smoke"]["ok"] is True
     assert payload["checks"] == {"smoke": True, "http_smoke": False}
@@ -154,6 +157,83 @@ def test_playground_preflight_output_keeps_human_summary(collection, capsys, tmp
     assert "curiator: playground preflight OK" in captured.out
     assert f"curiator: wrote {out_path}" in captured.err
     assert json.loads(out_path.read_text(encoding="utf-8"))["user_store"]["admins"] == 1
+
+
+def test_playground_preflight_rejects_world_readable_local_users_file(collection, capsys):
+    from curiator import auth, cli
+
+    (collection / "gallery.yaml").write_text(textwrap.dedent("""\
+        apps:
+          - name: sample
+            title: Sample
+            mount: { kind: dash-inproc, module: sample }
+            source: apps/sample.py
+        runner:
+          mode: pinned
+        git:
+          commit: true
+        auth:
+          mode: local
+          users_file: .curiator-users.json
+          admin_groups: [admin]
+        agent:
+          autonomy: propose-only
+          dispatch:
+            trusted_groups: [trusted]
+          quotas:
+            per_user_daily: 3
+            global_daily: 25
+    """))
+    users_file = collection / ".curiator-users.json"
+    auth.save_users_file(
+        str(users_file),
+        {"admin@example.com": {"name": "Admin", "groups": ["admin"], "password_hash": "test-hash"}},
+    )
+    users_file.chmod(0o644)
+
+    assert cli.main(["playground-preflight", "--no-smoke", "--json"]) == 1
+    payload = json.loads(capsys.readouterr().out)
+    messages = "\n".join(issue["message"] for issue in payload["issues"])
+    assert payload["user_store"]["users_file_mode"] == "0o644"
+    assert payload["user_store"]["users_file_owner_only"] is False
+    assert "must be owner-only (0600)" in messages
+
+
+def test_playground_preflight_rejects_inline_local_users(collection, capsys):
+    from curiator import cli
+
+    (collection / "gallery.yaml").write_text(textwrap.dedent("""\
+        apps:
+          - name: sample
+            title: Sample
+            mount: { kind: dash-inproc, module: sample }
+            source: apps/sample.py
+        runner:
+          mode: pinned
+        git:
+          commit: true
+        auth:
+          mode: local
+          admin_groups: [admin]
+          users:
+            - email: admin@example.com
+              name: Admin
+              groups: [admin]
+              password_hash: test-hash
+        agent:
+          autonomy: propose-only
+          dispatch:
+            trusted_groups: [trusted]
+          quotas:
+            per_user_daily: 3
+            global_daily: 25
+    """))
+
+    assert cli.main(["playground-preflight", "--no-smoke", "--json"]) == 1
+    payload = json.loads(capsys.readouterr().out)
+    messages = "\n".join(issue["message"] for issue in payload["issues"])
+    assert payload["user_store"]["inline_users"] == 1
+    assert "auth.users_file, not inline auth.users" in messages
 
 
 def test_playground_preflight_can_run_http_smoke(collection, monkeypatch, capsys):
