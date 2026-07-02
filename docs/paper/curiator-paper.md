@@ -95,8 +95,30 @@ loop closes on realistic app feedback with traceable commits, not which model wi
 
 # 5. Related Work
 
-TODO(draft): cover agentic coding CLIs, in-context visual feedback tools, ChatOps workflows, research
-software engineering, JOSS-style tool papers, and app-hosting/gallery platforms.
+curIAtor sits between several familiar tool categories rather than replacing any one of them. Agentic
+coding CLIs such as Claude Code, Codex, aider, and similar tools provide the editing loop; curIAtor's
+contribution is the surrounding protocol that gives those agents app-scoped feedback, screenshots,
+thread history, smoke commands, and a provenance-preserving place to reply.
+
+Visual feedback and annotation tools already make it easier to point at interface problems, but they
+usually export feedback into a separate ticket or chat surface. curIAtor keeps capture inside the
+running app and records annotations as part of the same ledger item that will later launch, trace, and
+close the maintenance task.
+
+ChatOps and issue trackers provide durable conversation around operations work. curIAtor borrows that
+threaded status model while narrowing the context to a local app collection: the app root, command set,
+ledger, screenshots, and git history travel with the task instead of being reconstructed from a general
+project backlog.
+
+Research-software engineering and JOSS-style tool papers emphasize runnable software, reproducibility,
+and honest limitations. This paper follows that framing: the evidence is not a benchmark leaderboard,
+but public collections whose feedback ledgers and git histories can be replayed into the reported
+case-study numbers.
+
+App galleries and hosting dashboards provide the substrate for browsing many small apps. curIAtor uses
+that substrate to support maintenance, review, and iteration; the novelty claim is the feedback-to-agent
+workflow around the hosted apps, not the gallery chrome by itself. Formal citations will be added at
+release time when the manuscript is exported for Zenodo/JOSS review.
 
 # 6. Availability
 
@@ -106,4 +128,6 @@ TODO(release): add GitHub, PyPI, Zenodo DOI, documentation URL, and the exact ve
 
 # Acknowledgements
 
-TODO(draft).
+This draft reflects lessons from dogfooding curIAtor on private research apps and on the public example
+collections prepared for release. Release-time acknowledgements should add any named contributors,
+reviewers, and upstream projects whose code or examples are part of the final published artifact.

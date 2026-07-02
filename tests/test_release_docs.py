@@ -38,6 +38,23 @@ def test_release_docs_detect_missing_security_language(tmp_path):
     assert "SECURITY.md missing required phrase: does not solve prompt injection" in failures
 
 
+def test_release_docs_detect_draft_paper_placeholders(tmp_path):
+    module = _load_script()
+    (tmp_path / "docs" / "backlog").mkdir(parents=True)
+    (tmp_path / "docs" / "paper").mkdir(parents=True)
+    shutil.copyfile(ROOT / "README.md", tmp_path / "README.md")
+    shutil.copyfile(ROOT / "SECURITY.md", tmp_path / "SECURITY.md")
+    shutil.copyfile(ROOT / "docs" / "backlog" / "public-release.md",
+                    tmp_path / "docs" / "backlog" / "public-release.md")
+    (tmp_path / "docs" / "paper" / "curiator-paper.md").write_text(
+        "# Paper\n\nTODO(draft): unresolved related work.\n"
+    )
+
+    failures = module.check_release_docs(tmp_path)
+
+    assert "docs/paper/curiator-paper.md still has TODO(draft) placeholders" in failures
+
+
 def test_release_docs_main_reports_failures(tmp_path, capsys):
     module = _load_script()
     (tmp_path / "README.md").write_text("# Demo\n")

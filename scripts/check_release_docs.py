@@ -36,6 +36,7 @@ def check_release_docs(root: Path = ROOT) -> list[str]:
     readme = root / "README.md"
     security = root / "SECURITY.md"
     public_release = root / "docs" / "backlog" / "public-release.md"
+    paper = root / "docs" / "paper" / "curiator-paper.md"
 
     if not readme.exists():
         failures.append("missing README.md")
@@ -47,6 +48,7 @@ def check_release_docs(root: Path = ROOT) -> list[str]:
     readme_text = readme.read_text(encoding="utf-8") if readme.exists() else ""
     security_text = security.read_text(encoding="utf-8") if security.exists() else ""
     public_release_text = public_release.read_text(encoding="utf-8") if public_release.exists() else ""
+    paper_text = paper.read_text(encoding="utf-8") if paper.exists() else ""
 
     if "[SECURITY.md](SECURITY.md)" not in readme_text:
         failures.append("README.md does not link to SECURITY.md")
@@ -56,6 +58,9 @@ def check_release_docs(root: Path = ROOT) -> list[str]:
     for phrase in SECURITY_REQUIRED_PHRASES:
         if not _contains(security_text, phrase):
             failures.append(f"SECURITY.md missing required phrase: {phrase}")
+
+    if "TODO(draft)" in paper_text:
+        failures.append("docs/paper/curiator-paper.md still has TODO(draft) placeholders")
 
     return failures
 

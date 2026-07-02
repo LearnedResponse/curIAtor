@@ -1,7 +1,8 @@
 # Backlog — the companion paper (Zenodo)
 
-> **Status:** scoped 2026-07-01; stats CLI, local Zenodo metadata, and a conservative `docs/paper/`
-> Markdown draft scaffold have landed. Paper/DOI publication work is still blocked on public
+> **Status:** scoped 2026-07-01; stats CLI, local Zenodo metadata, a conservative `docs/paper/`
+> Markdown draft scaffold, draft related-work prose, and draft acknowledgements have landed. Paper/DOI
+> publication work is still blocked on public
 > collection publication and Zenodo wiring. A citable software/systems paper, self-archived on **Zenodo** with a DOI. Sequences last:
 > the three public collections are its evaluation, so [public-release](public-release.md) → the
 > collections → this.
@@ -63,8 +64,9 @@ the durable record of that conversation.
    landed at `docs/paper/figures/shell-feedback-panel.png` and
    `docs/paper/figures/render_shell_feedback_panel.py`. The OT rainbow→ISA-101 before/after figure
    and renderer have landed at `docs/paper/figures/ot-rainbow-before-after.png` and
-   `docs/paper/figures/render_ot_before_after.py`. Remaining paper work is release-time refresh and
-   PDF export, not a missing draft figure.
+   `docs/paper/figures/render_ot_before_after.py`. The related-work and acknowledgement draft
+   placeholders have also been filled. Remaining paper work is release-time evidence, citation
+   refresh, final acknowledgements, and PDF export, not missing draft prose or draft figures.
 4. Deposit on Zenodo; DOI badge in the README; decide on the JOSS submission after.
 
 ## Guardrails
