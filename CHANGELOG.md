@@ -157,6 +157,8 @@ All notable changes to curIAtor are documented here. The format follows
 ### Fixed
 - `docs/USING_CURIATOR.md` no longer says the curator never commits; it now describes the current
   default-uncommitted behavior plus `git.commit: true` git-as-memory commits.
+- The adapter package overview now matches the current task protocol: agents never run git directly,
+  but `curiator reply`/`done` may trigger runner-owned git-as-memory commits when the collection opts in.
 - `docs/DESIGN.md` no longer presents the original Dash/JSON-ledger extraction checklist as still
   unlanded; it now records the current Flask/React, proxy, SQLite, scaffold, and release-gate state.
 - `docs/EXTRACTION_SCOPE.md` is now an archival extraction receipt with current package paths and

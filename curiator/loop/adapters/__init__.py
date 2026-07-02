@@ -8,7 +8,7 @@
 
 `build_task(cfg, key, entry)` writes a task file (the template + this feedback + the app's source
 path + the screenshot path) and returns a Task the adapter runs. The task file is what the agent
-reads; loop/task_template.md is the standing protocol (triage / smoke-test / reply / no auto-commit).
+reads; loop/task_template.md is the standing protocol (triage / smoke-test / reply / runner-owned git).
 """
 from __future__ import annotations
 
