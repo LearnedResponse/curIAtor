@@ -46,6 +46,7 @@ def check_release_docs(root: Path = ROOT, *, strict_launch: bool = False) -> lis
     reproducibility = root / "docs" / "paper" / "reproducibility.md"
     paper = root / "docs" / "paper" / "curiator-paper.md"
     demo_gif = root / "docs" / "demo.gif"
+    makefile = root / "Makefile"
 
     if not readme.exists():
         failures.append("missing README.md")
@@ -57,6 +58,8 @@ def check_release_docs(root: Path = ROOT, *, strict_launch: bool = False) -> lis
         failures.append("missing docs/RELEASE.md")
     if not reproducibility.exists():
         failures.append("missing docs/paper/reproducibility.md")
+    if not makefile.exists():
+        failures.append("missing Makefile")
 
     readme_text = readme.read_text(encoding="utf-8") if readme.exists() else ""
     security_text = security.read_text(encoding="utf-8") if security.exists() else ""
@@ -64,6 +67,7 @@ def check_release_docs(root: Path = ROOT, *, strict_launch: bool = False) -> lis
     public_release_text = public_release.read_text(encoding="utf-8") if public_release.exists() else ""
     reproducibility_text = reproducibility.read_text(encoding="utf-8") if reproducibility.exists() else ""
     paper_text = paper.read_text(encoding="utf-8") if paper.exists() else ""
+    makefile_text = makefile.read_text(encoding="utf-8") if makefile.exists() else ""
 
     if "[SECURITY.md](SECURITY.md)" not in readme_text:
         failures.append("README.md does not link to SECURITY.md")
@@ -87,18 +91,32 @@ def check_release_docs(root: Path = ROOT, *, strict_launch: bool = False) -> lis
         "release-evidence/release-preflight.json",
         "release-evidence/release-preflight-optional.json",
         "release-evidence/case-study-stats.json",
+        "make paper-stats",
     ]:
         if phrase not in release_text:
             failures.append(f"docs/RELEASE.md missing required phrase: {phrase}")
 
     for phrase in [
         "make release-evidence",
+        "make paper-stats",
         "--output release-evidence/release-preflight.json",
         "--output release-evidence/release-preflight-optional.json",
         "--output release-evidence/case-study-stats.json",
     ]:
         if phrase not in reproducibility_text:
             failures.append(f"docs/paper/reproducibility.md missing required phrase: {phrase}")
+    for phrase in [
+        "paper-stats:",
+        "scripts/update_paper_stats.py",
+    ]:
+        if phrase not in makefile_text:
+            failures.append(f"Makefile missing required phrase: {phrase}")
+    for marker in [
+        "<!-- curiator:case-study-stats:start -->",
+        "<!-- curiator:case-study-stats:end -->",
+    ]:
+        if marker not in paper_text:
+            failures.append(f"docs/paper/curiator-paper.md missing required marker: {marker}")
     for path in TRACKED_RAW_EVIDENCE_RE.findall(reproducibility_text):
         failures.append(
             f"docs/paper/reproducibility.md writes raw evidence to tracked paper assets: {path}"

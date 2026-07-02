@@ -21,8 +21,8 @@ Release-time checklist:
 
 1. Publish the three example collections.
 2. Run the commands in `reproducibility.md` from fresh clones of those public repositories.
-3. Refresh the case-study table in `curiator-paper.md` with command-backed evidence from the public
-   release repositories.
+3. Run `make paper-stats` to refresh the marked case-study table in `curiator-paper.md` with
+   command-backed evidence from the public release repositories.
 4. Render or embed `figures/feedback-loop.mmd` without hand-redrawing a divergent copy.
 5. Refresh `figures/provenance-log-excerpt.md` from a published example collection if the release
    evidence set changes.

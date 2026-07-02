@@ -6,11 +6,13 @@ git history. Do not hand-enter case-study counts without recording the command t
 ## Release-time commands
 
 Run these from a fresh clone of the runner repository after the public example collections are published
-or checked out under `galleries/`:
+or checked out under `galleries/`. The runner tree should be clean before `make paper-stats`; it refuses
+to write a paper snapshot marked `dirty` unless explicitly overridden for draft work:
 
 ```bash
 curiator release-preflight --fresh-clone
 make release-evidence
+make paper-stats
 curiator release-preflight --fresh-clone --json --output release-evidence/release-preflight.json
 curiator release-preflight --include-optional --fresh-clone --json \
   --output release-evidence/release-preflight-optional.json
@@ -28,7 +30,9 @@ recalculate those columns by hand. The `--output` form is preferred for the fina
 snapshot because it records the exact command product without shell-specific redirection. Keep raw JSON
 snapshots under the gitignored `release-evidence/` directory because they include local checkout and
 clone paths; commit only the portable Markdown/table excerpts that the paper actually cites.
-`make release-evidence` refreshes the standard local bundle under `release-evidence/`.
+`make release-evidence` refreshes the standard local bundle under `release-evidence/`; `make
+paper-stats` reruns that bundle and refreshes the marked case-study stats block in
+`curiator-paper.md` from the generated Markdown table.
 
 For per-collection appendix tables:
 

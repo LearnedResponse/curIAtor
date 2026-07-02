@@ -69,6 +69,7 @@ The OT visual arc is represented by [Figure 4](figures/ot-rainbow-before-after.p
 the collection's seed and improved commits with the script in
 `figures/render_ot_before_after.py`.
 
+<!-- curiator:case-study-stats:start -->
 The current case-study table was generated on 2026-07-02 with:
 
 ```bash
@@ -86,6 +87,7 @@ _Runner at stats snapshot: curIAtor 0.2.0, `main@55c4ee6`, clean._
 
 Totals: 3 collections, 20 cycles, 20 replies (100.0%), 17 direct fixes (85.0%), 3 proposals/human
 intervention cycles (15.0%), and 11 curator commits.
+<!-- curiator:case-study-stats:end -->
 
 `curiator-aviato` is the mixed-framework collection
 (`https://github.com/LearnedResponse/curiator-aviato`). Its release-candidate commit is `3719ac9`,

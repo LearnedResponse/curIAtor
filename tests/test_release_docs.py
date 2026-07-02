@@ -21,6 +21,7 @@ def _load_script():
 def _copy_release_doc_fixture(tmp_path: Path) -> None:
     (tmp_path / "docs" / "backlog").mkdir(parents=True)
     (tmp_path / "docs" / "paper").mkdir(parents=True)
+    shutil.copyfile(ROOT / "Makefile", tmp_path / "Makefile")
     shutil.copyfile(ROOT / "README.md", tmp_path / "README.md")
     shutil.copyfile(ROOT / "SECURITY.md", tmp_path / "SECURITY.md")
     shutil.copyfile(ROOT / "docs" / "RELEASE.md", tmp_path / "docs" / "RELEASE.md")
@@ -28,6 +29,8 @@ def _copy_release_doc_fixture(tmp_path: Path) -> None:
                     tmp_path / "docs" / "backlog" / "public-release.md")
     shutil.copyfile(ROOT / "docs" / "paper" / "reproducibility.md",
                     tmp_path / "docs" / "paper" / "reproducibility.md")
+    shutil.copyfile(ROOT / "docs" / "paper" / "curiator-paper.md",
+                    tmp_path / "docs" / "paper" / "curiator-paper.md")
     shutil.copyfile(ROOT / "docs" / "demo.gif", tmp_path / "docs" / "demo.gif")
 
 
@@ -89,6 +92,35 @@ def test_release_docs_requires_standard_release_evidence_commands(tmp_path):
         "docs/paper/reproducibility.md missing required phrase: "
         "--output release-evidence/case-study-stats.json"
     ) in failures
+    assert (
+        "docs/paper/reproducibility.md missing required phrase: "
+        "make paper-stats"
+    ) in failures
+
+
+def test_release_docs_requires_paper_stats_target(tmp_path):
+    module = _load_script()
+    _copy_release_doc_fixture(tmp_path)
+    makefile = tmp_path / "Makefile"
+    makefile.write_text(makefile.read_text().replace("paper-stats:", "paper-stats-missing:"))
+
+    failures = module.check_release_docs(tmp_path)
+
+    assert "Makefile missing required phrase: paper-stats:" in failures
+
+
+def test_release_docs_requires_paper_stats_markers(tmp_path):
+    module = _load_script()
+    _copy_release_doc_fixture(tmp_path)
+    paper = tmp_path / "docs" / "paper" / "curiator-paper.md"
+    paper.write_text(paper.read_text().replace("<!-- curiator:case-study-stats:start -->\n", ""))
+
+    failures = module.check_release_docs(tmp_path)
+
+    assert (
+        "docs/paper/curiator-paper.md missing required marker: "
+        "<!-- curiator:case-study-stats:start -->"
+    ) in failures
 
 
 def test_release_docs_requires_optional_preflight_artifact_in_runbook(tmp_path):
@@ -149,9 +181,8 @@ def test_release_docs_rejects_stale_never_commits_claim(tmp_path):
 def test_release_docs_default_allows_release_paper_placeholders(tmp_path):
     module = _load_script()
     _copy_release_doc_fixture(tmp_path)
-    (tmp_path / "docs" / "paper" / "curiator-paper.md").write_text(
-        "# Paper\n\nTODO(release): waits for public evidence.\n"
-    )
+    paper = tmp_path / "docs" / "paper" / "curiator-paper.md"
+    paper.write_text(paper.read_text() + "\nTODO(release): waits for public evidence.\n")
 
     assert module.check_release_docs(tmp_path) == []
 

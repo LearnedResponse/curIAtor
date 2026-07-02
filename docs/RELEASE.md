@@ -33,6 +33,7 @@ Run the full gate from the runner checkout:
 ```bash
 make release-check
 make release-evidence
+make paper-stats
 curiator release-preflight --include-optional --fresh-clone --strict
 curiator release-preflight --gallery curiator-aviato --http-smoke
 curiator release-preflight --fresh-clone --json --output release-evidence/release-preflight.json
@@ -53,7 +54,9 @@ because it records local clone/source paths. `make release-evidence` refreshes t
 bundle: required-gallery preflight JSON (`release-evidence/release-preflight.json`), optional-gallery
 preflight JSON (`release-evidence/release-preflight-optional.json`), and the three-collection
 case-study stats in `release-evidence/case-study-stats.md` and
-`release-evidence/case-study-stats.json`.
+`release-evidence/case-study-stats.json`. Run `make paper-stats` from a clean runner tree; it refreshes
+the companion paper's marked case-study stats block from that Markdown table so the tracked paper
+excerpt is command-backed too.
 
 Clean local build artifacts after inspection if needed:
 

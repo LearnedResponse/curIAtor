@@ -410,6 +410,9 @@ def format_compare_markdown(report: dict[str, Any]) -> str:
         "",
         f"_Totals: {totals['collections']} collections, {totals['cycles']} cycles, "
         f"{totals['replied_cycles']} replied ({totals['reply_rate_percent']}%), "
+        f"{totals['direct_fix_cycles']} direct fixes ({totals['direct_fix_rate_percent']}%), "
+        f"{totals['proposal_cycles']} proposals ({totals['proposal_rate_percent']}%), "
+        f"{totals['human_intervention_cycles']} human intervention ({totals['human_intervention_rate_percent']}%), "
         f"{totals['curator_commits']} curator commits._",
     ])
     return "\n".join(lines) + "\n"

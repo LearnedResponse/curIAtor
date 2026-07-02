@@ -79,6 +79,8 @@ def test_release_evidence_target_writes_ignored_artifacts():
     gitignore = Path(".gitignore").read_text()
 
     assert "release-evidence:" in makefile
+    assert "paper-stats:" in makefile
+    assert "scripts/update_paper_stats.py" in makefile
     assert "release-evidence/release-preflight.json" in makefile
     assert "release-evidence/case-study-stats.json" in makefile
     assert "release-evidence/" in gitignore

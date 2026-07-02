@@ -216,6 +216,10 @@ def test_stats_compare_combines_collection_rows(tmp_path, capsys):
     assert "| Collection | Git head | Cycles |" in markdown
     assert f"| alpha | {alpha_ref} | 2 | 1 (50.0%) | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) | 1 | 50.0% | 5m 30s | 1 | 1 |" in markdown
     assert f"| beta | {beta_ref} | 1 | 1 (100.0%) | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) | 1 | 100.0% | 1m | 1 | 1 |" in markdown
+    assert (
+        "_Totals: 2 collections, 3 cycles, 2 replied (66.7%), 2 direct fixes (66.7%), "
+        "0 proposals (0.0%), 0 human intervention (0.0%), 2 curator commits._"
+    ) in markdown
 
     assert cli.main([
         "stats",
