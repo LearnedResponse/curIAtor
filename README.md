@@ -64,9 +64,9 @@ Coding agents can fix this stuff in seconds now — but they're wired to your *e
 1. **One gallery, one origin.** Every app mounts at `/app/<name>` behind a single server. (That
    same-origin trick is also what makes the next part possible — you can't screenshot a cross-origin
    iframe.)
-2. **Feedback lives in the chrome, not the app.** The ★ / comment / **one-click screenshot** panel
-   wraps *around* each app — so you never touch an app's source to collect feedback on it. It lands
-   in a SQLite ledger, which is the single runtime source of truth.
+2. **Feedback lives in the chrome, not the app.** The ★ / comment / **one-click screenshot + annotation**
+   panel wraps *around* each app — so you never touch an app's source to collect feedback on it. It
+   lands in a SQLite ledger, which is the single runtime source of truth.
 3. **The curator acts.** New feedback wakes an AI coding agent with the comment, the screenshot, and
    the app's source path. It triages, makes the fix (or proposes a plan), smoke-tests it, reloads
    the app, and **replies right in the feedback panel.** You refresh and see it live.
@@ -117,11 +117,11 @@ and streams stdout/stderr to `feedback/replies/<feedback_id>.md`; click a `worki
 badge to inspect the trace. When you want the receipts, `curiator stats` summarizes the ledger and
 git-as-memory commits as human-readable text, JSON, Markdown tables, or CSV rows. Before publishing or
 moving a collection, `curiator doctor` flags machine-absolute paths, missing app roots/sources, weak
-smoke coverage, missing command/dependency setup, and suspicious proxy commands, then `curiator smoke`
-runs each app's configured smoke command. In this checkout, `curiator release-preflight` runs those
-checks across the nested public example galleries under `galleries/`; add `--fresh-clone` to verify
-the committed state survives a same-machine clone. Screenshot capture details and fidelity tradeoffs are in
-[`docs/SCREENSHOT_CAPTURE.md`](docs/SCREENSHOT_CAPTURE.md).
+smoke coverage, missing command/dependency setup, suspicious proxy commands, and likely HMR dev-server
+proxy commands, then `curiator smoke` runs each app's configured smoke command. In this checkout,
+`curiator release-preflight` runs those checks across the nested public example galleries under
+`galleries/`; add `--fresh-clone` to verify the committed state survives a same-machine clone.
+Screenshot capture details and fidelity tradeoffs are in [`docs/SCREENSHOT_CAPTURE.md`](docs/SCREENSHOT_CAPTURE.md).
 
 Already inside an app repo with Claude Code or Codex? Link it once and use the same loop interactively:
 
