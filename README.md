@@ -123,7 +123,7 @@ misconfiguration, and likely HMR dev-server proxy commands, then `curiator smoke
 configured smoke command. In this checkout, `curiator release-preflight` runs those checks across the
 nested public example galleries under `galleries/` and rejects tracked runtime/auth artifacts such as
 local user stores, task traces, screenshots, SQLite sidecars, env files, cache files, and installed
-dependency directories; add `--fresh-clone` to
+dependency directories, plus local editable/path dependency pins in requirements files; add `--fresh-clone` to
 verify the committed state survives a same-machine clone, and `--strict` to make doctor warnings fail
 publication gates.
 Screenshot capture details and fidelity tradeoffs are in [`docs/SCREENSHOT_CAPTURE.md`](docs/SCREENSHOT_CAPTURE.md).

@@ -268,7 +268,7 @@ curiator doctor --json
 curiator smoke                 # runs each app's configured smoke command/fallback import
 curiator smoke --app revenue --json
 curiator smoke --jobs 4 --json # run independent app checks concurrently, preserving report order
-curiator release-preflight     # nested public galleries + tracked publish-unsafe runtime/cache artifacts
+curiator release-preflight     # nested public galleries + publish-unsafe artifacts/local deps
 curiator release-preflight --fresh-clone
 curiator release-preflight --fresh-clone --strict  # fail on doctor warnings for publication gates
 curiator playground-preflight  # hosted pilot posture: auth, quotas, queue, doctor, smoke

@@ -1218,6 +1218,50 @@ _PUBLISH_ENV_DIRS = {".venv", "venv", ".env"}
 _PUBLISH_DEPENDENCY_DIRS = {"node_modules"}
 _PUBLISH_LOCAL_FILES = {".DS_Store", ".coverage", "coverage.xml"}
 _PUBLISH_LOG_FILES = {"npm-debug.log", "yarn-error.log", "pnpm-debug.log"}
+_REQUIREMENTS_FILE_RE = re.compile(r"(^|/)(requirements[^/]*\.txt|constraints\.txt)$")
+_REMOTE_DEPENDENCY_PREFIXES = (
+    "bzr+",
+    "git+",
+    "hg+",
+    "svn+",
+    "git://",
+    "http://",
+    "https://",
+    "ssh://",
+)
+_LOCAL_DEPENDENCY_PREFIXES = ("./", "../", "/", "file:")
+
+
+def _looks_local_dependency_target(target: str) -> bool:
+    return target.lower().startswith(_LOCAL_DEPENDENCY_PREFIXES)
+
+
+def _is_local_dependency_reference(line: str) -> bool:
+    stripped = line.strip()
+    if not stripped or stripped.startswith("#"):
+        return False
+    lower = stripped.lower()
+    for option in ("-e", "--editable", "-f", "--find-links"):
+        if lower.startswith(f"{option} "):
+            parts = stripped.split(maxsplit=1)
+            target = parts[1].strip() if len(parts) > 1 else ""
+            lower_target = target.lower()
+            if option in ("-e", "--editable"):
+                return not lower_target.startswith(_REMOTE_DEPENDENCY_PREFIXES)
+            return _looks_local_dependency_target(target)
+        if lower.startswith(f"{option}="):
+            target = stripped.split("=", 1)[1].strip()
+            lower_target = target.lower()
+            if option in ("-e", "--editable"):
+                return not lower_target.startswith(_REMOTE_DEPENDENCY_PREFIXES)
+            return _looks_local_dependency_target(target)
+    if lower.startswith("-f") and len(stripped) > 2:
+        return _looks_local_dependency_target(stripped[2:].strip())
+    if " @ file:" in lower:
+        return True
+    if re.search(r"\s@\s*(?:\.\.?/|/|file:)", stripped):
+        return True
+    return _looks_local_dependency_target(stripped)
 
 
 def _publish_artifact_message(rel: str) -> str | None:
@@ -1251,6 +1295,24 @@ def _publish_artifact_hits(repo: Path) -> list[dict]:
         message = _publish_artifact_message(rel)
         if message:
             hits.append({"file": rel, "message": message})
+        if _REQUIREMENTS_FILE_RE.search(rel.replace("\\", "/")):
+            path = repo / rel
+            if not path.is_file():
+                continue
+            try:
+                lines = path.read_text(encoding="utf-8", errors="ignore").splitlines()
+            except OSError:
+                continue
+            for line_no, line in enumerate(lines, start=1):
+                if _is_local_dependency_reference(line):
+                    hits.append({
+                        "file": rel,
+                        "line": line_no,
+                        "message": (
+                            "tracked local editable/path dependency; public examples should depend on "
+                            "published packages or VCS URLs"
+                        ),
+                    })
     return hits
 
 
@@ -1491,7 +1553,8 @@ def cmd_release_preflight(args) -> int:
         for hit in g["path_hits"]:
             print(f"    path {hit['file']}:{hit['line']}: {hit['message']}")
         for hit in g.get("publish_artifact_hits") or []:
-            print(f"    artifact {hit['file']}: {hit['message']}")
+            loc = f"{hit['file']}:{hit['line']}" if hit.get("line") else hit["file"]
+            print(f"    artifact {loc}: {hit['message']}")
         for line in g["dirty"][:8]:
             print(f"    dirty {line}")
         if len(g["dirty"]) > 8:

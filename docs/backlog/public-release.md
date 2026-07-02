@@ -38,14 +38,14 @@ leave feedback → watch the fix land and the ⚙ reply arrive. Every item below
    `/home/adamguetz/...`. `curiator commands install` now lays down repo-local interactive shims at
    `.claude/commands/curiator.md` and `.agents/skills/curiator/SKILL.md`; the three release
    collections carry those current paths and now default to `runner.mode: pinned` for standalone
-   `pip install curiator` use (`curiator-aviato` `b23e0bc`, `curiator-ot` `36e21cf`,
+   `pip install curiator` use (`curiator-aviato` `3719ac9`, `curiator-ot` `36e21cf`,
    `curiator-geometry` `30bb155` on `curiator/auto`). `curiator doctor` now gives a local preflight for
    machine-absolute paths, missing app roots/sources, weak smoke coverage, suspicious proxy port wiring,
    likely HMR dev-server proxy commands, missing framework base/root-path config, missing command
    executables, and common missing dependency manifests; `curiator smoke` runs the same per-app smoke
    hooks used by git-as-memory commits. From the runner checkout, `curiator release-preflight` runs
    those checks across the nested public galleries and also rejects dirty nested repos, tracked
-   machine-local paths, and tracked publish-unsafe runtime/auth artifacts such as local user stores,
+   machine-local paths, local editable/path dependency pins, and tracked publish-unsafe runtime/auth artifacts such as local user stores,
    task/reply traces, screenshots, SQLite sidecars, env files, legacy JSON ledgers, generated caches,
    virtualenvs, and `node_modules`; `curiator
    release-preflight --fresh-clone` repeats the same gate from temporary clones of the committed

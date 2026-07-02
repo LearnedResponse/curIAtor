@@ -146,6 +146,13 @@ def test_release_preflight_flags_publish_unsafe_runtime_artifacts(tmp_path, monk
     (repo / ".curiator-users.json").write_text('{"users": []}\n')
     (repo / ".env.local").write_text("OPENAI_API_KEY=sk-local\n")
     (repo / ".env.example").write_text("OPENAI_API_KEY=\n")
+    (repo / "requirements.txt").write_text(
+        "-e ../curiator\n"
+        "-e git+https://github.com/example/pkg.git#egg=pkg\n"
+        "--editable=../local_pkg\n"
+        "--find-links ./wheels\n"
+        "local-pkg @ file:///tmp/local-pkg\n"
+    )
     (repo / "feedback" / "tasks" / "abc.md").write_text("task bundle\n")
     (repo / "feedback" / "replies" / "abc.md").write_text("agent trace\n")
     (repo / "feedback" / "shots" / "abc.png").write_bytes(b"not really png")
@@ -166,7 +173,8 @@ def test_release_preflight_flags_publish_unsafe_runtime_artifacts(tmp_path, monk
     assert cli.main(["release-preflight", "--gallery", "curiator-demo", "--json"]) == 1
     payload = json.loads(capsys.readouterr().out)
     gallery = payload["galleries"][0]
-    files = {hit["file"] for hit in gallery["publish_artifact_hits"]}
+    hits = gallery["publish_artifact_hits"]
+    files = {hit["file"] for hit in hits}
     assert payload["ok"] is False
     assert ".curiator-users.json" in files
     assert ".env.local" in files
@@ -181,6 +189,19 @@ def test_release_preflight_flags_publish_unsafe_runtime_artifacts(tmp_path, monk
     assert ".pytest_cache/v/cache/nodeids" in files
     assert "coverage.xml" in files
     assert "npm-debug.log" in files
+    assert {"file": "requirements.txt", "line": 1, "message": (
+        "tracked local editable/path dependency; public examples should depend on published packages or VCS URLs"
+    )} in hits
+    assert {"file": "requirements.txt", "line": 3, "message": (
+        "tracked local editable/path dependency; public examples should depend on published packages or VCS URLs"
+    )} in hits
+    assert {"file": "requirements.txt", "line": 4, "message": (
+        "tracked local editable/path dependency; public examples should depend on published packages or VCS URLs"
+    )} in hits
+    assert {"file": "requirements.txt", "line": 5, "message": (
+        "tracked local editable/path dependency; public examples should depend on published packages or VCS URLs"
+    )} in hits
+    assert not any(hit["file"] == "requirements.txt" and hit.get("line") == 2 for hit in hits)
     assert "feedback/app_feedback.sqlite" not in files
     assert ".env.example" not in files
 
