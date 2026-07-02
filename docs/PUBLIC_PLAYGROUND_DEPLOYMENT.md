@@ -27,6 +27,7 @@ Before deployment:
 curiator doctor
 curiator smoke
 curiator playground-preflight
+curiator playground-preflight --strict
 ```
 
 For release collections from the runner checkout:
@@ -38,7 +39,8 @@ curiator release-preflight --gallery curiator-geometry --fresh-clone
 `curiator playground-preflight` is the hosted-posture gate: it combines `doctor`/`smoke` with checks
 for `runner.mode: pinned`, `git.commit: true`, sign-in, local invite/admin readiness, anonymous-held
 policy, dispatch quotas, and the current held queue count. It does not replace a real hosted pilot or
-backup-restore test.
+backup-restore test. Use `--strict` for CI or the final pre-pilot check; it keeps warnings visible as
+warnings but makes any posture or doctor warning fail the command.
 
 ## 2. Gate feedback behind sign-in
 

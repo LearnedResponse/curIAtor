@@ -51,6 +51,8 @@ All notable changes to curIAtor are documented here. The format follows
 - `curiator stats compare <gallery>...` emits collection-level case-study rows across multiple
   galleries, including runner version/git head, collection git branch/head, reply rates, first-reply
   latency, and curator commit counts.
+- `curiator playground-preflight --strict` makes hosted-pilot posture and doctor warnings fail the
+  preflight command, useful for CI or final pre-pilot gates where warnings should not be skipped.
 - `curiator link` now writes relative gallery paths when possible, so linked app repos keep working
   when moved or cloned next to their collection.
 - Generated task bundles now use repo-relative app roots, source scopes, screenshots, ledger paths, and

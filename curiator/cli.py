@@ -2136,8 +2136,17 @@ def _playground_preflight_payload(args) -> dict:
         smoke = {"ok": all(r["ok"] for r in results), "results": results}
     held = [_queue_row_payload(key, entry) for key, entry in _queue_entries(cfg)]
     errors = [i for i in issues if i.get("severity") == "error"]
+    warnings = [i for i in issues if i.get("severity") == "warning"]
+    strict = bool(getattr(args, "strict", False))
+    strict_warnings = warnings + doctor_warnings
     return {
-        "ok": not errors and not doctor_errors and (args.no_smoke or smoke["ok"] is True),
+        "ok": (
+            not errors
+            and not doctor_errors
+            and (not strict or not strict_warnings)
+            and (args.no_smoke or smoke["ok"] is True)
+        ),
+        "strict": strict,
         "gallery": cfg.get("gallery_path"),
         "auth": {
             "mode": (cfg.get("auth") or {}).get("mode"),
@@ -2154,6 +2163,7 @@ def _playground_preflight_payload(args) -> dict:
         "user_store": user_summary,
         "held_queue": {"count": len(held), "rows": held},
         "issues": issues,
+        "warnings": len(strict_warnings),
         "doctor": {
             "ok": not doctor_errors,
             "errors": len(doctor_errors),
@@ -2186,6 +2196,8 @@ def cmd_playground_preflight(args) -> int:
         f"smoke={smoke_label} users={payload['user_store']['active']} active/"
         f"{payload['user_store']['admins']} admin"
     )
+    if payload["strict"] and payload["warnings"]:
+        print(f"  strict=true: {payload['warnings']} warning(s) block this gate")
     for issue in payload["issues"]:
         print(f"  {issue['severity'].upper()} {issue['where']}: {issue['message']}")
     for issue in payload["doctor"]["issues"]:
@@ -2984,6 +2996,7 @@ def main(argv=None) -> int:
     rp.set_defaults(func=cmd_release_preflight)
     pp = sub.add_parser("playground-preflight", help="check hosted public-playground readiness")
     pp.add_argument("--no-smoke", action="store_true", help="skip per-app smoke checks")
+    pp.add_argument("--strict", action="store_true", help="fail when posture or doctor warnings are present")
     pp.add_argument("--json", action="store_true", help="emit machine-readable diagnostics")
     pp.set_defaults(func=cmd_playground_preflight)
     cx = sub.add_parser("context", help="print app context and recent feedback for interactive agents")

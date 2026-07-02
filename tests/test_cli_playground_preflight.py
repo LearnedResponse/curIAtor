@@ -74,6 +74,53 @@ def test_playground_preflight_accepts_phase0_local_auth_config(collection, capsy
     assert payload["smoke"]["ok"] is True
 
 
+def test_playground_preflight_strict_fails_warning_only_posture(collection, capsys):
+    from curiator import auth, cli
+
+    (collection / "gallery.yaml").write_text(textwrap.dedent("""\
+        apps:
+          - name: sample
+            title: Sample
+            mount: { kind: dash-inproc, module: sample }
+            source: apps/sample.py
+        runner:
+          mode: pinned
+        git:
+          commit: true
+        auth:
+          mode: local
+          users_file: .curiator-users.json
+          admin_groups: [admin]
+        agent:
+          adapter: headless-cc
+          autonomy: auto-small
+    """))
+    auth.save_users_file(
+        str(collection / ".curiator-users.json"),
+        {"admin@example.com": {"name": "Admin", "groups": ["admin"], "password_hash": "test-hash"}},
+    )
+
+    assert cli.main(["playground-preflight", "--no-smoke", "--json"]) == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["ok"] is True
+    assert payload["strict"] is False
+    assert payload["warnings"] == 4
+
+    assert cli.main(["playground-preflight", "--no-smoke", "--strict", "--json"]) == 1
+    payload = json.loads(capsys.readouterr().out)
+    messages = "\n".join(issue["message"] for issue in payload["issues"])
+    assert payload["ok"] is False
+    assert payload["strict"] is True
+    assert payload["warnings"] == 4
+    assert "agent.autonomy: propose-only" in messages
+    assert "per-user daily dispatch quota" in messages
+
+    assert cli.main(["playground-preflight", "--no-smoke", "--strict"]) == 1
+    out = capsys.readouterr().out
+    assert "strict=true: 4 warning(s) block this gate" in out
+    assert "WARNING agent.quotas.global_daily" in out
+
+
 def test_playground_preflight_rejects_anonymous_auto_dispatch(collection, capsys):
     from curiator import auth, cli
 
