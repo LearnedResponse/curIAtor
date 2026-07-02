@@ -115,6 +115,9 @@ All notable changes to curIAtor are documented here. The format follows
   failures.
 - Repository labels and `docs/GOOD_FIRST_ISSUES.md` track publish-time good-first issue seeds; the
   initial release-hardening seeds have been implemented.
+- `docs/RELEASE.md` records the human release runbook: metadata preparation, local gates, real demo GIF
+  replacement, collection publication, PyPI Trusted Publishing, Zenodo, tag push, and post-release
+  smoke checks.
 - The release workflow now publishes tagged builds through PyPI trusted publishing and blocks tags
   whose `vX.Y.Z` does not match `pyproject.toml`.
 - CI now builds the sdist/wheel and runs `twine check`, so package metadata regressions are caught

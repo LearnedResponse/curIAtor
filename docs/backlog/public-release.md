@@ -20,8 +20,9 @@ leave feedback → watch the fix land and the ⚙ reply arrive. Every item below
    app scaffolds, run traces, the interactive `link`/`work`/`done` workflow) as a tagged GitHub
    release. The release workflow builds/attaches artifacts and has a PyPI trusted-publishing job with
    a tag-vs-`pyproject.toml` version guard; `make release-check` now runs the local gate (lint, tests,
-   strict public-gallery fresh-clone preflight, demo GIF regeneration, package build, and `twine check`). Local
-   gate evidence from July 2, 2026: `make release-check` passed with 212 tests, public-gallery
+   strict public-gallery fresh-clone preflight, demo GIF regeneration, package build, and `twine check`). The
+   human release checklist now lives in [`docs/RELEASE.md`](../RELEASE.md). Local gate evidence from
+   July 2, 2026: `make release-check` passed with 214 tests, public-gallery
    fresh-clone preflight `3/3` with zero publish-artifact hits, regenerated `docs/demo.gif`, built
    sdist/wheel, and `twine check` passed both artifacts. The broader optional-public gate
    `curiator release-preflight --include-optional --fresh-clone --strict` passed `5/5` with all smoke

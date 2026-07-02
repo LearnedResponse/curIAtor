@@ -131,6 +131,7 @@ verify the committed state survives a same-machine clone, and `--strict` to make
 publication gates. Add `--include-optional` when checking finance and phylogenetics alongside the
 minimum release set.
 Screenshot capture details and fidelity tradeoffs are in [`docs/SCREENSHOT_CAPTURE.md`](docs/SCREENSHOT_CAPTURE.md).
+Release gates and publication steps are tracked in [`docs/RELEASE.md`](docs/RELEASE.md).
 
 Already inside an app repo with Claude Code or Codex? Link it once and use the same loop interactively:
 

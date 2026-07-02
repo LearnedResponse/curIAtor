@@ -286,6 +286,9 @@ make release-prepare VERSION=0.2.0 DATE=<release-date>  # only when cutting a re
 make release-check
 ```
 
+The full publication checklist lives in [`RELEASE.md`](RELEASE.md), including PyPI Trusted Publishing,
+collection publication, Zenodo, and post-release smoke checks.
+
 ## 4. Two install profiles
 
 | profile | install | `gallery.yaml` | who |
