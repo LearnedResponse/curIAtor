@@ -5,7 +5,8 @@ context bundle (the app source + a CONTEXT.md/LESSONS.md, optionally backed by a
 store like graphify — see docs/DESIGN.md → "Agent adapter / deployment modes"). Defaults to
 propose-only + PR-for-review for shared teams.
 
-Build this once the headless-cc wedge is proven (docs/EXTRACTION_SCOPE.md → M4).
+Build this in a later team-scale milestone; docs/EXTRACTION_SCOPE.md records the extracted package
+boundary, and docs/DESIGN.md records the adapter tradeoff.
 """
 from __future__ import annotations
 
@@ -17,5 +18,5 @@ def available() -> bool:
 def run(task) -> None:
     raise NotImplementedError(
         "The `api` adapter is a v1 stub. Use adapter: headless-cc for now "
-        "(see docs/EXTRACTION_SCOPE.md → M4 for the build plan)."
+        "(see docs/DESIGN.md for the team-scale adapter plan)."
     )

@@ -1,8 +1,7 @@
 """registry.py — gallery.yaml → the app registry the shell consumes.
 
-Drop-in replacement for the research repo's `all_apps_index` module: it exposes the same
-`ALL_APPS` (a flat list of app dicts) and `TAG_META` that `app_shell.load_registry()` reads,
-but sourced from a declarative `gallery.yaml` instead of a hand-maintained Python list.
+This exposes `ALL_APPS` (a flat list of app dicts) and `TAG_META` for the
+legacy Dash-compatible shell, sourced from declarative `gallery.yaml` entries.
 
 It also registers each app's source directory on `sys.path` so the shell's in-process Dash
 mount (`importlib.import_module(<module>)`) can find the demo apps under `examples/dash/`.

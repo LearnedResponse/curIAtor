@@ -6,17 +6,16 @@ is same-origin. Layout: CATALOG (left) · app in an iframe (center) · FEEDBACK
 (right).
 
 Key properties:
-  • Registry-driven — reads `all_apps_index` (the existing single source of truth:
-    ports, titles, tags, the 18-tag system). Adding an app = one registry entry.
+  • Registry-driven — reads the gallery.yaml-backed shell registry. Adding an
+    app = one gallery entry, either as an in-process Dash mount or a proxy mount.
   • Zero per-app edits — each app is mounted UNMODIFIED: the env var
     DASH_REQUESTS_PATHNAME_PREFIX is set, Dash reads it at construction, and we
     take the app's Flask server. Handles both entry patterns (`build_app()` and a
     module-level `app = Dash(...)`).
   • Lazy — apps are built on first view (a few hundred ms), not at startup; a
     build failure shows in the iframe, never breaks the shell.
-  • Numbers kept as IDs — the old port number is the permanent reference label,
-    decoupled from the (now nonexistent) live port. Apps are keyed by their
-    registry `key` (file stem); the number is shown for reference.
+  • Stable app keys — apps are keyed by their configured gallery names; numeric
+    labels are optional display metadata for collections that want them.
   • Catalog = quality dashboard — sort/filter by id · title · tag · ★rating ·
     recency · open-feedback (the last is the Phase-2 loop's work queue).
   • Same-origin feedback — ★1–5 + comment + one-click html2canvas screenshot of
@@ -59,7 +58,7 @@ sys.path.insert(0, str(HERE))
 PORT = 8200  # default; overridden by gallery.yaml shell.port just below (after the registry import)
 
 from curiator.annotations import clean_annotations  # noqa: E402
-import registry as REG  # gallery.yaml-backed registry (curIAtor drop-in for all_apps_index)
+import registry as REG  # gallery.yaml-backed registry
 from curiator import auth, ledger  # identity/provenance + shared SQLite feedback ledger
 PORT = REG.SHELL_CFG.get("port", PORT)  # honor gallery.yaml: shell.port
 def _norm_title(raw):

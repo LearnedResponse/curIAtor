@@ -468,7 +468,7 @@ drift, so follow each tool's own docs, linked, rather than treating these as gos
   tool — [Codex](https://github.com/openai/codex) supports OpenAI-compatible endpoints (incl. local:
   [Ollama](https://ollama.com), LM Studio, vLLM); [aider](https://aider.chat) is provider-agnostic via
   [LiteLLM](https://docs.litellm.ai). See each tool's docs.
-- **Future `api` adapter** (M4 — no CLI in the loop): target an OpenAI- or Anthropic-compatible gateway
-  (LiteLLM / a vendor proxy) to stay provider-agnostic.
+- **Future `api` adapter** (team-scale, no CLI in the loop): target an OpenAI- or
+  Anthropic-compatible gateway (LiteLLM / a vendor proxy) to stay provider-agnostic.
 
 **Rule of thumb: curIAtor is the harness; you bring the brain.**

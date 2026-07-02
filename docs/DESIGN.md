@@ -1,9 +1,9 @@
 # curIAtor — AI-maintained app gallery (OSS design sketch)
 
-> **Name LOCKED 2026-06-28: `curIAtor`** (curator + IA; also *creator + curator*) · repo `LearnedResponse/curiator` · `pip install curiator` · skill `curiator`. Extraction plan: `AI_GALLERY_OSS_EXTRACTION_SCOPE.md`.
+> **Name LOCKED 2026-06-28: `curIAtor`** (curator + IA; also *creator + curator*) · repo `LearnedResponse/curiator` · `pip install curiator` · skill `curiator`. Extraction receipt: [`docs/EXTRACTION_SCOPE.md`](EXTRACTION_SCOPE.md).
 
-> ⚠️ **Orthogonal to the math program.** This is a design note for extracting the viewer
-> shell + feedback + loop we built this session into a standalone open-source project. It has
+> ⚠️ **Orthogonal to the math program.** This started as a design note for extracting the viewer
+> shell + feedback + loop into a standalone open-source project. It has
 > nothing to do with the positive-geometry research; it's parked here because the code it
 > describes lives in this directory. Captured 2026-06-26 · updated 2026-06-28 (agent-adapter / deployment modes; graphify as complementary knowledge store).
 
