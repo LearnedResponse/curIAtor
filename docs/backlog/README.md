@@ -51,5 +51,5 @@ deliberate (ship, let the example demos surface what to prioritize).
   annotation on a *shared clock*, so a review becomes an ordered, intent-per-mark tour the agent
   follows. Composes with `annotated-feedback`; accessibility wins for motor/low-vision (voice +
   DOM-target snapping). Tier 0 dictation is documented; local transcription is command-backed and
-  opt-in; annotation marks and transcript segments now both carry task-bundle timing fields for the
-  future narrative merge.
+  opt-in; annotation marks and transcript segments now both carry task-bundle timing fields, and timed
+  marks with overlapping speech render as an ordered `Narrated feedback` task-bundle block.

@@ -74,6 +74,28 @@ def test_app_bundle_includes_voice_transcript_segments(cfg):
     assert "segment 2: untimed follow-up" in body
 
 
+def test_app_bundle_includes_narrated_feedback_when_timings_overlap(cfg):
+    entry = _entry(
+        annotations=[
+            {"tool": "box", "x1": 0.1, "y1": 0.2, "x2": 0.3, "y2": 0.4,
+             "start_ms": 100, "end_ms": 500, "note": "legend area",
+             "target": {"selector": "#chart .legend"}},
+        ],
+        transcript_segments=[
+            {"start_ms": 0, "end_ms": 250, "text": "this legend"},
+            {"start_ms": 250, "end_ms": 700, "text": "is cramped"},
+        ],
+    )
+
+    body = Path(build_task(cfg, "sample", entry).task_file).read_text()
+    assert "## Narrated feedback" in body
+    assert (
+        "1. mark 1: `box` [start=100ms, end=500ms] -> selector `#chart .legend`: "
+        "this legend is cramped"
+    ) in body
+    assert "(mark note: legend area)" in body
+
+
 def test_runner_routing_checkout_vs_pinned(cfg):
     g = build_task(cfg, GENERAL_KEY, _entry(id="g1", comment="the shell chrome is ugly"))
     body = Path(g.task_file).read_text()

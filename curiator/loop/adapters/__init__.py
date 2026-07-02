@@ -19,6 +19,7 @@ from pathlib import Path
 
 from ... import ledger
 from ...config import app_spec as _app_spec   # the gallery.yaml schema logic lives in config.py
+from ...narrative import build_narrative
 from .. import runlog
 from . import headless_cc, codex, api as api_adapter, command as command_adapter
 
@@ -211,6 +212,40 @@ def _transcript_block(entry: dict) -> str:
     return "\n## Voice transcript segments\n" + "\n".join(rows)
 
 
+def _narrative_block(entry: dict) -> str:
+    """Prompt-facing ordered tour that pairs timed marks with overlapping speech."""
+    rows = []
+    for idx, row in enumerate(build_narrative(entry.get("annotations"), entry.get("transcript_segments")), start=1):
+        times = f"[start={row['start_ms']:.0f}ms, end={row['end_ms']:.0f}ms]"
+        line = f"- {idx}. {row['label']}: `{row['tool']}` {times}"
+        target = row.get("target") if isinstance(row.get("target"), dict) else {}
+        bits = []
+        selector = target.get("selector")
+        if selector:
+            bits.append(f"selector `{selector}`")
+        tag = target.get("tag")
+        if tag:
+            bits.append(f"tag `{tag}`")
+        testid = target.get("data_testid")
+        if testid:
+            bits.append(f"data-testid `{testid}`")
+        role = target.get("role")
+        if role:
+            bits.append(f"role `{role}`")
+        if bits:
+            line += " -> " + "; ".join(bits)
+        if row.get("text"):
+            line += f": {row['text']}"
+        else:
+            line += ": (no overlapping transcript segment)"
+        if row.get("note"):
+            line += f" (mark note: {row['note']})"
+        rows.append(line)
+    if not rows:
+        return ""
+    return "\n## Narrated feedback\n" + "\n".join(rows)
+
+
 def _entry_label(entry: dict) -> str:
     who = "agent" if entry.get("kind") == "system" or entry.get("author") == "claude" else "user"
     status = entry.get("status") or "?"
@@ -365,6 +400,9 @@ def _collection_bundle(cfg: dict, entry: dict, eid: str, shot_path: str | None, 
     transcript = _transcript_block(entry)
     if transcript:
         body.append(transcript)
+    narrative = _narrative_block(entry)
+    if narrative:
+        body.append(narrative)
     if approval_followup:
         body.append(
             "\n**APPROVAL/FOLLOW-UP RUN** — the user has replied to a prior collection/app request. "
@@ -412,6 +450,9 @@ def _runner_bundle(cfg: dict, entry: dict, eid: str, shot_path: str | None) -> t
     transcript = _transcript_block(entry)
     if transcript:
         head.append(transcript)
+    narrative = _narrative_block(entry)
+    if narrative:
+        head.append(narrative)
     if mode == "checkout":
         root = _runner_root(cfg)
         root_display = _repo_display(cfg, root)
@@ -479,6 +520,9 @@ def _app_bundle(cfg: dict, key: str, entry: dict, eid: str, shot_path: str | Non
     transcript = _transcript_block(entry)
     if transcript:
         body.append(transcript)
+    narrative = _narrative_block(entry)
+    if narrative:
+        body.append(narrative)
     lessons = _lessons_for(cfg, key)
     if lessons:
         body.append(f"\n## Prior lessons for `{key}` (curator git history — what stuck / got reverted)\n{lessons}")

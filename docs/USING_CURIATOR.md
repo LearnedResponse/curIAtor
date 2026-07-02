@@ -224,8 +224,8 @@ voice:
 This is the private/default path: use a local Whisper or `whisper.cpp` wrapper for zero-egress review
 audio. Browser Web Speech is intentionally not used for private collections. Returned `segments`
 timestamps are sanitized, stored with the feedback entry, and included in the agent task bundle as a
-`Voice transcript segments` block; the later narrated-feedback layer will align those segments with
-annotation mark timestamps.
+`Voice transcript segments` block. If screenshot annotations also carry `start_ms` / `end_ms`,
+curIAtor derives a `Narrated feedback` block that pairs each timed mark with overlapping speech.
 
 ## 3. Work Interactively From An App Repo
 

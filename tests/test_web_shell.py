@@ -449,6 +449,11 @@ def test_react_shell_feedback_api_stores_sanitized_annotations(web_client):
     assert "## Voice transcript segments" in body
     assert "segment 1 [start=200ms, end=800ms]: move the legend" in body
     assert "segment 2 [start=900ms, end=1000ms]: then widen the plot" in body
+    assert "## Narrated feedback" in body
+    assert (
+        "1. mark 1: `box` [start=123ms, end=457ms] -> selector `#chart .legend`; "
+        "tag `div`; data-testid `legend`; role `img`: move the legend"
+    ) in body
     assert "mark 2: `redact` at x1=0.100, y1=0.100, x2=0.200, y2=0.200 (target omitted for redaction)" in body
     assert "#secret" not in body
 
