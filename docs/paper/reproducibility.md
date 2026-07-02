@@ -43,6 +43,12 @@ published collection with:
 git -C galleries/curiator-phylogenetics log --format='%h %s%n%b----' -3
 ```
 
+Regenerate the OT/HMI rainbow-to-HP-HMI before/after figure with:
+
+```bash
+python docs/paper/figures/render_ot_before_after.py
+```
+
 ## Local pre-publication snapshot
 
 The current local nested galleries are useful for draft shaping, but they are not publication evidence

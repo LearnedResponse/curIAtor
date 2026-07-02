@@ -59,8 +59,10 @@ the durable record of that conversation.
    `reproducibility.md`, including release-time `curiator stats` commands and TODO markers instead of
    invented numbers. The loop diagram source has landed at
    `docs/paper/figures/feedback-loop.mmd`, and the git-log provenance excerpt has landed at
-   `docs/paper/figures/provenance-log-excerpt.md`. Figures still needed: the shell with the feedback
-   panel and a rainbow→ISA-101 before/after.
+   `docs/paper/figures/provenance-log-excerpt.md`. The OT rainbow→ISA-101 before/after figure and
+   renderer have landed at `docs/paper/figures/ot-rainbow-before-after.png` and
+   `docs/paper/figures/render_ot_before_after.py`. Figure still needed: the shell with the feedback
+   panel.
 4. Deposit on Zenodo; DOI badge in the README; decide on the JOSS submission after.
 
 ## Guardrails

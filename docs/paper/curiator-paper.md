@@ -58,6 +58,10 @@ The release paper should report three public collections:
   higher-performance HMI conventions.
 - `curiator-geometry`: a low-friction public math/geometry quickstart collection.
 
+The OT visual arc is represented by [Figure 3](figures/ot-rainbow-before-after.png), generated from
+the collection's seed and improved commits with the script in
+`figures/render_ot_before_after.py`.
+
 TODO(release): insert the `curiator stats compare` table generated from fresh clones of the public
 collection repositories.
 
