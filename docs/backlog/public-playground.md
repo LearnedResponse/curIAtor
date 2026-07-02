@@ -2,8 +2,9 @@
 
 > **Status:** scoped 2026-07-01; phase-2 moderation primitive landed (`held` status,
 > `auth.allow_anonymous` held intake for `local`/`oidc`, admin `/queue` shell view, and
-> `curiator queue list|approve|reject` CLI, per-IP anonymous submission limits, and watcher-enforced
-> account/global dispatch quotas, plus anonymous-upload suppression in the React shell). Sequences AFTER
+> `curiator queue list|approve|reject|sweep` CLI, per-IP anonymous submission limits, and
+> watcher-enforced account/global dispatch quotas, plus anonymous-upload suppression in the React shell).
+> Sequences AFTER
 > [public-release](public-release.md): the
 > static example repos are the pitch; this is the live complement — **a hosted public collection where
 > anyone can leave feedback and watch the curator work**, without handing an autonomous agent to the
@@ -29,8 +30,9 @@ tier is not what you can *say* — it's **when the agent acts on it**:
 | **admin** | account in `auth.admin_groups` | reviews the pool, reverts, promotes, revokes |
 
 This is not a new system — it's **rungs below the ladder that already exists**. Groups on users,
-group-gated elevation, `admin_groups`, the login rate-limiter, and `curiator revert` are all in the
-runner today; what's missing is the budget/quota layer and public deployment hardening.
+group-gated elevation, `admin_groups`, the login rate-limiter, quotas, the held-queue CLI/shell, stale
+queue sweep, and `curiator revert` are all in the runner today; what's left is public deployment
+hardening and operating a real pilot.
 
 ## Rollout phases (each phase gates the next)
 
@@ -53,8 +55,8 @@ over-budget items to `held`. The rope is gone but every author is still identifi
 **Phase 2 — anonymous + the held pool.** The full ladder below: anonymous browsing + feedback that is
 **always held** for human review, the moderation queue in the shell + `curiator queue` CLI, per-IP
 submission limits. Core moderation status, hosted anonymous-held intake for `local`/`oidc`, shell
-review view, CLI, per-IP anonymous submission limits, and account/global quota degradation are now
-present.
+review view, CLI, stale queue sweep, per-IP anonymous submission limits, and account/global quota
+degradation are now present.
 
 ## Design (each piece lands on an existing seam)
 
@@ -77,7 +79,8 @@ present.
    `per_user_daily` but still count against `global_daily`.
 3. **The moderation pool** — ledger status `held`, the admin-gated `/queue` shell view, and the
    headless CLI are landed: `curiator queue list|approve|reject` reviews held items; approve → `new`
-   (dispatches normally), reject → `rejected` with an audit note. Approval is admission control,
+   (dispatches normally), reject → `rejected` with an audit note, and `curiator queue sweep` dry-runs
+   or applies stale-held cleanup with the same per-item audit notes. Approval is admission control,
    distinct from the existing `awaiting_approval` (which is the *agent* asking a human about a *plan*).
 4. **Admin operations** — `curiator revert` already exists (git-as-memory makes every run one
    revertible commit). `curiator user disable <email>` / `enable` now toggles a `disabled` flag in the
@@ -112,8 +115,8 @@ in phase 2 gets built until phase 0 has run with real invitees.
 ## Honest risks
 
 - **Moderation labor is the real cost.** The pool needs humans; for anonymous users the reply latency
-  *is* the reviewer, not the agent — say so in the UI ("queued for review"). Per-IP rate limits help
-  keep the pool reviewable, but a public deployment still needs monitoring and queue cleanup.
+  *is* the reviewer, not the agent — say so in the UI ("queued for review"). Per-IP rate limits and
+  dry-run stale sweeps help keep the pool reviewable, but a public deployment still needs monitoring.
 - **Prompt injection doesn't vanish above the anonymous tier** — account feedback still reaches the
   agent. Quotas bound the blast rate; `auto-small`/`propose-only` + deny-lists bound the blast radius;
   the container bounds the box. Keep SECURITY.md's "mitigations, not a solved problem" framing.

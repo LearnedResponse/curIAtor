@@ -220,6 +220,49 @@ def test_queue_refuses_non_held_and_system_notes(collection, monkeypatch):
         cli.main(["queue", "reject", note_id])
 
 
+def test_queue_sweep_dry_runs_and_rejects_only_stale_held_items(collection, monkeypatch, capsys):
+    import json
+    from datetime import datetime, timedelta, timezone
+
+    from curiator import cli, ledger
+    from curiator.config import load_config
+
+    monkeypatch.chdir(collection)
+    cfg = load_config()
+    now = datetime.now(timezone.utc)
+    old_id = ledger.save_entry(
+        cfg,
+        "sample",
+        comment="old held public feedback",
+        ts=(now - timedelta(days=45)).isoformat(timespec="seconds"),
+        user={"email": "old@example.com", "name": "Old"},
+        extra={"status": "held"},
+    )
+    recent_id = ledger.save_entry(
+        cfg,
+        "sample",
+        comment="recent held public feedback",
+        ts=(now - timedelta(days=3)).isoformat(timespec="seconds"),
+        user={"email": "recent@example.com", "name": "Recent"},
+        extra={"status": "held"},
+    )
+
+    assert cli.main(["queue", "sweep", "--older-than", "30", "--json"]) == 0
+    dry = json.loads(capsys.readouterr().out)
+    assert dry["applied"] is False
+    assert [row["id"] for row in dry["rows"]] == [old_id]
+    assert next(e for e in ledger.load(cfg)["sample"] if e["id"] == old_id)["status"] == "held"
+
+    assert cli.main(["queue", "sweep", "--older-than", "30", "--apply", "--reason", "stale"]) == 0
+    items = ledger.load(cfg)["sample"]
+    assert next(e for e in items if e["id"] == old_id)["status"] == "rejected"
+    assert next(e for e in items if e["id"] == recent_id)["status"] == "held"
+    assert any(e.get("kind") == "system" and old_id in (e.get("reply_to") or [])
+               and "stale held item rejected by curator@test.local" in e.get("comment", "")
+               and "Reason: stale" in e.get("comment", "")
+               for e in items)
+
+
 def test_work_refuses_a_system_note(collection, monkeypatch):
     import pytest
     from curiator import cli, ledger

@@ -34,7 +34,7 @@ import shlex
 import subprocess
 import sys
 import tempfile
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from .config import LINK_REL, agent_label, app_spec, app_specs, load_config, load_config_at
@@ -1502,6 +1502,24 @@ def _queue_entries(cfg: dict, app: str | None = None) -> list[tuple[str, dict]]:
     return rows
 
 
+def _parse_entry_ts(entry: dict) -> datetime | None:
+    raw = entry.get("ts")
+    if not raw:
+        return None
+    try:
+        parsed = datetime.fromisoformat(str(raw).replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return parsed.replace(tzinfo=timezone.utc) if parsed.tzinfo is None else parsed.astimezone(timezone.utc)
+
+
+def _queue_older_than(rows: list[tuple[str, dict]], days: float, *, now: datetime | None = None) -> list[tuple[str, dict]]:
+    if days <= 0:
+        raise SystemExit("curIAtor: --older-than must be greater than 0 days.")
+    cutoff = (now or datetime.now(timezone.utc)) - timedelta(days=days)
+    return [(app, entry) for app, entry in rows if (ts := _parse_entry_ts(entry)) is not None and ts <= cutoff]
+
+
 def _queue_row_payload(app: str, entry: dict) -> dict:
     user = entry.get("user") or {}
     comment = " ".join((entry.get("comment") or "").split())
@@ -1515,6 +1533,17 @@ def _queue_row_payload(app: str, entry: dict) -> dict:
     }
 
 
+def _queue_sweep_payload(app: str, entry: dict, *, now: datetime | None = None) -> dict:
+    payload = _queue_row_payload(app, entry)
+    ts = _parse_entry_ts(entry)
+    if ts:
+        age_days = ((now or datetime.now(timezone.utc)) - ts).total_seconds() / 86400
+        payload["age_days"] = round(max(age_days, 0.0), 2)
+    else:
+        payload["age_days"] = None
+    return payload
+
+
 def _print_queue_rows(rows: list[tuple[str, dict]]) -> None:
     if not rows:
         print("curiator: held queue is empty")
@@ -1526,6 +1555,14 @@ def _print_queue_rows(rows: list[tuple[str, dict]]) -> None:
         author = payload.get("author") or "user"
         comment = payload.get("comment") or "(no comment)"
         print(f"  {payload['id']} {app}{stars} {payload.get('ts') or '-'} {author}: {comment[:160]}")
+
+
+def _queue_reject(cfg: dict, app: str, entry: dict, *, actor: str, reason: str = "", prefix: str = "rejected") -> None:
+    text = f"Moderation queue: {prefix} by {actor}; closed without agent dispatch."
+    if reason:
+        text += f" Reason: {reason}"
+    ledger.add_system_note(cfg, app, text, reply_to=[entry["id"]], agent="curiator queue")
+    ledger.set_status(cfg, app, [entry["id"]], "rejected")
 
 
 def cmd_queue(args) -> int:
@@ -1544,6 +1581,45 @@ def cmd_queue(args) -> int:
         if args.json:
             print(json.dumps([_queue_row_payload(key, entry) for key, entry in rows], indent=2))
         else:
+            _print_queue_rows(rows)
+        return 0
+
+    if args.action == "sweep":
+        app = _resolve_app(cfg, args.app) if args.app else None
+        rows = _queue_older_than(_queue_entries(cfg, app), args.older_than)
+        if args.limit:
+            rows = rows[:args.limit]
+        actor = _queue_actor(cfg)
+        reason = " ".join(args.reason or []).strip()
+        if args.apply:
+            for key, entry in rows:
+                sweep_reason = reason or f"stale held feedback older than {args.older_than:g} day(s)"
+                _queue_reject(
+                    cfg,
+                    key,
+                    entry,
+                    actor=actor,
+                    reason=sweep_reason,
+                    prefix="stale held item rejected",
+                )
+        result = {
+            "ok": True,
+            "action": "sweep",
+            "applied": bool(args.apply),
+            "matched": len(rows),
+            "older_than_days": args.older_than,
+            "rows": [_queue_sweep_payload(key, entry) for key, entry in rows],
+        }
+        if args.json:
+            print(json.dumps(result, indent=2))
+        elif args.apply:
+            print(f"curiator: rejected {len(rows)} held feedback item(s) older than {args.older_than:g} day(s)")
+            _print_queue_rows(rows)
+        else:
+            print(
+                f"curiator: sweep dry-run found {len(rows)} held feedback item(s) older than "
+                f"{args.older_than:g} day(s); pass --apply to reject them"
+            )
             _print_queue_rows(rows)
         return 0
 
@@ -1571,11 +1647,7 @@ def cmd_queue(args) -> int:
         return 0
 
     reason = " ".join(args.reason or []).strip()
-    text = f"Moderation queue: rejected by {actor}; closed without agent dispatch."
-    if reason:
-        text += f" Reason: {reason}"
-    ledger.add_system_note(cfg, app, text, reply_to=[entry["id"]], agent="curiator queue")
-    ledger.set_status(cfg, app, [entry["id"]], "rejected")
+    _queue_reject(cfg, app, entry, actor=actor, reason=reason)
     result = {"app": app, "id": entry["id"], "status": "rejected", "action": "rejected", "reason": reason}
     if args.json:
         print(json.dumps(result, indent=2))
@@ -2199,6 +2271,15 @@ def main(argv=None) -> int:
     qr.add_argument("--app", help="disambiguate the feedback id")
     qr.add_argument("--json", action="store_true", help="emit machine-readable result")
     qr.set_defaults(func=cmd_queue)
+    qs = qu_sub.add_parser("sweep", help="dry-run or reject stale held feedback items")
+    qs.add_argument("--older-than", type=float, default=30.0,
+                    help="held feedback age in days required for sweep eligibility (default: 30)")
+    qs.add_argument("--app", help="limit sweep to one app")
+    qs.add_argument("--limit", type=int, default=0, help="maximum items to sweep (0 = all)")
+    qs.add_argument("--reason", nargs="*", help="optional rejection reason for applied sweeps")
+    qs.add_argument("--apply", action="store_true", help="actually reject matched held items")
+    qs.add_argument("--json", action="store_true", help="emit machine-readable sweep result")
+    qs.set_defaults(func=cmd_queue)
     op = sub.add_parser("open", help="print the gallery/app URL")
     op.add_argument("--app", help="override linked/current app")
     op.set_defaults(func=cmd_open)

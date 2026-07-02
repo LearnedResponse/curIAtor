@@ -191,6 +191,8 @@ curiator feedback add revenue "anonymous/public suggestion" --status held
 curiator queue list
 curiator queue approve <feedback_id>         # held -> new; the watcher can dispatch it
 curiator queue reject <feedback_id> "spam"   # held -> rejected; records a thread note
+curiator queue sweep --older-than 30         # dry-run stale held-item cleanup
+curiator queue sweep --older-than 30 --apply --reason stale
 ```
 
 Admins can also open **Queue** from the account menu in the React shell; it shows the same held pool
@@ -198,7 +200,8 @@ and uses the same ledger transitions.
 
 `held` is admission control for public or over-quota feedback. It is distinct from
 `awaiting_approval`, which means the agent has already looked at a task and is asking a human to
-approve a plan.
+approve a plan. `queue sweep` is intentionally dry-run unless `--apply` is present; applied sweeps
+reject matching held items and write the same per-item audit notes as `queue reject`.
 
 And summarize the collection's feedback history for release notes or case studies:
 

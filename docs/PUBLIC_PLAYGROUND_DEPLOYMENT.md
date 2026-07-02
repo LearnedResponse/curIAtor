@@ -171,6 +171,13 @@ Weekly:
 ```bash
 CURIATOR_GALLERY=/collection/gallery.yaml curiator stats --markdown
 CURIATOR_GALLERY=/collection/gallery.yaml curiator smoke
+CURIATOR_GALLERY=/collection/gallery.yaml curiator queue sweep --older-than 30
+```
+
+Only close stale held feedback after reviewing the dry-run list:
+
+```bash
+CURIATOR_GALLERY=/collection/gallery.yaml curiator queue sweep --older-than 30 --apply --reason stale
 ```
 
 Before widening the invite list, review:

@@ -64,8 +64,8 @@ All notable changes to curIAtor are documented here. The format follows
   velvet-gated hosted collections a revocation lever.
 - A held-feedback moderation queue: `curiator feedback add --status held` records feedback without
   dispatching it, `/queue` gives admins a shell review view, and
-  `curiator queue list|approve|reject` lets headless admins review, release, or close held items with
-  ledger audit notes.
+  `curiator queue list|approve|reject|sweep` lets headless admins review, release, close, or dry-run
+  stale cleanup of held items with ledger audit notes.
 - `auth.allow_anonymous: true` for `local`/`oidc` hosted galleries lets logged-out users leave feedback,
   but it is always recorded as `held`; logged-in users keep the normal dispatch path.
 - Anonymous hosted feedback is rate-limited per client IP with `auth.anonymous_feedback_max` and
