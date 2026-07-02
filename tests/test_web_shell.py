@@ -327,6 +327,58 @@ auth:
     assert r.get_json()["error"] == "sign in required"
 
 
+def test_react_shell_header_auth_requires_proxy_identity_for_feedback(collection, monkeypatch):
+    from curiator import ledger
+    from curiator.config import load_config
+
+    script = collection / "transcribe_fixture.py"
+    script.write_text("import json\nprint(json.dumps({'text': 'header voice', 'segments': []}))\n")
+    (collection / "gallery.yaml").write_text((collection / "gallery.yaml").read_text() + f"""
+auth:
+  mode: header
+  admin_groups: [ops]
+voice:
+  transcribe_cmd: "{sys.executable} {script} {{audio}}"
+  retain_audio: true
+""")
+    mod = _load_web_mod(monkeypatch)
+    client = mod.build_flask_app().test_client()
+
+    rejected = client.post("/api/feedback/sample", json={"comment": "missing proxy identity"})
+    assert rejected.status_code == 401
+    assert rejected.get_json()["error"] == "sign in required"
+    assert ledger.load(load_config()).get("sample", []) == []
+
+    route_action = client.get("/fb-action?key=sample&value=approve")
+    assert route_action.status_code == 401
+
+    transcribe = client.post("/api/transcribe", data={"audio": (io.BytesIO(b"audio"), "clip.webm")})
+    assert transcribe.status_code == 401
+    assert transcribe.get_json()["error"] == "sign in required"
+
+    accepted = client.post(
+        "/api/feedback/sample",
+        json={"comment": "proxied feedback"},
+        headers={
+            "X-Auth-Request-User": "u-1",
+            "X-Auth-Request-Email": "alex@example.com",
+            "X-Auth-Request-Groups": "ops, trusted",
+        },
+    )
+    assert accepted.status_code == 200
+    entry = accepted.get_json()["entry"]
+    assert entry["status"] == "new"
+    assert entry["user"] == {
+        "id": "u-1",
+        "email": "alex@example.com",
+        "name": "alex",
+        "groups": ["ops", "trusted"],
+    }
+
+    action = client.post("/api/action", json={"key": "sample", "value": "approve"})
+    assert action.status_code == 401
+
+
 def test_react_shell_allow_anonymous_feedback_is_held(collection, monkeypatch):
     from curiator import auth, ledger
     from curiator.config import load_config

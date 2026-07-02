@@ -73,6 +73,14 @@ def test_login_required_only_oidc():
     assert auth.login_required({}) is False
 
 
+def test_feedback_requires_identity_for_hosted_modes():
+    assert auth.feedback_requires_identity({"mode": "local"}) is True
+    assert auth.feedback_requires_identity({"mode": "oidc"}) is True
+    assert auth.feedback_requires_identity({"mode": "header"}) is True
+    assert auth.feedback_requires_identity({"mode": "none"}) is False
+    assert auth.feedback_requires_identity({}) is False
+
+
 def test_allow_anonymous_feedback_only_for_explicit_login_gated_modes():
     assert auth.allow_anonymous_feedback({"mode": "local", "allow_anonymous": True}) is True
     assert auth.allow_anonymous_feedback({"mode": "oidc", "allow_anonymous": True}) is True

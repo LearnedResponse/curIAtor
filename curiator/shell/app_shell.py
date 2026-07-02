@@ -817,7 +817,7 @@ def _client_key() -> str:
 
 def _feedback_user_and_status(rate_limit_key: str | None = None) -> tuple[dict | None, str, str | None, int]:
     u = _current_user()
-    if auth.login_required(REG.AUTH_CFG) and not u:
+    if auth.feedback_requires_identity(REG.AUTH_CFG) and not u:
         if not auth.allow_anonymous_feedback(REG.AUTH_CFG):
             return None, "new", "Sign in to leave feedback.", 401
         key = rate_limit_key or _client_key()

@@ -151,7 +151,7 @@ def _queue_page_html(message: str = "") -> str:
 
 def _feedback_user_and_status(rate_limit_key: str | None = None) -> tuple[dict | None, str, str | None, int]:
     u = core._current_user()
-    if auth.login_required(core.REG.AUTH_CFG) and not u:
+    if auth.feedback_requires_identity(core.REG.AUTH_CFG) and not u:
         if not auth.allow_anonymous_feedback(core.REG.AUTH_CFG):
             return None, "new", "sign in required", 401
         key = rate_limit_key or request.remote_addr or "?"
@@ -229,7 +229,7 @@ def _parse_transcript(stdout: str) -> dict:
 
 
 def _transcribe_allowed() -> tuple[str | None, int]:
-    if auth.login_required(core.REG.AUTH_CFG) and not core._current_user():
+    if auth.feedback_requires_identity(core.REG.AUTH_CFG) and not core._current_user():
         if not auth.allow_anonymous_feedback(core.REG.AUTH_CFG):
             return "sign in required", 401
     return None, 0
@@ -520,7 +520,7 @@ def build_flask_app() -> Flask:
                 return jsonify({"error": "transcription failed", "detail": detail}), 502
             payload = _parse_transcript(proc.stdout)
             retain_audio = bool(voice.get("retain_audio")) and not (
-                auth.login_required(core.REG.AUTH_CFG) and not core._current_user()
+                auth.feedback_requires_identity(core.REG.AUTH_CFG) and not core._current_user()
             )
             if retain_audio:
                 core.PENDING_AUDIO.mkdir(parents=True, exist_ok=True)
@@ -586,7 +586,10 @@ def build_flask_app() -> Flask:
         value = request.args.get("value")
         reply_to = request.args.get("reply_to")
         if key and value is not None:
-            core.record_action(key, value, reply_to)
+            u, status, auth_error, code = _feedback_user_and_status()
+            if auth_error:
+                return (auth_error, code or 401)
+            core.record_action(key, value, reply_to, user=u, status=status)
             return ("ok", 200)
         return ("missing key/value", 400)
 

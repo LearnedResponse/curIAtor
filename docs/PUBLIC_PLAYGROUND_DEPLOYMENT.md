@@ -179,7 +179,9 @@ server {
 ```
 
 If using `auth.mode: header`, terminate authentication at this edge and only trust headers from that
-proxy.
+proxy. The shell treats missing identity headers as unauthenticated: feedback, quick replies,
+transcription, and retained audio are rejected rather than queued. That fail-closed behavior protects
+against a misrouted request reaching curIAtor without the auth proxy in front of it.
 
 ## 6. Back up the durable state
 

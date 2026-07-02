@@ -21,7 +21,9 @@
 > unignored, outside-root, or group/world-readable `.curiator-users.json` files, keeping invite
 > credentials in the gitignored owner-only store. OIDC hosted preflight now also rejects missing
 > `auth.issuer`, `auth.client_id`, and unset `auth.client_secret_env` secret variables while keeping
-> secret values out of the JSON evidence report.
+> secret values out of the JSON evidence report. Header-auth deployments now also fail closed at the
+> feedback boundary: if the trusted edge proxy does not supply identity headers, feedback, quick
+> replies, transcription, and retained audio are rejected instead of entering the dispatch queue.
 
 ## The idea
 
@@ -93,8 +95,9 @@ degradation are now present.
    distinct from the existing `awaiting_approval` (which is the *agent* asking a human about a *plan*).
 4. **Admin operations** — `curiator revert` already exists (git-as-memory makes every run one
    revertible commit). `curiator user disable <email>` / `enable` now toggles a `disabled` flag in the
-   local store; header/OIDC revocation belongs to the IdP. Per-IP submission rate limiting for
-   anonymous feedback is landed with the same in-memory sliding-window pattern as the login limiter.
+   local store; header/OIDC revocation belongs to the IdP. Header mode now requires a resolved proxy
+   identity before feedback can enter the ledger. Per-IP submission rate limiting for anonymous
+   feedback is landed with the same in-memory sliding-window pattern as the login limiter.
 5. **Trust promotion** — v1 is manual: an admin adds an account to the trusted group
    (`curiator user add <email> --groups trusted` is already an upsert). v2 can *derive* "established"
    from the ledger — account age + accepted-fix count, which `curiator stats` already computes the

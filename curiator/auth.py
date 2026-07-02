@@ -87,6 +87,11 @@ def login_required(auth_cfg: dict) -> bool:
     return (auth_cfg or {}).get("mode") in ("oidc", "local")
 
 
+def feedback_requires_identity(auth_cfg: dict) -> bool:
+    """Does leaving feedback require a verified identity from curiator or a trusted edge proxy?"""
+    return (auth_cfg or {}).get("mode") in ("header", "oidc", "local")
+
+
 def allow_anonymous_feedback(auth_cfg: dict) -> bool:
     """May logged-out users leave feedback in an otherwise login-gated gallery?
 
