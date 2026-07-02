@@ -37,8 +37,9 @@ curiator release-preflight --gallery curiator-aviato --http-smoke
 ```
 
 `make release-check` runs lint, the full pytest suite, release-doc checks, strict fresh-clone preflight
-for the three required public collections, `docs/demo.gif` regeneration, package build, and
-`twine check`. The optional preflight adds finance and phylogenetics. The HTTP-smoke variant starts
+for the three required public collections, `docs/demo.gif` presence validation, package build, and
+`twine check`. It does not rewrite `docs/demo.gif`, so a recorded browser capture is not replaced by
+the generated storyboard fallback. The optional preflight adds finance and phylogenetics. The HTTP-smoke variant starts
 proxy apps briefly and polls configured `smoke_http` paths or default app URLs; it expects app
 dependencies to be installed in the tree being checked, so use it against the nested workspace or a
 fresh clone after dependency installation.
@@ -54,6 +55,8 @@ rm -rf dist build curiator.egg-info
 `docs/demo.gif` currently has a generated storyboard fallback. Before public launch, replace it with a
 real browser recording following `docs/DEMO_SCRIPT.md`: feedback on the broken `aviato`, the curator
 fix lands, and the reply appears in the panel.
+
+Use `make demo-gif` only when you intentionally want to regenerate the fallback storyboard.
 
 Then run the final launch-only gate:
 

@@ -83,10 +83,10 @@ def check_release_docs(root: Path = ROOT, *, strict_launch: bool = False) -> lis
     if "TODO(draft)" in paper_text:
         failures.append("docs/paper/curiator-paper.md still has TODO(draft) placeholders")
 
-    if strict_launch:
-        if not demo_gif.exists():
-            failures.append("docs/demo.gif missing; record the real browser demo before public launch")
-        elif PLACEHOLDER_DEMO_MARKER in demo_gif.read_bytes():
+    if not demo_gif.exists():
+        failures.append("docs/demo.gif missing; run make demo-gif or record the real browser demo before release")
+    elif strict_launch:
+        if PLACEHOLDER_DEMO_MARKER in demo_gif.read_bytes():
             failures.append(
                 "docs/demo.gif is still the generated storyboard placeholder; "
                 "record the real browser demo before public launch"

@@ -26,6 +26,7 @@ def _copy_release_doc_fixture(tmp_path: Path) -> None:
     shutil.copyfile(ROOT / "docs" / "RELEASE.md", tmp_path / "docs" / "RELEASE.md")
     shutil.copyfile(ROOT / "docs" / "backlog" / "public-release.md",
                     tmp_path / "docs" / "backlog" / "public-release.md")
+    shutil.copyfile(ROOT / "docs" / "demo.gif", tmp_path / "docs" / "demo.gif")
 
 
 def test_release_docs_current_repo_pass():
@@ -73,6 +74,16 @@ def test_release_docs_default_allows_release_paper_placeholders(tmp_path):
     )
 
     assert module.check_release_docs(tmp_path) == []
+
+
+def test_release_docs_default_requires_demo_gif(tmp_path):
+    module = _load_script()
+    _copy_release_doc_fixture(tmp_path)
+    (tmp_path / "docs" / "demo.gif").unlink()
+
+    failures = module.check_release_docs(tmp_path)
+
+    assert "docs/demo.gif missing; run make demo-gif or record the real browser demo before release" in failures
 
 
 def test_release_docs_strict_launch_detects_storyboard_demo_gif(tmp_path):

@@ -131,8 +131,9 @@ All notable changes to curIAtor are documented here. The format follows
   unless version matching, lint, tests, release-doc checks, package build, and `twine check` pass.
 - CI now lints runner code, tests, and scripts, runs the release-doc check, builds the sdist/wheel, and
   runs `twine check`, so package metadata and launch-doc regressions are caught before a release tag is pushed.
-- `make release-check` runs the local release gate: lint, tests, public-gallery fresh-clone preflight,
-  demo GIF regeneration, package build, and `twine check`.
+- `make release-check` runs the local release gate without rewriting the hero GIF: lint, tests,
+  release-doc validation that `docs/demo.gif` exists, public-gallery fresh-clone preflight, package
+  build, and `twine check`.
 - `.zenodo.json` provides GitHub-Zenodo archive metadata, and
   `make release-prepare VERSION=... DATE=...` cuts release metadata by updating `pyproject.toml`,
   `CITATION.cff`, `.zenodo.json`, and the Keep-a-Changelog links in one tested step.

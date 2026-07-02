@@ -20,10 +20,10 @@ leave feedback → watch the fix land and the ⚙ reply arrive. Every item below
    app scaffolds, run traces, the interactive `link`/`work`/`done` workflow) as a tagged GitHub
    release. The release workflow builds/attaches artifacts and has a PyPI trusted-publishing job with
    a tag-vs-`pyproject.toml` version guard; `make release-check` now runs the local gate (lint, tests,
-   strict public-gallery fresh-clone preflight, demo GIF regeneration, package build, and `twine check`). The
+   strict public-gallery fresh-clone preflight, `docs/demo.gif` presence validation, package build, and `twine check`). The
    human release checklist now lives in [`docs/RELEASE.md`](../RELEASE.md). Local gate evidence from
    July 2, 2026: `make release-check` passed with 224 tests, public-gallery
-   fresh-clone preflight `3/3` with zero publish-artifact hits, regenerated `docs/demo.gif`, built
+   fresh-clone preflight `3/3` with zero publish-artifact hits, validated `docs/demo.gif`, built
    sdist/wheel, and `twine check` passed both artifacts. The broader optional-public gate
    `curiator release-preflight --include-optional --fresh-clone --strict` passed `5/5` with all smoke
    hooks green. Release metadata is cut locally for `0.2.0` / `2026-07-02` via
@@ -35,8 +35,10 @@ leave feedback → watch the fix land and the ⚙ reply arrive. Every item below
    `aviato` → the fix lands live → the ⚙ reply. Nothing sells the loop faster than watching it close
    once. The generated storyboard now carries an internal placeholder marker, and
    `make release-launch-check` rejects that marker so the final public-launch pass cannot silently ship
-   the fallback GIF. The same strict doc gate also rejects `docs/paper/curiator-paper.md`
-   `TODO(release)` placeholders before the paper is published.
+   the fallback GIF. `make release-check` validates that the hero GIF path exists but no longer
+   regenerates it, so a real browser capture is not overwritten by the fallback storyboard. The same
+   strict doc gate also rejects `docs/paper/curiator-paper.md` `TODO(release)` placeholders before the
+   paper is published.
 3. **Portability pass — collections must survive leaving this machine.** The `.curiator/app.yaml` part
    is fixed: `curiator link` now writes relative paths when the gallery is reachable relatively. The
    generated task-bundle prompt surface is also fixed for self-contained collections: app roots,

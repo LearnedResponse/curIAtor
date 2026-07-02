@@ -14,13 +14,12 @@ demo-gif:       ## render the README demo GIF storyboard to docs/demo.gif
 release-prepare:  ## cut release metadata; use VERSION=0.2.0 DATE=YYYY-MM-DD
 	@if [ -z "$(VERSION)" ]; then echo "VERSION=... is required"; exit 2; fi
 	python scripts/prepare_release.py "$(VERSION)" $(if $(DATE),--date "$(DATE)")
-release-check:  ## local release gate: lint, tests, demo gif, gallery preflight, package build
+release-check:  ## local release gate: lint, tests, docs/demo.gif presence, gallery preflight, package build
 	rm -rf dist build curiator.egg-info
 	ruff check curiator tests scripts
 	pytest -q
 	python scripts/check_release_docs.py
 	curiator release-preflight --fresh-clone --strict
-	python scripts/render_demo_gif.py
 	python -m build
 	python -m twine check dist/*
 release-launch-check:  ## final public-launch gate: reject generated/paper placeholders and optional-gallery drift
