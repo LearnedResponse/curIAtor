@@ -150,6 +150,13 @@ def _annotation_block(entry: dict) -> str:
         line = f"- {label}: `{tool}`"
         if coords:
             line += " at " + ", ".join(coords)
+        times = []
+        if isinstance(mark.get("start_ms"), (int, float)):
+            times.append(f"start={mark['start_ms']:.0f}ms")
+        if isinstance(mark.get("end_ms"), (int, float)):
+            times.append(f"end={mark['end_ms']:.0f}ms")
+        if times:
+            line += " [" + ", ".join(times) + "]"
         target = mark.get("target") if isinstance(mark.get("target"), dict) else {}
         if tool == "redact":
             line += " (target omitted for redaction)"

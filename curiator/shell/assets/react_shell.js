@@ -343,8 +343,17 @@
   function AnnotationEditor({image, annotations, setAnnotations, annotate}) {
     const canvasRef = useRef(null);
     const imageRef = useRef(null);
+    const clockRef = useRef(performance.now());
     const [tool, setTool] = useState("box");
     const [draft, setDraft] = useState(null);
+
+    useEffect(() => {
+      clockRef.current = performance.now();
+    }, [image]);
+
+    function elapsedMs() {
+      return Math.max(0, Math.round((performance.now() - clockRef.current) * 10) / 10);
+    }
 
     function redraw() {
       const canvas = canvasRef.current;
@@ -378,12 +387,13 @@
       const p = point(evt);
       if (tool === "pin") {
         const n = annotations.filter((m) => m.tool === "pin").length + 1;
-        const mark = {tool, x1: p.x, y1: p.y, n};
+        const t = elapsedMs();
+        const mark = {tool, x1: p.x, y1: p.y, n, start_ms: t, end_ms: t};
         setAnnotations(annotations.concat([annotate ? annotate(mark) : mark]));
         return;
       }
       evt.currentTarget.setPointerCapture(evt.pointerId);
-      setDraft({tool, x1: p.x, y1: p.y, x2: p.x, y2: p.y});
+      setDraft({tool, x1: p.x, y1: p.y, x2: p.x, y2: p.y, start_ms: elapsedMs()});
     }
 
     function move(evt) {
@@ -395,7 +405,7 @@
     function up(evt) {
       if (!draft) return;
       const p = point(evt);
-      const mark = Object.assign({}, draft, {x2: p.x, y2: p.y});
+      const mark = Object.assign({}, draft, {x2: p.x, y2: p.y, end_ms: elapsedMs()});
       setDraft(null);
       if (Math.abs(mark.x2 - mark.x1) + Math.abs(mark.y2 - mark.y1) < .015) return;
       setAnnotations(annotations.concat([annotate ? annotate(mark) : mark]));

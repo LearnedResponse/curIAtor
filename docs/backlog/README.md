@@ -50,4 +50,5 @@ deliberate (ship, let the example demos surface what to prioritize).
   default** (on-device, works on Linux, zero egress). North star: **"narrated feedback"** — voice +
   annotation on a *shared clock*, so a review becomes an ordered, intent-per-mark tour the agent
   follows. Composes with `annotated-feedback`; accessibility wins for motor/low-vision (voice +
-  DOM-target snapping). Design-now: put marks + transcript segments on one clock.
+  DOM-target snapping). Tier 0 dictation is documented, and annotation marks now carry optional
+  `start_ms` / `end_ms` offsets for the future transcript clock.

@@ -10,6 +10,14 @@ def _clamp01(value):
     return max(0.0, min(1.0, n))
 
 
+def _nonnegative_ms(value):
+    try:
+        n = float(value)
+    except (TypeError, ValueError):
+        return None
+    return max(0.0, min(86_400_000.0, n))
+
+
 def _short_text(value, limit: int = 240) -> str | None:
     if value is None:
         return None
@@ -33,6 +41,12 @@ def clean_annotations(raw) -> list[dict]:
             n = _clamp01(item.get(field))
             if n is not None:
                 mark[field] = n
+        for field in ("start_ms", "end_ms"):
+            n = _nonnegative_ms(item.get(field))
+            if n is not None:
+                mark[field] = n
+        if "start_ms" in mark and "end_ms" in mark and mark["end_ms"] < mark["start_ms"]:
+            mark["end_ms"] = mark["start_ms"]
         if "x1" not in mark or "y1" not in mark:
             continue
         if tool == "pin":

@@ -110,6 +110,7 @@ def test_react_shell_has_burned_screenshot_annotations(web_client):
     assert "rshell-annotation-summary" in js
     assert "annotation note " in js
     assert "OS dictation can type feedback here." in js
+    assert "start_ms" in js and "end_ms" in js
     assert "shotSource" in js
     assert 'setShotSource("capture")' in js
     assert 'setShotSource("upload")' in js
@@ -335,6 +336,8 @@ def test_react_shell_feedback_api_stores_sanitized_annotations(web_client):
                 "y1": 0.2,
                 "x2": 0.9,
                 "y2": 2,
+                "start_ms": 123.4,
+                "end_ms": 456.7,
                 "note": "  legend   overlaps\nchart  ",
                 "target": {
                     "selector": "#chart .legend",
@@ -355,6 +358,8 @@ def test_react_shell_feedback_api_stores_sanitized_annotations(web_client):
     annotations = r.get_json()["entry"]["annotations"]
     assert len(annotations) == 2
     assert annotations[0]["x1"] == 0.0 and annotations[0]["y2"] == 1.0
+    assert annotations[0]["start_ms"] == 123.4
+    assert annotations[0]["end_ms"] == 456.7
     assert annotations[0]["note"] == "legend overlaps chart"
     assert annotations[0]["target"]["selector"] == "#chart .legend"
     assert annotations[0]["target"]["classes"] == ["plot", "legend", "extra", "ignored", "last"]
@@ -377,7 +382,7 @@ def test_react_shell_feedback_api_stores_sanitized_annotations(web_client):
     body = Path(task.task_file).read_text()
     assert "screenshot (Read this PNG): `feedback/shots/sample_" in body
     assert "## Screenshot annotations" in body
-    assert "mark 1: `box` at x1=0.000, y1=0.200, x2=0.900, y2=1.000" in body
+    assert "mark 1: `box` at x1=0.000, y1=0.200, x2=0.900, y2=1.000 [start=123ms, end=457ms]" in body
     assert "selector `#chart .legend`" in body
     assert "data-testid `legend`" in body
     assert "legend overlaps chart" in body

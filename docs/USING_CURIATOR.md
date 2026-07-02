@@ -193,10 +193,11 @@ Signed-in reviewers can also use the **Native** capture button for browser scree
 canvas/WebGL-heavy views do not render well through `html2canvas`; anonymous feedback is limited to
 same-origin **Capture view**.
 In the React shell, burned-in annotations also carry sanitized normalized coordinates and same-origin
-DOM target hints into the task bundle when available, plus any short per-mark notes you enter;
-redaction marks, uploads, and unreadable/cross-origin mounts do not carry DOM targets. Prior feedback
-threads show those annotation summaries, and saved annotated entries can be reopened as a scrollable
-preview from the feedback panel or loaded as an editable reply draft.
+DOM target hints into the task bundle when available, plus any short per-mark notes you enter and
+optional `start_ms` / `end_ms` offsets on the annotation clock; redaction marks, uploads, and
+unreadable/cross-origin mounts do not carry DOM targets. Prior feedback threads show those annotation
+summaries, and saved annotated entries can be reopened as a scrollable preview from the feedback panel
+or loaded as an editable reply draft.
 
 The comment field is a normal textarea, so OS-level dictation works without curIAtor-specific audio
 handling. On macOS, use Dictation; on Windows, use Win+H voice typing. Linux desktop dictation depends

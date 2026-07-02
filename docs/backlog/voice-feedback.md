@@ -1,10 +1,12 @@
 # Backlog — voice + narrated feedback (talk through the fix)
 
-> **Status:** scoped; Tier 0 landed 2026-07-02. **North star: "narrated feedback"** — voice + annotation on a
-> shared clock, so a review is an *ordered, intent-per-mark tour* the agent can follow.
+> **Status:** scoped; Tier 0 and annotation mark clock fields landed 2026-07-02. **North star:
+> "narrated feedback"** — voice + annotation on a shared clock, so a review is an
+> *ordered, intent-per-mark tour* the agent can follow.
 > **Recommended shape: local-Whisper default** (moat-consistent, works on Linux), Web-Speech for the
 > public tier only, OS dictation as the free stopgap. The comment textarea now exposes a dictation hint,
-> and `docs/USING_CURIATOR.md` documents OS dictation as the zero-code path. Composes with
+> `docs/USING_CURIATOR.md` documents OS dictation as the zero-code path, and annotation marks now carry
+> optional `start_ms` / `end_ms` offsets for future transcript alignment. Composes with
 > `annotated-feedback.md`, not a separate feature. Captured 2026-07-02.
 
 ## The pitch
@@ -22,8 +24,9 @@ difference between handing the agent a picture with notes and *walking it throug
   path flows into the task bundle (`_shot_path` / `_app_bundle` in `curiator/loop/adapters/`).
 - **`annotated-feedback` has landed** (v1 burn-in + v2 DOM-mapped): marks (box / arrow / numbered pin
   / redact) with **structured metadata — normalized coords + DOM target (`elementFromPoint` →
-  selector) + per-mark notes** — and a **replay overlay**. Voice slots into the *comment* channel; the
-  next data-model step is putting annotation events and transcript segments on one shared clock.
+  selector) + per-mark notes + optional mark clock offsets** — and a **replay overlay**. Voice slots
+  into the *comment* channel; the next data-model step is putting transcript segments on the same
+  clock.
 
 ## The three tiers (and why the privacy moat decides, not capability)
 
@@ -47,8 +50,8 @@ The whole thing hinges on **one shared clock**:
 
 1. A **record mode** starts the mic and the annotation-event log at the same instant, timestamping
    both from `t=0` (`performance.now()` zero point; audio and marks on the same timeline).
-2. Draw + talk simultaneously. Annotation events need mark timestamps; Whisper returns transcript
-   **segments with `[start, end]`** on the same clock.
+2. Draw + talk simultaneously. Annotation events already have optional mark timestamps; Whisper
+   returns transcript **segments with `[start, end]`** on the same clock.
 3. **Merge** the two timelines: each mark at time `t` pairs with the transcript segment(s) overlapping
    `t` → an ordered narrative
    `[(box①, "the legend's cramped"), (arrow②, "move it up here"), (pin③, "this number's wrong")]`.
@@ -73,7 +76,8 @@ to retrofit.
    `MediaRecorder`-captures → POSTs → drops the transcript into the comment. Local, any browser.
 3. **Tier 1 (optional)** — a Web Speech mic button **gated to public/hosted collections** (a config
    flag), never the private/OT ones.
-4. **Shared-clock data model** — timestamp marks + transcript segments on one clock (design now).
+4. **Shared-clock data model** — annotation mark timestamps landed as optional `start_ms` / `end_ms`
+   fields. Transcript segments still need to join the same clock when transcription lands.
 5. **Narrated feedback** — record mode → merge timelines → the ordered narrative into the ledger
    (structured) + the task bundle "Narrative" block; upgrade the replay overlay to narrated replay.
 6. **Verify by running** — a spoken-while-drawing review round-trips; the agent's reply follows the
