@@ -198,6 +198,22 @@ def set_status(cfg: dict, key: str, ids: list[str], status: str) -> None:
                 _insert_payload(conn, key, payload)
 
 
+def update_entry(cfg: dict, key: str, entry_id: str, fields: dict) -> None:
+    """Merge fields into one entry payload."""
+    if not entry_id or not fields:
+        return
+    with closing(_connect(cfg)) as conn:
+        row = conn.execute(
+            "SELECT payload FROM entries WHERE app_key = ? AND id = ?", (key, entry_id)
+        ).fetchone()
+        if not row:
+            return
+        payload = json.loads(row["payload"])
+        payload.update(fields)
+        with conn:
+            _insert_payload(conn, key, payload)
+
+
 def amend_note(cfg: dict, key: str, note_id: str, suffix: str) -> None:
     """Append text to an existing note's comment."""
     with closing(_connect(cfg)) as conn:

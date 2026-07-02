@@ -1,8 +1,9 @@
 # Backlog — public playground (hosted collections, trust-tiered dispatch)
 
-> **Status:** scoped 2026-07-01; phase-2 moderation primitive partly landed (`held` status,
+> **Status:** scoped 2026-07-01; phase-2 moderation primitive landed (`held` status,
 > `auth.allow_anonymous` held intake for `local`/`oidc`, admin `/queue` shell view, and
-> `curiator queue list|approve|reject` CLI, with per-IP anonymous submission limits). Sequences AFTER
+> `curiator queue list|approve|reject` CLI, per-IP anonymous submission limits, and watcher-enforced
+> account/global dispatch quotas). Sequences AFTER
 > [public-release](public-release.md): the
 > static example repos are the pitch; this is the live complement — **a hosted public collection where
 > anyone can leave feedback and watch the curator work**, without handing an autonomous agent to the
@@ -44,20 +45,21 @@ assumptions.
 
 **Phase 1 — self-serve accounts + quotas.** Open signup (or "Sign in with GitHub" via the existing
 OIDC mode — identity dedupe plus a free reputation prior), and the quota knobs become real
-(`per_user_daily`, `global_daily`). The rope is gone but every author is still identified.
+(`per_user_daily`, `global_daily`). The watcher now enforces those quota knobs by degrading
+over-budget items to `held`. The rope is gone but every author is still identified.
 
 **Phase 2 — anonymous + the held pool.** The full ladder below: anonymous browsing + feedback that is
 **always held** for human review, the moderation queue in the shell + `curiator queue` CLI, per-IP
 submission limits. Core moderation status, hosted anonymous-held intake for `local`/`oidc`, shell
-review view, CLI, and per-IP anonymous submission limits are now present; account/global quota
-degradation still remains.
+review view, CLI, per-IP anonymous submission limits, and account/global quota degradation are now
+present.
 
 ## Design (each piece lands on an existing seam)
 
 1. **Mixed anonymity** — `auth.allow_anonymous: true` alongside `mode: local|oidc` is landed: browsing
    + feedback work logged-out (recorded as anonymous and forced to `held`), login upgrades identity
    and keeps the normal `new` path.
-2. **The dispatch ladder** — a per-tier policy the loop consults before waking the agent:
+2. **The dispatch ladder** — landed: a per-tier policy the loop consults before waking the agent:
    ```yaml
    agent:
      dispatch:
@@ -68,8 +70,9 @@ degradation still remains.
        per_user_daily: 5        # account-tier runs per author per day
        global_daily: 100        # the collection's total agent budget — the cost ceiling
    ```
-   Over-quota items degrade to `held` with an honest ⚙ note ("queued — the daily agent budget is
-   spent"), not a silent drop.
+   Explicit anonymous `new` entries are forced to `held`; over-quota items degrade to `held` with an
+   honest ⚙ note ("queued — the daily agent budget is spent"), not a silent drop. Trusted groups bypass
+   `per_user_daily` but still count against `global_daily`.
 3. **The moderation pool** — ledger status `held`, the admin-gated `/queue` shell view, and the
    headless CLI are landed: `curiator queue list|approve|reject` reviews held items; approve → `new`
    (dispatches normally), reject → `rejected` with an audit note. Approval is admission control,

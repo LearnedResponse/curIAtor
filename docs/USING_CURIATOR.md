@@ -286,6 +286,24 @@ anonymous feedback limit is per client IP in the running shell process; set
 `anonymous_feedback_max: 0` only for a private, already-gated deployment where you intentionally want
 no anonymous submission throttle.
 
+For hosted self-serve accounts, cap agent dispatch at the watcher:
+
+```yaml
+agent:
+  dispatch:
+    anonymous: hold
+    user: auto
+    trusted_groups: [trusted]
+  quotas:
+    per_user_daily: 5
+    global_daily: 100
+```
+
+The watcher checks these before it marks feedback `working`. Explicit anonymous feedback is forced
+to `held` even if it reaches the ledger as `new`; over-quota account feedback is also moved to `held`
+with a thread note. Trusted groups bypass the per-user quota, but still count against
+`global_daily`.
+
 ## 6. Run it in a container (one sandbox per collection)
 
 The curator **auto-edits and runs** your code, so the safety unit is **one container per collection** —

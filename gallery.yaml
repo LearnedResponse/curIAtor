@@ -40,6 +40,14 @@ agent:
   context:
     bundle: null                # required for adapter: api (cold start) — a CONTEXT.md/LESSONS.md
     knowledge_store: null       # optional live index (e.g. graphify) to keep the bundle fresh
+  # Hosted dispatch controls. The watcher enforces these before setting feedback to `working`:
+  # dispatch:
+  #   anonymous: hold            # explicit anonymous feedback is always held, never auto-dispatched
+  #   user: auto                 # logged-in accounts dispatch while inside quota
+  #   trusted_groups: [trusted]  # bypass per-user quota, still bounded by global_daily
+  # quotas:
+  #   per_user_daily: 5          # account-tier runs per author per UTC day (omit = unlimited)
+  #   global_daily: 100          # total collection agent runs per UTC day (omit = unlimited)
   # Elevated profile — feedback from these groups (the author's `groups`, from auth) runs with fuller
   # rights. INTENDED FOR THE SANDBOX/LOCAL CASE (one container per collection = the blast-radius boundary).
   # elevated:

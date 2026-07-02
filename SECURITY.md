@@ -111,4 +111,6 @@ write access to a repo or credentials. The moderation primitives are the admin s
 and `curiator queue`: held feedback does not dispatch until an admin approves it (`held` → `new`), and
 rejected feedback closes as `rejected` with a ledger note. Anonymous held intake is also throttled by
 `auth.anonymous_feedback_max` over `auth.anonymous_feedback_window_seconds`; this limits queue spam, it
-does not make public prompt input trusted.
+does not make public prompt input trusted. For account-based public feedback, set
+`agent.quotas.per_user_daily` and `agent.quotas.global_daily`; the watcher degrades over-budget items
+to `held` before launching an agent.

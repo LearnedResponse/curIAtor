@@ -64,6 +64,9 @@ All notable changes to curIAtor are documented here. The format follows
   but it is always recorded as `held`; logged-in users keep the normal dispatch path.
 - Anonymous hosted feedback is rate-limited per client IP with `auth.anonymous_feedback_max` and
   `auth.anonymous_feedback_window_seconds` before it reaches the held queue.
+- The watcher enforces `agent.quotas.per_user_daily` and `agent.quotas.global_daily`: explicit
+  anonymous feedback and over-budget account feedback are degraded to `held` with a ledger note before
+  any agent launch.
 - `docs/SCREENSHOT_CAPTURE.md` documents the current same-origin `html2canvas` capture path, upload
   fallback, and native/server-side capture tradeoffs.
 - `CITATION.cff` provides machine-readable software citation metadata for GitHub and Zenodo.

@@ -17,6 +17,7 @@ Run:  curiator watch     (or: python -m curiator.loop.loop)
 from __future__ import annotations
 
 import time
+from datetime import datetime, timezone
 from pathlib import Path
 
 from . import adapters, runlog
@@ -61,6 +62,108 @@ def _label(key: str) -> str:
     return "◆ General" if key == adapters.GENERAL_KEY else key
 
 
+def _now() -> str:
+    return datetime.now(timezone.utc).isoformat(timespec="seconds")
+
+
+def _day(value: str | None) -> str | None:
+    if not value:
+        return None
+    try:
+        return datetime.fromisoformat(str(value).replace("Z", "+00:00")).astimezone(timezone.utc).date().isoformat()
+    except ValueError:
+        return None
+
+
+def _quota_value(raw) -> int | None:
+    if raw is None or raw == "":
+        return None
+    try:
+        value = int(raw)
+    except (TypeError, ValueError):
+        return None
+    return value if value >= 0 else None
+
+
+def _user_key(entry: dict) -> str:
+    user = entry.get("user") or {}
+    for field in ("email", "id", "name"):
+        value = (user.get(field) or "").strip()
+        if value:
+            return value.lower()
+    return "anonymous"
+
+
+def _explicit_anonymous(entry: dict) -> bool:
+    """Only the hosted anonymous user is forced held here.
+
+    Older tests/imports may have no `user` stamp at all; those are not enough to prove the author was
+    a logged-out public visitor, so they keep the historical dispatch behavior.
+    """
+    user = entry.get("user") or {}
+    if not user:
+        return False
+    uid = str(user.get("id") or "").lower()
+    email = str(user.get("email") or "").strip()
+    name = str(user.get("name") or "").lower()
+    return not email and (uid == "anonymous" or name == "anonymous")
+
+
+def _trusted_user(cfg: dict, entry: dict) -> bool:
+    groups = set((entry.get("user") or {}).get("groups") or [])
+    trusted = set(((cfg.get("agent") or {}).get("dispatch") or {}).get("trusted_groups") or [])
+    return bool(groups & trusted)
+
+
+def _dispatch_day(entry: dict) -> str | None:
+    if entry.get("dispatched_at"):
+        return _day(entry.get("dispatched_at"))
+    if entry.get("status") in {"working", "awaiting_approval", "done"}:
+        return _day(entry.get("ts"))
+    return None
+
+
+def _today_dispatches(led: dict, today: str) -> list[dict]:
+    out = []
+    for entries in (led or {}).values():
+        for entry in entries if isinstance(entries, list) else []:
+            if entry.get("kind") == "system":
+                continue
+            if _dispatch_day(entry) == today:
+                out.append(entry)
+    return out
+
+
+def _hold_feedback(cfg: dict, key: str, entry: dict, text: str) -> None:
+    eid = entry.get("id")
+    ledger.set_status(cfg, key, [eid], "held")
+    ledger.add_system_note(cfg, key, text, reply_to=[eid], agent="curiator quota")
+
+
+def _dispatch_hold_reason(cfg: dict, led: dict, entry: dict) -> str | None:
+    if _explicit_anonymous(entry):
+        return "Queued for review - anonymous feedback never auto-dispatches."
+
+    quotas = ((cfg.get("agent") or {}).get("quotas") or {})
+    global_daily = _quota_value(quotas.get("global_daily"))
+    per_user_daily = _quota_value(quotas.get("per_user_daily"))
+    if global_daily is None and per_user_daily is None:
+        return None
+
+    today = datetime.now(timezone.utc).date().isoformat()
+    dispatched = _today_dispatches(led, today)
+    if global_daily is not None and len(dispatched) >= global_daily:
+        return f"Queued for review - the daily agent budget is spent (global_daily={global_daily})."
+
+    if per_user_daily is not None and not _trusted_user(cfg, entry):
+        user = _user_key(entry)
+        used = sum(1 for e in dispatched if _user_key(e) == user)
+        if used >= per_user_daily:
+            return f"Queued for review - this account's daily agent budget is spent (per_user_daily={per_user_daily})."
+
+    return None
+
+
 def _outcome(cfg: dict, key: str, eid: str) -> tuple[str, str]:
     """The item's status + the first line of the agent's reply, after a run (for the ✓ line)."""
     items = ledger.load(cfg).get(key, [])
@@ -79,20 +182,27 @@ def run_once(cfg: dict) -> int:
     items = _new_items(led)
     adapter = adapters.get(cfg)
     adapter_name = (cfg.get("agent", {}) or {}).get("adapter", "headless-cc")
+    dispatched = 0
     for key, entry in items:
         eid = entry.get("id")
         who = (entry.get("user") or {}).get("name") or "anonymous"
         snippet = " ".join((entry.get("comment") or "").split())[:80] or f"★{entry.get('stars')}"
         print(f"curiator: ● new feedback on {_label(key)} by {who} — {snippet!r}", flush=True)
+        reason = _dispatch_hold_reason(cfg, ledger.load(cfg), entry)
+        if reason:
+            _hold_feedback(cfg, key, entry, reason)
+            print(f"curiator:   • {key}/{eid} → held · {reason}", flush=True)
+            continue
         task = adapters.build_task(cfg, key, entry)     # writes a task file, returns its path + bundle
         prof = task.agent or {}
         elevated = "  ⚡ELEVATED" if prof.get("elevated") else ""
         runlog.init_trace(task, adapter_name)
         runlog.note(task, "task bundle written; setting status to working")
-        ledger.set_status(cfg, key, [eid], "working")
+        ledger.update_entry(cfg, key, eid, {"status": "working", "dispatched_at": _now()})
         print(f"curiator:   ▶ launching {adapter_name} on {key}/{eid} "
               f"(autonomy={prof.get('autonomy', 'auto-small')}){elevated}", flush=True)
         runlog.note(task, f"status set to working; launching {adapter_name}")
+        dispatched += 1
         try:
             adapter.run(task)                            # the agent edits + smoke-tests + replies
             st, reply = _outcome(cfg, key, eid)
@@ -106,7 +216,7 @@ def run_once(cfg: dict) -> int:
             runlog.note(task, f"loop error: {exc}")
             ledger.add_system_note(cfg, key, f"⚙ loop error: {exc}", reply_to=[eid])
             ledger.set_status(cfg, key, [eid], "new")
-    return len(items)
+    return dispatched
 
 
 def watch(cfg: dict) -> None:

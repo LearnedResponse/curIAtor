@@ -3,6 +3,7 @@ and live gallery.yaml reload (config edits apply without restarting the loop).""
 from __future__ import annotations
 
 import os
+from datetime import datetime, timezone
 from pathlib import Path
 
 from curiator import ledger
@@ -42,6 +43,112 @@ def test_run_once_dispatches_serially_in_order(cfg, monkeypatch, capsys):
     out = capsys.readouterr().out
     assert out.count("● new feedback on sample") == 2 and out.count("▶ launching") == 2
     assert "first" in out and "second" in out
+
+
+def test_run_once_forces_explicit_anonymous_feedback_to_held(cfg, monkeypatch):
+    fid = ledger.save_entry(
+        cfg,
+        "sample",
+        comment="public note",
+        user={"id": "anonymous", "email": "", "name": "anonymous", "groups": []},
+    )
+    seen = []
+
+    class Stub:
+        @staticmethod
+        def run(task):
+            seen.append(task.entry["comment"])
+
+    monkeypatch.setattr("curiator.loop.adapters.get", lambda _cfg: Stub)
+    assert loop.run_once(cfg) == 0
+
+    data = ledger.load(cfg)["sample"]
+    user = next(e for e in data if e["id"] == fid)
+    note = next(e for e in data if e.get("kind") == "system" and fid in (e.get("reply_to") or []))
+    assert user["status"] == "held"
+    assert "anonymous feedback never auto-dispatches" in note["comment"]
+    assert seen == []
+
+
+def test_run_once_holds_feedback_when_global_daily_quota_is_spent(cfg, monkeypatch):
+    now = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    cfg["agent"]["quotas"] = {"global_daily": 1}
+    ledger.save_entry(
+        cfg,
+        "sample",
+        comment="already dispatched",
+        ts=now,
+        user={"email": "a@example.com", "groups": []},
+        extra={"status": "done", "dispatched_at": now},
+    )
+    fid = ledger.save_entry(
+        cfg,
+        "sample",
+        comment="over budget",
+        ts=now,
+        user={"email": "b@example.com", "groups": []},
+    )
+
+    class Stub:
+        @staticmethod
+        def run(task):  # pragma: no cover - should not dispatch
+            raise AssertionError("over-quota feedback should not dispatch")
+
+    monkeypatch.setattr("curiator.loop.adapters.get", lambda _cfg: Stub)
+    assert loop.run_once(cfg) == 0
+
+    data = ledger.load(cfg)["sample"]
+    user = next(e for e in data if e["id"] == fid)
+    note = next(e for e in data if e.get("kind") == "system" and fid in (e.get("reply_to") or []))
+    assert user["status"] == "held"
+    assert "global_daily=1" in note["comment"]
+
+
+def test_run_once_holds_account_over_per_user_quota_but_not_trusted(cfg, monkeypatch):
+    now = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    cfg["agent"]["dispatch"] = {"trusted_groups": ["trusted"]}
+    cfg["agent"]["quotas"] = {"per_user_daily": 1}
+    ledger.save_entry(
+        cfg,
+        "sample",
+        comment="already dispatched",
+        ts=now,
+        user={"email": "a@example.com", "groups": []},
+        extra={"status": "done", "dispatched_at": now},
+    )
+    held_id = ledger.save_entry(
+        cfg,
+        "sample",
+        comment="same user",
+        ts=now,
+        user={"email": "a@example.com", "groups": []},
+    )
+    trusted_id = ledger.save_entry(
+        cfg,
+        "sample",
+        comment="trusted same user",
+        ts=now,
+        user={"email": "a@example.com", "groups": ["trusted"]},
+    )
+    seen = []
+
+    class Stub:
+        @staticmethod
+        def run(task):
+            seen.append(task.entry["id"])
+
+    monkeypatch.setattr("curiator.loop.adapters.get", lambda _cfg: Stub)
+    assert loop.run_once(cfg) == 1
+
+    data = ledger.load(cfg)["sample"]
+    held = next(e for e in data if e["id"] == held_id)
+    trusted = next(e for e in data if e["id"] == trusted_id)
+    note = next(e for e in data if e.get("kind") == "system" and held_id in (e.get("reply_to") or []))
+    assert held["status"] == "held"
+    assert "per_user_daily=1" in note["comment"]
+    assert trusted["status"] == "working"
+    assert trusted.get("dispatched_at")
+    assert seen == [trusted_id]
 
 
 def test_run_once_resets_item_on_adapter_error(cfg, monkeypatch):
