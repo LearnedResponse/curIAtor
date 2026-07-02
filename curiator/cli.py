@@ -1987,6 +1987,18 @@ def _js_run_command(manager: str, script: str, args: str = "") -> str:
     return f"yarn run {script} {args}"
 
 
+def _rust_string(value: str) -> str:
+    text = str(value)
+    return '"' + (
+        text
+        .replace("\\", "\\\\")
+        .replace('"', '\\"')
+        .replace("\n", "\\n")
+        .replace("\r", "\\r")
+        .replace("\t", "\\t")
+    ) + '"'
+
+
 def _append_app_entry(text: str, entry: str) -> str:
     """Append an app item under the top-level `apps:` block while preserving the rest of gallery.yaml."""
     lines = text.splitlines()
@@ -2077,6 +2089,18 @@ def _gallery_entry(
             f"    mount: {{ kind: proxy, cmd: \"python app.py --port {port}\", port: {port} }}\n"
             f"    tags: {_yaml_list(tags)}\n"
         )
+    if template == "rust":
+        return (
+            f"  - name: {name}\n"
+            f"    title: {json.dumps(title)}\n"
+            f"    root: {root}\n"
+            f"    source: .\n"
+            f"    smoke: cargo check --quiet\n"
+            f"    commands:\n"
+            f"      preview: {json.dumps(f'cargo run --quiet -- --port {port}')}\n"
+            f"    mount: {{ kind: proxy, cmd: \"cargo run --quiet -- --port {port}\", port: {port} }}\n"
+            f"    tags: {_yaml_list(tags)}\n"
+        )
     if template == "gradio":
         return (
             f"  - name: {name}\n"
@@ -2132,6 +2156,8 @@ def _app_template_files(name: str, template: str, title: str, package_manager: s
     if template == "flask":
         return {rel: content.format(name=name, title=title, title_json=json.dumps(title))
                 for rel, content in _APP_FLASK_TEMPLATE.items()}
+    if template == "rust":
+        return _app_rust_template_files(name, title)
     if template == "streamlit":
         return {rel: content.format(name=name, title=title, title_json=json.dumps(title))
                 for rel, content in _APP_STREAMLIT_TEMPLATE.items()}
@@ -2159,7 +2185,7 @@ def cmd_app_create(args) -> int:
         return 1
     title = args.title or _title_from_name(name)
     tags = _tags_arg(args.tags, template)
-    proxy_templates = {"static", "python", "node", "flask", "react", "svelte", "vue", "streamlit", "gradio"}
+    proxy_templates = {"static", "python", "node", "flask", "rust", "react", "svelte", "vue", "streamlit", "gradio"}
     port = args.port if args.port is not None else (_next_proxy_port(cfg) if template in proxy_templates else None)
     package_manager = _resolve_package_manager(repo, args.package_manager) if template in {"react", "svelte", "vue"} else "npm"
 
@@ -2321,22 +2347,22 @@ def main(argv=None) -> int:
     app_sub = app.add_subparsers(dest="action", required=True)
     ac = app_sub.add_parser("create", help="scaffold an app directory and add it to gallery.yaml")
     ac.add_argument("name", help="app key, e.g. orange_picker")
-    ac.add_argument("--template", choices=["dash", "static", "python", "node", "flask", "react", "svelte", "vue", "streamlit", "gradio"], default="dash",
+    ac.add_argument("--template", choices=["dash", "static", "python", "node", "flask", "rust", "react", "svelte", "vue", "streamlit", "gradio"], default="dash",
                     help="scaffold template (default: dash)")
     ac.add_argument("--title", help="display title")
     ac.add_argument("--tags", help="comma-separated tags; default is the template name")
-    ac.add_argument("--port", type=int, help="proxy port for static/python/node/flask/react/svelte/vue/streamlit/gradio templates")
+    ac.add_argument("--port", type=int, help="proxy port for static/python/node/flask/rust/react/svelte/vue/streamlit/gradio templates")
     ac.add_argument("--package-manager", choices=["auto", *_JS_PACKAGE_MANAGERS], default="auto",
                     help="JS package manager for react/svelte/vue templates (default: auto)")
     ac.add_argument("--force", action="store_true", help="allow an existing apps/<name> directory")
     ac.set_defaults(func=cmd_app_create)
     ia = sub.add_parser("init-app", help="alias for `curiator app create`")
     ia.add_argument("name", help="app key, e.g. orange_picker")
-    ia.add_argument("--template", choices=["dash", "static", "python", "node", "flask", "react", "svelte", "vue", "streamlit", "gradio"], default="dash",
+    ia.add_argument("--template", choices=["dash", "static", "python", "node", "flask", "rust", "react", "svelte", "vue", "streamlit", "gradio"], default="dash",
                     help="scaffold template (default: dash)")
     ia.add_argument("--title", help="display title")
     ia.add_argument("--tags", help="comma-separated tags; default is the template name")
-    ia.add_argument("--port", type=int, help="proxy port for static/python/node/flask/react/svelte/vue/streamlit/gradio templates")
+    ia.add_argument("--port", type=int, help="proxy port for static/python/node/flask/rust/react/svelte/vue/streamlit/gradio templates")
     ia.add_argument("--package-manager", choices=["auto", *_JS_PACKAGE_MANAGERS], default="auto",
                     help="JS package manager for react/svelte/vue templates (default: auto)")
     ia.add_argument("--force", action="store_true", help="allow an existing apps/<name> directory")
@@ -2494,9 +2520,9 @@ Use the scaffold command; it creates `apps/<name>/` and updates `gallery.yaml`:
 
     curiator app create revenue --template dash --title "Revenue dashboard"
 
-Templates: `dash`, `static`, `python`, `node`, `flask`, `react`, `svelte`, `vue`, `streamlit`, `gradio`.
-Node and Flask use lightweight server scaffolds behind same-origin proxy mounts. React/Svelte/Vue use
-Vite and can auto-detect npm/pnpm/yarn/bun; Streamlit and Gradio use prefix-preserving proxy mounts.
+Templates: `dash`, `static`, `python`, `node`, `flask`, `rust`, `react`, `svelte`, `vue`, `streamlit`, `gradio`.
+Node, Flask, and Rust use lightweight server scaffolds behind same-origin proxy mounts. React/Svelte/Vue
+use Vite and can auto-detect npm/pnpm/yarn/bun; Streamlit and Gradio use prefix-preserving proxy mounts.
 You can still edit `gallery.yaml` manually for existing apps.
 
 See the consumer guide: https://github.com/LearnedResponse/curiator/blob/main/docs/USING_CURIATOR.md
@@ -3446,6 +3472,205 @@ Use this template for lightweight server-rendered views, tiny API-backed panels,
 should stay Python-native without becoming Dash apps.
 """,
 }
+
+_APP_RUST_TEMPLATE = {
+    "Cargo.toml": """\
+[package]
+name = "__NAME__"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+""",
+    "src/main.rs": r'''
+//! Rust HTTP server scaffold generated by `curiator app create __NAME__ --template rust`.
+
+use std::env;
+use std::io::{Read, Write};
+use std::net::{TcpListener, TcpStream};
+
+const APP: &str = "__NAME__";
+const TITLE: &str = __TITLE_LITERAL__;
+
+fn option_value(flag: &str) -> Option<String> {
+    let mut args = env::args().skip(1);
+    while let Some(arg) = args.next() {
+        if arg == flag {
+            return args.next();
+        }
+    }
+    None
+}
+
+fn port() -> u16 {
+    option_value("--port")
+        .or_else(|| env::var("PORT").ok())
+        .and_then(|value| value.parse::<u16>().ok())
+        .unwrap_or(8700)
+}
+
+fn page() -> String {
+    r#"<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>__TITLE_TEXT__</title>
+    <style>
+      body {
+        margin: 0;
+        font-family: system-ui, sans-serif;
+        color: #22272e;
+        background: #f6f7f8;
+      }
+      main {
+        max-width: 900px;
+        padding: 32px;
+      }
+      .eyebrow {
+        margin: 0 0 8px;
+        color: #8e44ad;
+        font-size: 13px;
+        font-weight: 700;
+      }
+      h1 {
+        margin: 0 0 12px;
+        font-size: 32px;
+      }
+      p {
+        color: #5e6670;
+        line-height: 1.55;
+      }
+      .metricGrid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(120px, 1fr));
+        gap: 12px;
+        margin-top: 24px;
+        max-width: 620px;
+      }
+      .metricGrid div {
+        border: 1px solid #d9dde2;
+        border-radius: 8px;
+        background: white;
+        padding: 14px;
+      }
+      .metricGrid b {
+        display: block;
+        font-size: 24px;
+      }
+      .metricGrid span {
+        color: #6c747d;
+        font-size: 13px;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <p class="eyebrow">curIAtor Rust scaffold</p>
+      <h1>__TITLE_TEXT__</h1>
+      <p>
+        This dependency-light Rust app is served through a same-origin proxy mount. Use the feedback
+        rail to shape the server-rendered view; the curator edits files in this directory and
+        smoke-tests with <code>cargo check --quiet</code>.
+      </p>
+      <section class="metricGrid" aria-label="demo metrics">
+        <div><b>1</b><span>binary</span></div>
+        <div><b>0</b><span>dependencies</span></div>
+        <div><b>2</b><span>routes</span></div>
+      </section>
+    </main>
+  </body>
+</html>"#.to_string()
+}
+
+fn response(status: &str, content_type: &str, body: &str) -> Vec<u8> {
+    format!(
+        "HTTP/1.1 {status}\r\ncontent-type: {content_type}\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{body}",
+        body.as_bytes().len()
+    )
+    .into_bytes()
+}
+
+fn handle(mut stream: TcpStream) -> std::io::Result<()> {
+    let mut buf = [0_u8; 1024];
+    let n = stream.read(&mut buf)?;
+    let request = String::from_utf8_lossy(&buf[..n]);
+    let path = request
+        .lines()
+        .next()
+        .and_then(|line| line.split_whitespace().nth(1))
+        .unwrap_or("/");
+    let bytes = if path == "/healthz" {
+        let body = format!(r#"{{"ok":true,"app":"{APP}"}}"#);
+        response("200 OK", "application/json; charset=utf-8", &body)
+    } else {
+        response("200 OK", "text/html; charset=utf-8", &page())
+    };
+    stream.write_all(&bytes)?;
+    stream.flush()
+}
+
+fn main() -> std::io::Result<()> {
+    let port = port();
+    let listener = TcpListener::bind(("127.0.0.1", port))?;
+    println!("{TITLE} listening on http://127.0.0.1:{port}");
+    for stream in listener.incoming() {
+        match stream {
+            Ok(stream) => {
+                if let Err(err) = handle(stream) {
+                    eprintln!("request failed: {err}");
+                }
+            }
+            Err(err) => eprintln!("connection failed: {err}"),
+        }
+    }
+    Ok(())
+}
+''',
+    "README.md": """\
+# __TITLE_TEXT__
+
+This Rust app was scaffolded by curIAtor. It has no crate dependencies: `src/main.rs` uses the Rust
+standard library to serve HTML plus a `/healthz` JSON endpoint.
+
+Run it through the gallery:
+
+```bash
+curiator up
+```
+
+The generated `gallery.yaml` entry runs:
+
+```bash
+cargo run --quiet -- --port <port>
+```
+
+The scaffold smoke test is:
+
+```bash
+cargo check --quiet
+```
+
+Use this template for small compiled status services, API-backed prototypes, or Rust views that should
+stay behind curIAtor's same-origin feedback overlay.
+""",
+}
+
+
+def _app_rust_template_files(name: str, title: str) -> dict[str, str]:
+    replacements = {
+        "__NAME__": name,
+        "__TITLE_LITERAL__": _rust_string(title),
+        "__TITLE_TEXT__": title,
+    }
+    out = {}
+    for rel, content in _APP_RUST_TEMPLATE.items():
+        text = content
+        for old, new in replacements.items():
+            text = text.replace(old, new)
+        out[rel] = text
+    return out
+
 
 _APP_PYTHON_TEMPLATE = '''\
 """Tiny Python web server scaffold generated by `curiator app create {name} --template python`."""

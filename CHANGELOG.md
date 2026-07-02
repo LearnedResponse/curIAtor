@@ -20,7 +20,7 @@ All notable changes to curIAtor are documented here. The format follows
   Proxy mounts can opt into preserving the `/app/<name>/` prefix for frameworks like Streamlit that
   need their own base path.
 - `curiator app create` / `curiator init-app` to scaffold app directories and register them in
-  `gallery.yaml` using Dash, static, tiny Python-server, dependency-light Node, Flask, React/Vite,
+  `gallery.yaml` using Dash, static, tiny Python-server, dependency-light Node, Flask, Rust, React/Vite,
   Svelte/Vite, Vue/Vite, Streamlit, or Gradio templates; React/Svelte/Vue scaffolds can
   auto-detect or explicitly set npm/pnpm/yarn/bun commands.
 - Per-feedback run artifacts: task bundles live under `feedback/tasks/<id>.md`, agent stdout/stderr

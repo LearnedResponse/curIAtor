@@ -80,9 +80,9 @@ curiator app create revenue --template dash --title "Revenue dashboard" --tags f
 
 Templates today: `dash` (in-process Dash), `static` (same-origin proxy using `http.server`), `python`
 (tiny proxy-served Python HTTP app), `node` (dependency-light Node HTTP server), `flask`
-(server-rendered Flask app), `react` (Vite + React), `svelte` (Vite + Svelte), `vue` (Vite + Vue),
-`streamlit`, and `gradio`.
-The Node, Flask, and JS templates use `proxy` mounts; Vite templates set their base path from
+(server-rendered Flask app), `rust` (dependency-light Rust HTTP server), `react` (Vite + React),
+`svelte` (Vite + Svelte), `vue` (Vite + Vue), `streamlit`, and `gradio`.
+The Node, Flask, Rust, and JS templates use `proxy` mounts; Vite templates set their base path from
 `CURIATOR_APP` so assets resolve under `/app/<name>/`. Pass
 `--package-manager pnpm|yarn|bun|npm` to override auto-detection from lockfiles. They also add
 `commands.preview` to `gallery.yaml`, and

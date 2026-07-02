@@ -115,6 +115,42 @@ def test_app_create_flask_proxy_template(collection, capsys):
     assert "- preview: `python app.py --port 8700`" in out
 
 
+def test_app_create_rust_proxy_template(collection, capsys):
+    import shutil
+    import subprocess
+
+    from curiator import cli
+    from curiator.config import app_spec, load_config
+
+    assert cli.main(["app", "create", "rust_status", "--template", "rust"]) == 0
+
+    root = collection / "apps" / "rust_status"
+    assert (root / "Cargo.toml").exists()
+    assert (root / "src" / "main.rs").exists()
+    assert (root / "README.md").exists()
+    cargo_toml = (root / "Cargo.toml").read_text()
+    main_rs = (root / "src" / "main.rs").read_text()
+    assert 'name = "rust_status"' in cargo_toml
+    assert "std::net::{TcpListener, TcpStream}" in main_rs
+    assert "cargo check --quiet" in main_rs
+    assert 'path == "/healthz"' in main_rs
+    if shutil.which("cargo"):
+        subprocess.run(["cargo", "check", "--quiet"], cwd=root, check=True)
+
+    data = _gallery(collection)
+    app = next(a for a in data["apps"] if a["name"] == "rust_status")
+    assert app["mount"] == {"kind": "proxy", "cmd": "cargo run --quiet -- --port 8700", "port": 8700}
+    assert app["smoke"] == "cargo check --quiet"
+    assert app["commands"]["preview"] == "cargo run --quiet -- --port 8700"
+    assert app["tags"] == ["rust"]
+    assert app_spec(load_config(), "rust_status")["commands"]["preview"] == "cargo run --quiet -- --port 8700"
+
+    assert cli.main(["context", "--app", "rust_status", "--limit", "1"]) == 0
+    out = capsys.readouterr().out
+    assert "- smoke: `cargo check --quiet`" in out
+    assert "- preview: `cargo run --quiet -- --port 8700`" in out
+
+
 def test_app_create_react_svelte_and_vue_proxy_templates(collection, capsys):
     from curiator import cli
     from curiator.config import app_spec, load_config
