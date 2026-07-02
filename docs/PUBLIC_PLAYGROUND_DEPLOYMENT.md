@@ -28,6 +28,7 @@ curiator doctor
 curiator smoke
 curiator playground-preflight
 curiator playground-preflight --strict
+curiator playground-preflight --http-smoke
 ```
 
 For release collections from the runner checkout:
@@ -40,7 +41,9 @@ curiator release-preflight --gallery curiator-geometry --fresh-clone
 for `runner.mode: pinned`, `git.commit: true`, sign-in, local invite/admin readiness, anonymous-held
 policy, dispatch quotas, and the current held queue count. It does not replace a real hosted pilot or
 backup-restore test. Use `--strict` for CI or the final pre-pilot check; it keeps warnings visible as
-warnings but makes any posture or doctor warning fail the command.
+warnings but makes any posture or doctor warning fail the command. Use `--http-smoke` when app
+dependencies are installed in the mounted collection and you want the gate to start proxy apps briefly
+and poll their configured HTTP smoke paths or default app URLs.
 
 ## 2. Gate feedback behind sign-in
 
@@ -179,6 +182,7 @@ Weekly:
 ```bash
 CURIATOR_GALLERY=/collection/gallery.yaml curiator stats --markdown
 CURIATOR_GALLERY=/collection/gallery.yaml curiator smoke
+CURIATOR_GALLERY=/collection/gallery.yaml curiator playground-preflight --http-smoke
 CURIATOR_GALLERY=/collection/gallery.yaml curiator playground-preflight
 CURIATOR_GALLERY=/collection/gallery.yaml curiator queue sweep --older-than 30
 ```

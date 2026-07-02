@@ -108,7 +108,8 @@ All notable changes to curIAtor are documented here. The format follows
   stale cleanup of held items with ledger audit notes.
 - `curiator playground-preflight` checks one collection's hosted public-playground posture by combining
   doctor/smoke with runner/auth/git/user-store/anonymous-hold/quota/held-queue checks before an
-  invite-only pilot.
+  invite-only pilot; `--http-smoke` also starts proxy apps and polls their HTTP endpoints when app
+  dependencies are installed in the checked collection.
 - `auth.allow_anonymous: true` for `local`/`oidc` hosted galleries lets logged-out users leave feedback,
   but it is always recorded as `held`; logged-in users keep the normal dispatch path.
 - Anonymous hosted feedback is rate-limited per client IP with `auth.anonymous_feedback_max` and

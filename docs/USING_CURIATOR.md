@@ -277,6 +277,7 @@ curiator release-preflight --fresh-clone --strict  # fail on doctor warnings for
 curiator release-preflight --http-smoke  # also start proxy apps and poll HTTP when deps are installed
 curiator release-preflight --include-optional --fresh-clone --strict  # add finance + phylogenetics
 curiator playground-preflight  # hosted pilot posture: auth, quotas, queue, doctor, smoke
+curiator playground-preflight --http-smoke  # also start proxy apps when deps are installed
 curiator playground-preflight --strict  # fail on warnings for CI/final pre-pilot gates
 make release-prepare VERSION=0.2.0 DATE=2026-07-02  # updates package, citation, Zenodo, changelog
 ```

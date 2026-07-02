@@ -44,10 +44,11 @@ password management). Everyone inside the rope is effectively the "account" tier
 the rate limit, the vetting, and the abuse policy. `curiator user disable|enable` now gives local-login
 deployments a non-destructive revocation lever, and the deployment runbook now spells out the container,
 TLS reverse proxy, mounted-state backups, weekly `curiator stats` checks, and
-`curiator playground-preflight` for runner/auth/git/queue/quota posture. Remaining phase-0 work is
-actually running the hosted pilot. **What it answers before phase 1:** real hosting cost per
-feedback→fix cycle, how often reverts are actually needed, and whether strangers' feedback breaks the
-task-bundle assumptions.
+`curiator playground-preflight` for runner/auth/git/queue/quota posture, with `--http-smoke` available
+when installed app dependencies should be runtime-checked too. Remaining phase-0 work is actually
+running the hosted pilot. **What it answers before phase 1:** real hosting cost per feedback→fix
+cycle, how often reverts are actually needed, and whether strangers' feedback breaks the task-bundle
+assumptions.
 
 **Phase 1 — self-serve accounts + quotas.** Open signup (or "Sign in with GitHub" via the existing
 OIDC mode — identity dedupe plus a free reputation prior), and the quota knobs become real

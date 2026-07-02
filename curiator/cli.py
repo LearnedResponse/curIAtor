@@ -2264,7 +2264,7 @@ def _playground_preflight_payload(args) -> dict:
     doctor_warnings = [i for i in doctor_issues if i.get("severity") == "warning"]
     smoke = {"ok": None, "results": []}
     if not args.no_smoke:
-        results = _smoke_results(cfg)
+        results = _smoke_results(cfg, http=args.http_smoke)
         smoke = {"ok": all(r["ok"] for r in results), "results": results}
     held = [_queue_row_payload(key, entry) for key, entry in _queue_entries(cfg)]
     errors = [i for i in issues if i.get("severity") == "error"]
@@ -2279,6 +2279,10 @@ def _playground_preflight_payload(args) -> dict:
             and (args.no_smoke or smoke["ok"] is True)
         ),
         "strict": strict,
+        "checks": {
+            "smoke": not args.no_smoke,
+            "http_smoke": bool(args.http_smoke),
+        },
         "gallery": cfg.get("gallery_path"),
         "auth": {
             "mode": (cfg.get("auth") or {}).get("mode"),
@@ -2308,6 +2312,9 @@ def _playground_preflight_payload(args) -> dict:
 
 def cmd_playground_preflight(args) -> int:
     """Check one collection's hosted public-playground posture before an invite-only pilot."""
+    if args.no_smoke and args.http_smoke:
+        print("curiator: playground-preflight --http-smoke requires smoke checks; remove --no-smoke")
+        return 2
     payload = _playground_preflight_payload(args)
     if args.json:
         print(json.dumps(payload, indent=2))
@@ -3263,6 +3270,8 @@ def main(argv=None) -> int:
     rp.set_defaults(func=cmd_release_preflight)
     pp = sub.add_parser("playground-preflight", help="check hosted public-playground readiness")
     pp.add_argument("--no-smoke", action="store_true", help="skip per-app smoke checks")
+    pp.add_argument("--http-smoke", "--http", action="store_true", dest="http_smoke",
+                    help="also start proxy apps briefly and verify configured HTTP smoke paths")
     pp.add_argument("--strict", action="store_true", help="fail when posture or doctor warnings are present")
     pp.add_argument("--json", action="store_true", help="emit machine-readable diagnostics")
     pp.set_defaults(func=cmd_playground_preflight)
