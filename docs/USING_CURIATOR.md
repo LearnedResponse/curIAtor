@@ -203,16 +203,27 @@ The comment field is a normal textarea, so OS-level dictation works without curI
 handling. On macOS, use Dictation; on Windows, use Win+H voice typing. Linux desktop dictation depends
 on the local environment.
 
-Collections can also opt into local voice transcription. Set `voice.transcribe_cmd` to a local command
-that accepts an audio clip path either through `{audio}` or as the final argument. The React shell then
-shows a **Record** button, captures microphone audio with `MediaRecorder`, posts it to `/api/transcribe`,
-and drops the returned transcript into the comment box. The command runs from the collection root with
+Collections can also opt into local voice transcription. The packaged faster-whisper adapter is the
+default setup path:
+
+```bash
+pip install 'curiator[voice]'
+curiator voice setup
+curiator up
+```
+
+`curiator voice setup` writes `voice.transcribe_cmd` to `gallery.yaml`. The React shell then shows a
+**Record** button, captures microphone audio with `MediaRecorder`, posts it to `/api/transcribe`, and
+drops the returned transcript into the comment box.
+
+You can also set `voice.transcribe_cmd` manually to any local command that accepts an audio clip path
+either through `{audio}` or as the final argument. The command runs from the collection root with
 `CURIATOR_AUDIO`, `CURIATOR_GALLERY`, and `CURIATOR_COLLECTION_ROOT` in the environment. It can print
 plain transcript text or JSON:
 
 ```yaml
 voice:
-  transcribe_cmd: "python scripts/transcribe.py {audio}"
+  transcribe_cmd: "python -m curiator.voice.faster_whisper {audio}"
   transcribe_timeout: 60
   transcribe_max_bytes: 26214400
 ```

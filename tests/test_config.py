@@ -106,6 +106,11 @@ def test_set_block_key_updates_inserts_appends():
     # update in place, KEEP the inline comment + the other keys
     t2 = set_block_key(t, "agent", "adapter", "codex")
     assert "adapter: codex   # provider" in t2 and "autonomy: auto-small" in t2
+    # replace the whole scalar, not just the first shell token
+    tv = "voice:\n  transcribe_cmd: scripts/custom-transcribe {audio}  # local\n"
+    assert "transcribe_cmd: python -m curiator.voice.faster_whisper {audio}  # local" in set_block_key(
+        tv, "voice", "transcribe_cmd", "python -m curiator.voice.faster_whisper {audio}"
+    )
     # insert a key the block doesn't have yet
     assert "sandbox: workspace-write" in set_block_key(t2, "agent", "sandbox", "workspace-write")
     # blank / None → null

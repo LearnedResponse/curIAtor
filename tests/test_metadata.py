@@ -43,6 +43,13 @@ def test_runtime_version_matches_release_metadata():
     assert zenodo["version"] == version
 
 
+def test_voice_extra_and_package_are_shipped():
+    project = tomllib.loads(Path("pyproject.toml").read_text())
+
+    assert "faster-whisper>=1.1" in project["project"]["optional-dependencies"]["voice"]
+    assert "curiator.voice" in project["tool"]["setuptools"]["packages"]
+
+
 def test_issue_templates_are_valid_yaml():
     template_dir = Path(".github/ISSUE_TEMPLATE")
     files = sorted(template_dir.glob("*.yml"))

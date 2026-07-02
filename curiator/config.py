@@ -249,9 +249,9 @@ def set_block_key(text: str, block: str, key: str, value) -> str:
     import re
     repl = _scalar(value)
     body = r"(?:(?:[ \t]+[^\n]*)?\n)*?"                      # indented/blank lines, not a col-0 key
-    pat = re.compile(rf"(?ms)^({re.escape(block)}:[^\n]*\n{body}[ \t]+{re.escape(key)}:[ \t]*)(\S+)")
+    pat = re.compile(rf"(?ms)^({re.escape(block)}:[^\n]*\n{body}[ \t]+{re.escape(key)}:[ \t]*)([^\n#]*?)([ \t]+#.*)?$")
     if pat.search(text):
-        return pat.sub(lambda m: m.group(1) + repl, text, count=1)
+        return pat.sub(lambda m: m.group(1) + repl + (m.group(3) or ""), text, count=1)
     bpat = re.compile(rf"(?m)^{re.escape(block)}:[^\n]*$")
     if bpat.search(text):
         return bpat.sub(lambda m: m.group(0) + f"\n  {key}: {repl}", text, count=1)

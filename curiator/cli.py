@@ -17,6 +17,7 @@
     curiator galleries adopt ../curiator-demo # move an existing collection repo under ./galleries
     curiator app templates # list supported scaffold/import templates
     curiator app import <repo-or-url> <name> # copy/clone an existing app repo into apps/<name>
+    curiator voice setup # configure local voice transcription
     curiator release-preflight # run doctor/smoke/path checks across release galleries or fresh clones
     curiator playground-preflight # check hosted public-playground posture
     curiator reset-demo # rewind the demo: re-break aviato, clear the ledger
@@ -43,7 +44,7 @@ import tempfile
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from .config import LINK_REL, agent_label, app_spec, app_specs, load_config, load_config_at
+from .config import LINK_REL, agent_label, app_spec, app_specs, load_config, load_config_at, set_block_key
 from . import ledger
 
 
@@ -753,6 +754,28 @@ def _doctor_warn_missing_executable(
     })
 
 
+def _doctor_warn_voice_config(issues: list[dict], cfg: dict, repo: Path) -> None:
+    command = str((cfg.get("voice") or {}).get("transcribe_cmd") or "")
+    if not command:
+        return
+    _doctor_warn_missing_executable(
+        issues,
+        where="voice.transcribe_cmd",
+        command=command,
+        cwd=repo,
+        label="voice transcribe command",
+    )
+    if "curiator.voice.faster_whisper" in command:
+        import importlib.util
+        if importlib.util.find_spec("faster_whisper") is None:
+            issues.append({
+                "severity": "warning",
+                "where": "voice.transcribe_cmd",
+                "message": "faster-whisper is not installed; install `pip install 'curiator[voice]'` "
+                           "in the collection environment",
+            })
+
+
 def _manifest_expectations(command: str | None) -> dict[str, list[str]]:
     executable = (_command_executable(command) or "").lower()
     command_text = str(command or "").lower()
@@ -975,6 +998,7 @@ def _doctor_issues(cfg: dict) -> list[dict]:
     raw = yaml.safe_load(gallery.read_text()) or {}
     needles = tuple({str(repo), str(Path.home())} - {"", "/"})
     _doctor_scan_portability(raw, "gallery.yaml", issues, needles)
+    _doctor_warn_voice_config(issues, cfg, repo)
 
     link = cfg.get("link") or {}
     if link:
@@ -2895,6 +2919,42 @@ def cmd_auth(args) -> int:
     return 0
 
 
+_VOICE_FASTER_WHISPER_CMD = "python -m curiator.voice.faster_whisper {audio}"
+
+
+def cmd_voice(args) -> int:
+    """Show or configure local voice transcription for the React feedback shell."""
+    cfg = load_config()
+    gallery = Path(cfg["gallery_path"])
+    voice = cfg.get("voice") or {}
+    if args.action == "show":
+        command = voice.get("transcribe_cmd")
+        print(f"curiator: voice.transcribe_cmd = {command or 'null'}  ({gallery})")
+        print(f"curiator: voice.transcribe_timeout = {voice.get('transcribe_timeout')}")
+        print(f"curiator: voice.transcribe_max_bytes = {voice.get('transcribe_max_bytes')}")
+        return 0
+
+    command = _VOICE_FASTER_WHISPER_CMD
+    existing = voice.get("transcribe_cmd")
+    if existing and existing != command and not args.force:
+        print("curiator: voice.transcribe_cmd is already configured; use --force to overwrite it")
+        print(f"  current: {existing}")
+        print(f"  new:     {command}")
+        return 1
+
+    text = gallery.read_text()
+    text = set_block_key(text, "voice", "transcribe_cmd", command)
+    text = set_block_key(text, "voice", "transcribe_timeout", args.timeout)
+    text = set_block_key(text, "voice", "transcribe_max_bytes", args.max_bytes)
+    gallery.write_text(text)
+    print(f"curiator: configured {args.engine} voice transcription in {gallery}")
+    print(f"  voice.transcribe_cmd: {command}")
+    print("next:")
+    print("  pip install 'curiator[voice]'")
+    print("  curiator up")
+    return 0
+
+
 def cmd_demo(args) -> int:
     print(Path(__file__).resolve().parents[1].joinpath("docs", "DEMO_SCRIPT.md").read_text())
     return 0
@@ -3760,6 +3820,17 @@ def main(argv=None) -> int:
     at = sub.add_parser("auth", help="show or set auth.mode in gallery.yaml")
     at.add_argument("mode", nargs="?", choices=["none", "local", "header", "oidc"])
     at.set_defaults(func=cmd_auth)
+    vc = sub.add_parser("voice", help="show or configure local voice transcription")
+    vc_sub = vc.add_subparsers(dest="action", required=True)
+    vs = vc_sub.add_parser("show", help="show active voice transcription config")
+    vs.set_defaults(func=cmd_voice)
+    vsetup = vc_sub.add_parser("setup", help="configure local faster-whisper transcription")
+    vsetup.add_argument("--engine", choices=["faster-whisper"], default="faster-whisper",
+                        help="local transcription adapter to configure")
+    vsetup.add_argument("--timeout", type=int, default=60, help="transcription timeout in seconds")
+    vsetup.add_argument("--max-bytes", type=int, default=25 * 1024 * 1024, help="maximum uploaded audio bytes")
+    vsetup.add_argument("--force", action="store_true", help="overwrite an existing voice.transcribe_cmd")
+    vsetup.set_defaults(func=cmd_voice)
     rv = sub.add_parser("revert", help="(git-as-memory) undo a curator commit; record + thread stay intact")
     rv.add_argument("target", help="a feedback id or a commit SHA")
     rv.add_argument("--reason", default=None, help="why (recorded in the ⚙ note + revert commit)")

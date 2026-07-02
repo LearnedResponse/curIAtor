@@ -1,18 +1,21 @@
 # Backlog — voice + narrated feedback (talk through the fix)
 
-> **Status:** Tier 0, command-backed local transcription, shared-clock mark/transcript timing, segment
-> persistence, and the first task-bundle narrative merge landed 2026-07-02. **North star:
+> **Status:** Tier 0, command-backed local transcription, packaged faster-whisper setup, shared-clock
+> mark/transcript timing, segment persistence, and the first task-bundle narrative merge landed
+> 2026-07-02. **North star:
 > "narrated feedback"** — voice + annotation on a shared clock, so a review is an
 > *ordered, intent-per-mark tour* the agent can follow.
 > **Recommended shape: local-Whisper default** (moat-consistent, works on Linux), Web-Speech for the
 > public tier only, OS dictation as the free stopgap. The comment textarea now exposes a dictation hint,
 > `docs/USING_CURIATOR.md` documents OS dictation as the zero-code path, and annotation marks now carry
 > optional `start_ms` / `end_ms` offsets for future transcript alignment; collections can now opt into
-> a local `voice.transcribe_cmd` so the React shell records mic audio with `MediaRecorder`, POSTs it to
-> `/api/transcribe`, appends the returned transcript to the comment box, and stores returned segment
-> timestamps on the feedback entry so agents see `Voice transcript segments` plus a derived
-> `Narrated feedback` block when timed marks overlap timed speech. When recording is active, annotation
-> marks and transcript segments share the recording start as `t=0`.
+> a local `voice.transcribe_cmd`; `curiator voice setup` now configures the packaged
+> `curiator.voice.faster_whisper` adapter for `pip install 'curiator[voice]'`. The React shell records
+> mic audio with `MediaRecorder`, POSTs it to `/api/transcribe`, appends the returned transcript to the
+> comment box, and stores returned segment timestamps on the feedback entry so agents see
+> `Voice transcript segments` plus a derived `Narrated feedback` block when timed marks overlap timed
+> speech. When recording is active, annotation marks and transcript segments share the recording start
+> as `t=0`.
 > Composes with `annotated-feedback.md`, not a separate feature. Captured 2026-07-02.
 
 ## The pitch
@@ -81,8 +84,9 @@ to retrofit.
 1. **Tier 0** — landed. OS dictation is documented, and the shell comment textarea exposes a
    dictation hint for the default React shell and the legacy Dash shell.
 2. **Tier 2 (default)** — landed as a command-backed curiator `/api/transcribe` seam: a 🎤 button that
-   `MediaRecorder`-captures → POSTs → drops the transcript into the comment. Local, any browser. Still
-   needs packaged/default model adapters or template wrappers for `faster-whisper` / `whisper.cpp`.
+   `MediaRecorder`-captures → POSTs → drops the transcript into the comment. Local, any browser.
+   `curiator voice setup` now writes the default packaged `faster-whisper` adapter command; a
+   `whisper.cpp` wrapper remains future polish.
 3. **Tier 1 (optional)** — a Web Speech mic button **gated to public/hosted collections** (a config
    flag), never the private/OT ones.
 4. **Shared-clock data model** — annotation mark timestamps landed as optional `start_ms` / `end_ms`
