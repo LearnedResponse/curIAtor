@@ -128,20 +128,44 @@
     return "";
   }
 
-  function AnnotationSummary({entry}) {
+  function AnnotationRows({marks}) {
+    return marks.map((mark, idx) => {
+      const target = annotationTarget(mark);
+      return h("div", {className: "rshell-annotation-summary-row", key: idx},
+        h("span", {className: "rshell-annotation-chip"}, annotationLabel(mark, idx)),
+        h("span", {className: "rshell-annotation-copy"},
+          mark.tool || "mark",
+          mark.note ? " — " + mark.note : "",
+          target ? h("code", {className: "rshell-annotation-target"}, target) : null));
+    });
+  }
+
+  function AnnotationSummary({entry, onPreview}) {
     const marks = (entry && entry.annotations) || [];
     if (!marks.length) return null;
+    const canPreview = entry && entry.shot_url && onPreview;
     return h("div", {className: "rshell-annotation-summary"},
-      h("div", {className: "rshell-annotation-summary-title"}, "Annotations"),
-      marks.map((mark, idx) => {
-        const target = annotationTarget(mark);
-        return h("div", {className: "rshell-annotation-summary-row", key: idx},
-          h("span", {className: "rshell-annotation-chip"}, annotationLabel(mark, idx)),
-          h("span", {className: "rshell-annotation-copy"},
-            mark.tool || "mark",
-            mark.note ? " — " + mark.note : "",
-            target ? h("code", {className: "rshell-annotation-target"}, target) : null));
-      }));
+      h("div", {className: "rshell-annotation-summary-title"},
+        "Annotations",
+        canPreview ? h("button", {className: "rshell-annotation-preview-btn",
+          title: "Open annotation preview", onClick: () => onPreview(entry)}, "view") : null),
+      h(AnnotationRows, {marks}));
+  }
+
+  function AnnotationPreview({entry, onClose}) {
+    const marks = (entry && entry.annotations) || [];
+    if (!entry || !marks.length) return null;
+    return h("div", {className: "rshell-modal-backdrop", onClick: onClose},
+      h("div", {className: "rshell-annotation-modal", role: "dialog", "aria-modal": "true",
+          onClick: (e) => e.stopPropagation()},
+        h("div", {className: "rshell-modal-head"},
+          h("b", null, "Annotations"),
+          h("button", {className: "rshell-modal-close", title: "Close", onClick: onClose}, "×")),
+        h("div", {className: "rshell-annotation-modal-body"},
+          entry.shot_url ? h("div", {className: "rshell-annotation-replay-shot"},
+            h("img", {src: entry.shot_url, alt: "annotated screenshot"})) : null,
+          h("div", {className: "rshell-annotation-replay-list"},
+            h(AnnotationRows, {marks})))));
   }
 
   function composeShot(dataUrl, annotations) {
@@ -372,7 +396,7 @@
             style: {background: a.color || "#888"}}, t)))))));
   }
 
-  function Entry({entry, depth, children, actions, onReply, onAction}) {
+  function Entry({entry, depth, children, actions, onReply, onAction, onPreview}) {
     const isSystem = entry.kind === "system" || entry.author === "claude";
     const marginLeft = Math.min(depth * 14, 56);
     const st = entry.status || "new";
@@ -397,10 +421,11 @@
         h("button", {className: "rshell-reply", onClick: () => onReply(entry)}, "reply")),
       h("div", {className: "rshell-entry-body"}, entry.comment || ""),
       entry.shot_url ? h("img", {className: "rshell-shot", src: entry.shot_url}) : null,
-      h(AnnotationSummary, {entry}),
+      h(AnnotationSummary, {entry, onPreview}),
       actionBlock);
     return h("div", {className: "rshell-thread"}, body,
-      (children[entry.id] || []).map((c) => h(Entry, {key: c.id, entry: c, depth: depth + 1, children, actions, onReply, onAction})));
+      (children[entry.id] || []).map((c) => h(Entry, {key: c.id, entry: c, depth: depth + 1, children,
+        actions, onReply, onAction, onPreview})));
   }
 
   function AccountMenu({boot}) {
@@ -437,6 +462,7 @@
     const [shotSource, setShotSource] = useState(null);
     const [annotations, setAnnotations] = useState([]);
     const [replyTo, setReplyTo] = useState(null);
+    const [previewEntry, setPreviewEntry] = useState(null);
     const [msg, setMsg] = useState("");
 
     useEffect(() => {
@@ -448,6 +474,7 @@
     }, []);
     useEffect(() => {
       if (replyTo && replyTo.key !== selected) setReplyTo(null);
+      if (previewEntry) setPreviewEntry(null);
     }, [selected]);
 
     const items = feedback.items || [];
@@ -539,6 +566,7 @@
     }
 
     return h("aside", {className: "rshell-feedback" + (open ? " open" : "") + (collapsed ? " collapsed" : "")},
+      h(AnnotationPreview, {entry: previewEntry, onClose: () => setPreviewEntry(null)}),
       h(AccountMenu, {boot}),
       h("div", {className: "rshell-feedback-head"},
         h("h4", null, "Feedback"),
@@ -564,7 +592,8 @@
       h("hr", {style: {border: "none", borderTop: "1px solid #eee"}}),
       h("div", {style: {fontSize: 11, color: "#666", fontWeight: 700, marginBottom: 4}}, "prior feedback"),
       items.length ? t.roots.map((root) => h(Entry, {key: root.id, entry: root, depth: 0, children: t.children,
-        actions: feedback.actions, onReply: (e) => setReplyTo({key: selected, id: e.id}), onAction: action}))
+        actions: feedback.actions, onReply: (e) => setReplyTo({key: selected, id: e.id}), onAction: action,
+        onPreview: (e) => setPreviewEntry(e)}))
         : h("div", {style: {fontSize: 12, color: "#777"}}, "No feedback yet."));
   }
 

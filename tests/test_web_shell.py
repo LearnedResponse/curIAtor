@@ -82,10 +82,13 @@ def test_react_shell_has_burned_screenshot_annotations(web_client):
     css = web_client.get("/assets/react_shell.css").get_data(as_text=True)
     assert "function AnnotationEditor" in js
     assert "function AnnotationSummary" in js
+    assert "function AnnotationPreview" in js
     assert "function composeShot" in js
     assert "function withDomTarget" in js
     assert "function selectorFor" in js
     assert "function annotationTarget" in js
+    assert "rshell-annotation-preview-btn" in js
+    assert "rshell-annotation-modal" in js
     assert "annotations: screenshot ? annotations : []" in js
     assert "rshell-annotation-note" in js
     assert "rshell-annotation-summary" in js
@@ -99,6 +102,9 @@ def test_react_shell_has_burned_screenshot_annotations(web_client):
     assert "rshell-annotation-canvas" in css
     assert ".rshell-annotation-note input" in css
     assert ".rshell-annotation-summary" in css
+    assert ".rshell-annotation-preview-btn" in css
+    assert ".rshell-modal-backdrop" in css
+    assert ".rshell-annotation-modal-body" in css
     assert ".rshell-annotation-target" in css
     assert "touch-action: none" in css
 
