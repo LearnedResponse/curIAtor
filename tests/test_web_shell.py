@@ -57,7 +57,7 @@ def test_react_shell_general_iframe_src_is_stable(web_client):
 def test_react_shell_pins_general_and_restores_auth_menu(web_client):
     body = web_client.get("/assets/react_shell.js").get_data(as_text=True)
     assert "function AccountMenu" in body
-    assert "Settings" in body and "Profile" in body and "Log in" in body
+    assert "Queue" in body and "Settings" in body and "Profile" in body and "Log in" in body
     assert '.filter((a) => a.kind !== "general")' in body
     assert "rshell-general-row" in body
 
@@ -96,6 +96,42 @@ def test_react_shell_profile_settings_and_collection_home(web_client):
     settings = web_client.get("/settings")
     assert settings.status_code == 200
     assert "Provider (adapter)" in settings.get_data(as_text=True)
+
+
+def test_react_shell_admin_queue_page_reviews_held_feedback(web_client):
+    from curiator import ledger
+    from curiator.config import load_config
+
+    cfg = load_config()
+    fid = ledger.save_entry(
+        cfg,
+        "sample",
+        comment="public typo report",
+        stars=4,
+        user={"id": "visitor", "email": "visitor@example.com", "name": "Visitor", "groups": []},
+        extra={"status": "held"},
+    )
+    page = web_client.get("/queue")
+    assert page.status_code == 200
+    body = page.get_data(as_text=True)
+    assert "public typo report" in body and "visitor@example.com" in body
+
+    approved = web_client.post(f"/queue/{fid}/approve")
+    assert approved.status_code == 302
+    items = ledger.load(load_config())["sample"]
+    assert next(e for e in items if e["id"] == fid)["status"] == "new"
+    assert any(e.get("kind") == "system" and fid in (e.get("reply_to") or [])
+               and "approved by anonymous@local" in e.get("comment", "")
+               for e in items)
+
+    reject_id = ledger.save_entry(cfg, "sample", comment="spam link", extra={"status": "held"})
+    rejected = web_client.post(f"/queue/{reject_id}/reject", data={"reason": "spam"}, follow_redirects=True)
+    assert rejected.status_code == 200
+    items = ledger.load(load_config())["sample"]
+    assert next(e for e in items if e["id"] == reject_id)["status"] == "rejected"
+    assert any(e.get("kind") == "system" and reject_id in (e.get("reply_to") or [])
+               and "Reason: spam" in e.get("comment", "")
+               for e in items)
 
 
 def test_react_shell_feedback_api_threads_replies(web_client):

@@ -1,7 +1,8 @@
 # Backlog — public playground (hosted collections, trust-tiered dispatch)
 
-> **Status:** scoped 2026-07-01; phase-2 moderation primitive partly landed (`held` status +
-> `curiator queue list|approve|reject` CLI), hosted anonymous intake still not started. Sequences AFTER
+> **Status:** scoped 2026-07-01; phase-2 moderation primitive partly landed (`held` status,
+> admin `/queue` shell view, and `curiator queue list|approve|reject` CLI), hosted anonymous intake
+> still not started. Sequences AFTER
 > [public-release](public-release.md): the
 > static example repos are the pitch; this is the live complement — **a hosted public collection where
 > anyone can leave feedback and watch the curator work**, without handing an autonomous agent to the
@@ -47,8 +48,8 @@ OIDC mode — identity dedupe plus a free reputation prior), and the quota knobs
 
 **Phase 2 — anonymous + the held pool.** The full ladder below: anonymous browsing + feedback that is
 **always held** for human review, the moderation queue in the shell + `curiator queue` CLI, per-IP
-submission limits. Core moderation status/CLI is now present; the hosted anonymous intake, admin shell
-queue view, per-IP limits, and quota degradation still remain.
+submission limits. Core moderation status, shell review view, and CLI are now present; the hosted
+anonymous intake, per-IP limits, and quota degradation still remain.
 
 ## Design (each piece lands on an existing seam)
 
@@ -68,12 +69,11 @@ queue view, per-IP limits, and quota degradation still remain.
    ```
    Over-quota items degrade to `held` with an honest ⚙ note ("queued — the daily agent budget is
    spent"), not a silent drop.
-3. **The moderation pool** — ledger status `held` and the headless CLI are landed:
-   `curiator queue list|approve|reject` reviews held items; approve → `new` (dispatches normally),
-   reject → `rejected` with an audit note. Remaining: a shell queue view (admin-gated, like /settings)
-   and the hosted anonymous-feedback path that creates held items automatically. Approval is admission
-   control, distinct from the existing `awaiting_approval` (which is the *agent* asking a human about a
-   *plan*).
+3. **The moderation pool** — ledger status `held`, the admin-gated `/queue` shell view, and the
+   headless CLI are landed: `curiator queue list|approve|reject` reviews held items; approve → `new`
+   (dispatches normally), reject → `rejected` with an audit note. Remaining: the hosted
+   anonymous-feedback path that creates held items automatically. Approval is admission control,
+   distinct from the existing `awaiting_approval` (which is the *agent* asking a human about a *plan*).
 4. **Admin operations** — `curiator revert` already exists (git-as-memory makes every run one
    revertible commit). `curiator user disable <email>` / `enable` now toggles a `disabled` flag in the
    local store; header/OIDC revocation belongs to the IdP. Still to add for later anonymous phases:

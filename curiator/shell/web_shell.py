@@ -12,7 +12,7 @@ from pathlib import Path
 from flask import Flask, Response, jsonify, redirect, request, send_from_directory
 
 from curiator.shell import app_shell as core
-from curiator import auth
+from curiator import auth, ledger
 
 
 def _dash_deps_dir() -> Path:
@@ -69,6 +69,75 @@ def _feedback_payload(key: str) -> dict:
     tb = core.thread_buttons(items)
     actions = {"target": tb[0], "items": tb[1]} if tb else None
     return {"key": key, "items": items, "actions": actions}
+
+
+def _queue_actor(user: dict | None) -> str:
+    user = user or {}
+    return user.get("email") or user.get("name") or user.get("id") or "shell admin"
+
+
+def _queue_find(feedback_id: str) -> tuple[str, dict] | None:
+    for key, items in core.load_feedback().items():
+        for entry in items:
+            if entry.get("id") == feedback_id:
+                return key, entry
+    return None
+
+
+def _queue_rows() -> list[tuple[str, dict]]:
+    rows = []
+    for key, items in core.load_feedback().items():
+        for entry in items:
+            if entry.get("kind") != "system" and entry.get("status") == "held":
+                rows.append((key, entry))
+    return rows
+
+
+def _queue_app_title(key: str) -> str:
+    if key == core.GENERAL_KEY:
+        return "General"
+    rec = next((item for item in core.REGISTRY if item.get("key") == key), {})
+    return rec.get("title") or key
+
+
+def _queue_page_html(message: str = "") -> str:
+    rows = _queue_rows()
+    msg = (f"<p style='color:{core.GREEN};font-size:13px'>{core._esc(message)}</p>" if message else "")
+    if not rows:
+        return msg + "<p style='color:#777;font-size:13px'>No held feedback is waiting for review.</p>"
+    cards = []
+    for key, entry in rows:
+        user = entry.get("user") or {}
+        author = user.get("email") or user.get("name") or entry.get("author") or "user"
+        stars = "★" * int(entry.get("stars") or 0)
+        shot = ""
+        if entry.get("screenshot"):
+            shot = (f"<img src='/feedback-shot/{core._esc(Path(entry['screenshot']).name)}' "
+                    "style='display:block;max-width:420px;margin-top:8px;border:1px solid #ddd;"
+                    "border-radius:4px'>")
+        cards.append(
+            "<section style='border-left:4px solid #6f42c1;background:#fafafa;"
+            "padding:10px 12px;margin:0 0 12px;border-radius:4px'>"
+            f"<div style='font-size:12px;color:#777'><b>{core._esc(_queue_app_title(key))}</b> "
+            f"<code>{core._esc(key)}</code> · <code>{core._esc(entry.get('id') or '')}</code> · "
+            f"{core._esc(entry.get('ts') or '')}</div>"
+            f"<div style='font-size:12px;color:#777;margin-top:2px'>{core._esc(author)} "
+            f"<span style='color:#cc7a00'>{stars}</span></div>"
+            f"<p style='font-size:14px;white-space:pre-wrap'>{core._esc(entry.get('comment') or '')}</p>"
+            f"{shot}"
+            f"<form method='post' action='/queue/{core._esc(entry.get('id') or '')}/approve' "
+            "style='display:inline-block;margin-top:8px;margin-right:8px'>"
+            "<button style='background:#1f9d55;color:white;border:none;border-radius:5px;"
+            "padding:6px 13px;font-weight:700;cursor:pointer'>Approve</button></form>"
+            f"<form method='post' action='/queue/{core._esc(entry.get('id') or '')}/reject' "
+            "style='display:inline-flex;gap:6px;align-items:center;margin-top:8px'>"
+            "<input name='reason' placeholder='optional rejection reason' "
+            "style='font:inherit;font-size:12px;border:1px solid #ccc;border-radius:5px;padding:6px;width:220px'>"
+            "<button style='background:#555;color:white;border:none;border-radius:5px;"
+            "padding:6px 13px;font-weight:700;cursor:pointer'>Reject</button></form>"
+            "</section>"
+        )
+    return msg + "".join(cards)
 
 
 def _index() -> str:
@@ -218,6 +287,48 @@ def build_flask_app() -> Flask:
         return core._page("Agent settings",
                           core._settings_html(cfg.get("agent") or {}, cfg["gallery_path"],
                                               saved=request.args.get("saved") == "1"))
+
+    @app.route("/queue")
+    def _queue_page():
+        u = auth.current_user(core.REG.AUTH_CFG)
+        if not auth.is_admin(core.REG.AUTH_CFG, u):
+            return core._page("Held feedback queue", "<p style='color:#a33;font-size:13px'>Admins only — your "
+                             "account isn't in <code>auth.admin_groups</code>.</p>"), 403
+        return core._page("Held feedback queue", _queue_page_html(request.args.get("msg", "")))
+
+    @app.route("/queue/<feedback_id>/<action>", methods=["POST"])
+    def _queue_action(feedback_id, action):
+        u = auth.current_user(core.REG.AUTH_CFG)
+        if not auth.is_admin(core.REG.AUTH_CFG, u):
+            return core._page("Held feedback queue", "<p style='color:#a33;font-size:13px'>Admins only.</p>"), 403
+        if action not in {"approve", "reject"}:
+            return core._page("Held feedback queue", "<p style='color:#a33;font-size:13px'>Unknown queue action.</p>"), 400
+        found = _queue_find(feedback_id)
+        if not found:
+            return core._page("Held feedback queue", "<p style='color:#a33;font-size:13px'>Feedback not found.</p>"), 404
+        key, entry = found
+        if entry.get("kind") == "system" or entry.get("status") != "held":
+            return core._page("Held feedback queue", "<p style='color:#a33;font-size:13px'>Only held user feedback can be reviewed here.</p>"), 400
+
+        actor = _queue_actor(u)
+        if action == "approve":
+            ledger.add_system_note(
+                core.LEDGER_CFG,
+                key,
+                f"Moderation queue: approved by {actor}; dispatching to the agent.",
+                reply_to=[entry["id"]],
+                agent="curiator queue",
+            )
+            ledger.set_status(core.LEDGER_CFG, key, [entry["id"]], "new")
+            return redirect("/queue?msg=Approved")
+
+        reason = (request.form.get("reason") or "").strip()
+        text = f"Moderation queue: rejected by {actor}; closed without agent dispatch."
+        if reason:
+            text += f" Reason: {reason}"
+        ledger.add_system_note(core.LEDGER_CFG, key, text, reply_to=[entry["id"]], agent="curiator queue")
+        ledger.set_status(core.LEDGER_CFG, key, [entry["id"]], "rejected")
+        return redirect("/queue?msg=Rejected")
 
     @app.route("/api/feedback/<key>", methods=["GET", "POST"])
     def _feedback(key):

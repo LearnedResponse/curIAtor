@@ -162,6 +162,9 @@ curiator queue approve <feedback_id>         # held -> new; the watcher can disp
 curiator queue reject <feedback_id> "spam"   # held -> rejected; records a thread note
 ```
 
+Admins can also open **Queue** from the account menu in the React shell; it shows the same held pool
+and uses the same ledger transitions.
+
 `held` is admission control for public or over-quota feedback. It is distinct from
 `awaiting_approval`, which means the agent has already looked at a task and is asking a human to
 approve a plan.

@@ -106,6 +106,6 @@ scanner; still review ledgers, screenshots, traces, commits, and app data manual
 
 If the feedback form is exposed to the public internet, use a queue plus human review or
 `propose-only` by default. Do not let unauthenticated public comments trigger an autonomous agent with
-write access to a repo or credentials. The CLI moderation primitive is `curiator queue`: held feedback
-does not dispatch until an admin approves it (`held` → `new`), and rejected feedback closes as
-`rejected` with a ledger note.
+write access to a repo or credentials. The moderation primitives are the admin shell's `/queue` page
+and `curiator queue`: held feedback does not dispatch until an admin approves it (`held` → `new`), and
+rejected feedback closes as `rejected` with a ledger note.

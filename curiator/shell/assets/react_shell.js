@@ -295,7 +295,7 @@
     const verified = Boolean(user && user.name && mode !== "none");
     const name = user.name || "anonymous";
     const items = [];
-    if (auth.is_admin) items.push(["Settings", "/settings", "app-frame"]);
+    if (auth.is_admin) items.push(["Queue", "/queue", "app-frame"], ["Settings", "/settings", "app-frame"]);
     if (verified) {
       items.push(["Profile", "/profile", "app-frame"], ["Sign out", "/logout", "_top"]);
     } else {
