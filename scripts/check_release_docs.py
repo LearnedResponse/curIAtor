@@ -84,12 +84,14 @@ def check_release_docs(root: Path = ROOT, *, strict_launch: bool = False) -> lis
 
     for phrase in [
         "make release-check",
+        "make release-package-smoke",
         "PyPI Trusted Publishing",
         "GitHub to Zenodo integration",
         "git tag v",
         "docs/DEMO_SCRIPT.md",
         "release-evidence/release-preflight.json",
         "release-evidence/release-preflight-optional.json",
+        "release-evidence/release-package-smoke.json",
         "release-evidence/case-study-stats.json",
         "make paper-stats",
         "make paper-pdf",
@@ -110,6 +112,8 @@ def check_release_docs(root: Path = ROOT, *, strict_launch: bool = False) -> lis
     for phrase in [
         "paper-stats:",
         "paper-pdf:",
+        "release-package-smoke:",
+        "scripts/smoke_release_package.py",
         "scripts/update_paper_stats.py",
     ]:
         if phrase not in makefile_text:

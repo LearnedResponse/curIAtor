@@ -79,10 +79,13 @@ def test_release_evidence_target_writes_ignored_artifacts():
     gitignore = Path(".gitignore").read_text()
 
     assert "release-evidence:" in makefile
+    assert "release-package-smoke:" in makefile
     assert "paper-stats:" in makefile
     assert "paper-pdf:" in makefile
+    assert "scripts/smoke_release_package.py" in makefile
     assert "scripts/update_paper_stats.py" in makefile
     assert "release-evidence/release-preflight.json" in makefile
+    assert "release-evidence/release-package-smoke.json" in makefile
     assert "release-evidence/case-study-stats.json" in makefile
     assert "release-evidence/curiator-paper.pdf" in makefile
     assert "release-evidence/" in gitignore

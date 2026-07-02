@@ -136,16 +136,26 @@ def test_release_docs_requires_optional_preflight_artifact_in_runbook(tmp_path):
     module = _load_script()
     _copy_release_doc_fixture(tmp_path)
     release = tmp_path / "docs" / "RELEASE.md"
-    release.write_text(release.read_text().replace(
-        "release-evidence/release-preflight-optional.json",
-        "release-evidence/optional.json",
-    ))
+    release.write_text(
+        release.read_text()
+        .replace("release-evidence/release-preflight-optional.json", "release-evidence/optional.json")
+        .replace("release-evidence/release-package-smoke.json", "release-evidence/package.json")
+        .replace("make release-package-smoke", "make package-smoke")
+    )
 
     failures = module.check_release_docs(tmp_path)
 
     assert (
         "docs/RELEASE.md missing required phrase: "
         "release-evidence/release-preflight-optional.json"
+    ) in failures
+    assert (
+        "docs/RELEASE.md missing required phrase: "
+        "release-evidence/release-package-smoke.json"
+    ) in failures
+    assert (
+        "docs/RELEASE.md missing required phrase: "
+        "make release-package-smoke"
     ) in failures
 
 

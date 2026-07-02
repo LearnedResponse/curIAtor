@@ -130,7 +130,16 @@ curiator release-preflight --fresh-clone --strict --require-public-remotes --req
 ```
 
 Then verify from a separate fresh clone that the quickstart works with the released package, not only
-the local checkout.
+the local checkout. Before the external/off-machine proof, run the local installed-wheel smoke:
+
+```bash
+make release-package-smoke
+```
+
+This runs `make release-check`, installs the freshly built wheel from `dist/` into a temporary virtual
+environment, verifies `curiator` imports from that installed wheel, initializes a temporary collection,
+lists templates, and runs `curiator smoke`. Its JSON evidence is written to
+`release-evidence/release-package-smoke.json`.
 
 ## 6. Configure external release services
 
