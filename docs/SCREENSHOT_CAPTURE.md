@@ -31,7 +31,10 @@ cropped screenshot.
 Captured or uploaded screenshots can be annotated before saving. The current v1 tools burn boxes,
 arrows, numbered pins, and redaction rectangles into the PNG in the browser, before it is posted to
 the feedback ledger. That keeps the existing task-bundle path unchanged while letting the agent read
-a marked-up image directly.
+a marked-up image directly. In the React shell, non-redaction marks also store sanitized normalized
+coordinates, per-mark notes, and same-origin DOM target hints when available; prior feedback threads
+can reopen saved annotated entries as a scrollable preview of the marked screenshot and structured
+mark list.
 
 ## Browser screen capture: `getDisplayMedia`
 
