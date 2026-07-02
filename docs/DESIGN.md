@@ -316,11 +316,11 @@ The original extraction checklist is now mostly landed:
       source of truth plus screenshots, task bundles, replies, threaded feedback, run traces, the
       General/history view, and collapsible overlay drawers.
 - [x] Added README, task template, autonomy/security docs, release runbook, and app/galleries CLIs.
-- [ ] Before public launch: replace the generated `docs/demo.gif` with a real browser capture, fill
-      release-time paper evidence, publish the example collection repos, configure PyPI/Zenodo, and
-      rerun the loop from a machine that is not this one.
+- [ ] Before public launch: publish the example collection repos, configure PyPI/Zenodo, refresh paper
+      evidence from those published repos, and rerun the loop from a machine that is not this one.
 - [ ] Future layers: branch/merge/PR UI, heavier Docker/Compose orchestration, team-scale API context
-      bundles, and DOM-mapped annotation v2.
+      bundles, reputation/trust automation, and higher-fidelity capture options beyond the current
+      browser-native fallback.
 
 ## Landscape / differentiation
 
