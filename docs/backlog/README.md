@@ -40,8 +40,8 @@ deliberate (ship, let the example demos surface what to prioritize).
   Dash explorer **and a working Pyodide static port**. A domain-specialized sibling of
   `math-geometry-collection` for the phylo-networks community; first client-side-WASM-compute collection;
   the full eight-item seeded feedback loop is complete through `b1b3586`, and it ships with the paper's outreach.
-- [**annotated-feedback**](annotated-feedback.md) — draw on the captured screenshot (box / arrow / numbered
-  pin / redact) so feedback points at the exact element. **v1 burns the marks into the PNG** (rides the
-  existing Read-the-PNG path, front-end only); **v2 resolves each mark to its DOM element** via same-origin
-  `elementFromPoint` → a *code-locating* pointer a generic annotator can't produce. Core overlay feature —
-  every collection benefits.
+- [**annotated-feedback**](annotated-feedback.md) — **core landed**: captured screenshots can be marked
+  up with boxes, arrows, pins, redactions, and per-mark notes; marks burn into the PNG, structured
+  annotation metadata rides through the ledger/task bundle, and the React shell records same-origin DOM
+  targets when available. Remaining work is real browser drag/capture dogfood and the native-capture
+  fidelity follow-on.
