@@ -1,7 +1,8 @@
 # Backlog — the companion paper (Zenodo)
 
-> **Status:** scoped 2026-07-01; stats CLI and local Zenodo metadata landed, paper/DOI work not
-> started. A citable software/systems paper, self-archived on **Zenodo** with a DOI. Sequences last:
+> **Status:** scoped 2026-07-01; stats CLI, local Zenodo metadata, and a conservative `docs/paper/`
+> Markdown draft scaffold have landed. Paper/DOI publication work is still blocked on public
+> collection publication and Zenodo wiring. A citable software/systems paper, self-archived on **Zenodo** with a DOI. Sequences last:
 > the three public collections are its evaluation, so [public-release](public-release.md) → the
 > collections → this.
 
@@ -53,8 +54,10 @@ the durable record of that conversation.
    now emits the cross-collection case-study table directly.
    Remaining paper work: run it against each public collection after publication and cite the exact
    command/output snapshot.
-3. Draft in `docs/paper/` (markdown → pandoc PDF). Figures: the shell with the feedback panel, one
-   loop diagram, a rainbow→ISA-101 before/after, a git-log excerpt with provenance trailers.
+3. Draft in `docs/paper/` (markdown → pandoc PDF) — scaffolded with `curiator-paper.md` and
+   `reproducibility.md`, including release-time `curiator stats` commands and TODO markers instead of
+   invented numbers. Figures still needed: the shell with the feedback panel, one loop diagram, a
+   rainbow→ISA-101 before/after, a git-log excerpt with provenance trailers.
 4. Deposit on Zenodo; DOI badge in the README; decide on the JOSS submission after.
 
 ## Guardrails
