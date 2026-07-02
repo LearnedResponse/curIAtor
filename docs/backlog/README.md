@@ -58,3 +58,9 @@ deliberate (ship, let the example demos surface what to prioritize).
   as persisted `narrative` rows, an ordered `Narrated feedback` task-bundle block, compact prior-feedback summary, and
   transcript-timed annotation replay, with opt-in retained-audio replay for collections that choose to
   keep local clips.
+## Engineering / health
+
+- [**cli-modularization**](cli-modularization.md) — shrink the **5,471-line `curiator/cli.py`** one
+  command group at a time. First seam landed by moving `curiator voice` into
+  `curiator/voice/cli.py`; the rest stays incremental, behavior-preserving, and `test_cli_*`-gated
+  until a final `curiator/cli/` package cut-over is safe.
