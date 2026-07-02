@@ -13,6 +13,7 @@
     curiator queue      # review held feedback before dispatch
     curiator smoke      # run configured app smoke checks across the collection
     curiator galleries  # list nested curiator-* collection repos under ./galleries
+    curiator galleries adopt ../curiator-demo # move an existing collection repo under ./galleries
     curiator release-preflight # run doctor/smoke/path checks across release galleries or fresh clones
     curiator reset-demo # rewind the demo: re-break aviato, clear the ledger
     curiator demo-up    # reset-demo, then serve — one command, record-ready
@@ -200,6 +201,14 @@ def _discover_galleries(root: Path) -> list[Path]:
     )
 
 
+def _is_relative_to(path: Path, parent: Path) -> bool:
+    try:
+        path.relative_to(parent)
+    except ValueError:
+        return False
+    return True
+
+
 def _gallery_summary(repo: Path) -> dict:
     is_git = _git_output(repo, "rev-parse", "--is-inside-work-tree") == "true"
     dirty = _git_text(repo, "status", "--porcelain", "--untracked-files=all").splitlines() if is_git else []
@@ -243,6 +252,123 @@ def cmd_galleries(args) -> int:
         gallery = _rel_cmd_path(g["gallery"])
         print(f"  {g['name']}: {git}, {dirty}")
         print(f"    use: CURIATOR_GALLERY={shlex.quote(gallery)} curiator status")
+    return 0
+
+
+def _safe_gallery_name(name: str) -> str:
+    return name if name.startswith("curiator-") else f"curiator-{name}"
+
+
+def _valid_gallery_dir_name(name: str) -> bool:
+    return name.startswith("curiator-") and Path(name).name == name and name not in {"curiator-", ".", ".."}
+
+
+def _is_git_toplevel(repo: Path) -> bool:
+    top = _git_output(repo, "rev-parse", "--show-toplevel")
+    return bool(top) and Path(top).resolve() == repo.resolve()
+
+
+def _maybe_rewrite_nested_runner_path(gallery: Path, *, old_repo: Path, project: Path) -> list[dict]:
+    """After adopting a sibling checkout under galleries/, rewrite only the safe, common case:
+    runner.mode=checkout and runner.path used to resolve to this runner checkout. Public/pinned
+    galleries and custom runner targets are left untouched."""
+    import yaml
+
+    raw = yaml.safe_load(gallery.read_text()) or {}
+    if not isinstance(raw, dict):
+        return []
+    runner = raw.get("runner")
+    if not isinstance(runner, dict) or runner.get("mode") != "checkout":
+        return []
+    path = runner.get("path")
+    if not path:
+        return []
+    old_target = (old_repo / str(path)).resolve()
+    if old_target != project:
+        return []
+    new_path = os.path.relpath(project, gallery.parent)
+    if str(path) == new_path:
+        return []
+    runner["path"] = new_path
+    gallery.write_text(yaml.safe_dump(raw, sort_keys=False))
+    return [{
+        "field": "runner.path",
+        "from": str(path),
+        "to": new_path,
+        "reason": "source runner.path resolved to this curIAtor checkout before adoption",
+    }]
+
+
+def _adopt_gallery_payload(args) -> dict:
+    project = _project_root()
+    root = _galleries_root(args.root)
+    source = Path(args.source).expanduser()
+    source = source.resolve() if source.is_absolute() else (Path.cwd() / source).resolve()
+    name = _safe_gallery_name(args.name or source.name)
+    dest = (root / name).resolve()
+    payload = {
+        "ok": False,
+        "action": "copy" if args.copy else "move",
+        "source": str(source),
+        "destination": str(dest),
+        "gallery": str(dest / "gallery.yaml"),
+        "runner_rewrites": [],
+        "use": f"CURIATOR_GALLERY={_rel_cmd_path(str(dest / 'gallery.yaml'))} curiator status",
+    }
+    if not source.exists() or not source.is_dir():
+        payload["error"] = f"source directory not found: {source}"
+        return payload
+    if not (source / "gallery.yaml").exists():
+        payload["error"] = f"source is not a curIAtor gallery (missing gallery.yaml): {source}"
+        return payload
+    if not _is_git_toplevel(source):
+        payload["error"] = f"source must be its own git repository: {source}"
+        return payload
+    if not _valid_gallery_dir_name(name):
+        payload["error"] = f"destination name must be a single curiator-* directory: {name}"
+        return payload
+    if source == dest:
+        payload["ok"] = True
+        payload["already_nested"] = True
+        return payload
+    if _is_relative_to(root, source):
+        payload["error"] = f"refusing to adopt into a root inside the source directory: {root}"
+        return payload
+    if dest.exists():
+        payload["error"] = f"destination already exists: {dest}"
+        return payload
+
+    root.mkdir(parents=True, exist_ok=True)
+    if args.copy:
+        shutil.copytree(source, dest)
+    else:
+        shutil.move(str(source), str(dest))
+    if not args.no_rewrite_runner:
+        payload["runner_rewrites"] = _maybe_rewrite_nested_runner_path(
+            dest / "gallery.yaml",
+            old_repo=source,
+            project=project,
+        )
+    payload["ok"] = True
+    return payload
+
+
+def cmd_galleries_adopt(args) -> int:
+    payload = _adopt_gallery_payload(args)
+    if args.json:
+        print(json.dumps(payload, indent=2))
+        return 0 if payload["ok"] else 1
+    if not payload["ok"]:
+        print(f"curiator: galleries adopt FAILED — {payload.get('error', 'unknown error')}")
+        return 1
+    verb = "copied" if payload["action"] == "copy" else "moved"
+    if payload.get("already_nested"):
+        print(f"curiator: gallery is already nested at {payload['destination']}")
+    else:
+        print(f"curiator: {verb} {payload['source']} -> {payload['destination']}")
+    for rewrite in payload["runner_rewrites"]:
+        print(f"  rewrote {rewrite['field']}: {rewrite['from']} -> {rewrite['to']}")
+    print(f"  use: {payload['use']}")
     return 0
 
 
@@ -2009,10 +2135,21 @@ def main(argv=None) -> int:
     sm.add_argument("--jobs", type=int, default=1, help="run up to N smoke checks concurrently (default: 1)")
     sm.add_argument("--json", action="store_true", help="emit machine-readable results")
     sm.set_defaults(func=cmd_smoke)
-    gl = sub.add_parser("galleries", help="list nested curiator-* collection repos")
+    gl = sub.add_parser("galleries", help="list or adopt nested curiator-* collection repos")
     gl.add_argument("--root", default="galleries", help="directory containing curiator-* gallery repos")
     gl.add_argument("--json", action="store_true", help="emit machine-readable gallery repo status")
     gl.set_defaults(func=cmd_galleries)
+    gl_sub = gl.add_subparsers(dest="galleries_action")
+    adopt = gl_sub.add_parser("adopt", help="move or copy an existing gallery repo under ./galleries")
+    adopt.add_argument("source", help="existing curIAtor gallery repo to adopt, e.g. ../curiator-aviato")
+    adopt.add_argument("--root", default=argparse.SUPPRESS, help="directory containing curiator-* gallery repos")
+    adopt.add_argument("--name", help="destination directory name; curiator- is added if omitted")
+    adopt.add_argument("--copy", action="store_true", help="copy instead of moving the source repo")
+    adopt.add_argument("--no-rewrite-runner", action="store_true",
+                       help="do not rewrite checkout runner.path when it points at this curIAtor checkout")
+    adopt.add_argument("--json", action="store_true", default=argparse.SUPPRESS,
+                       help="emit machine-readable adoption result")
+    adopt.set_defaults(func=cmd_galleries_adopt)
     rp = sub.add_parser("release-preflight", help="run release checks across nested public galleries")
     rp.add_argument("--root", default="galleries", help="directory containing curiator-* gallery repos")
     rp.add_argument("--gallery", action="append",

@@ -53,6 +53,9 @@ All notable changes to curIAtor are documented here. The format follows
   histories.
 - `curiator galleries` lists nested `galleries/curiator-*` collection repos with git head, dirty state,
   and the `CURIATOR_GALLERY=...` command for targeting one from the runner checkout.
+- `curiator galleries adopt <repo>` moves or copies an existing sibling collection repo under
+  `galleries/` while preserving its `.git` history and rewriting the safe checkout-runner path to the
+  nested `../..` form.
 - A generated `docs/demo.gif` storyboard now ships at the README hero path, with `make demo-gif` /
   `scripts/render_demo_gif.py` to regenerate it until the final live browser recording replaces it.
 - `SECURITY.md` documents the prompt-injection caveat, collection-level containment boundary, autonomy

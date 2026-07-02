@@ -56,6 +56,17 @@ curiator galleries
 CURIATOR_GALLERY=galleries/curiator-my-topic/gallery.yaml curiator status
 ```
 
+Adopt an existing sibling collection repo into that workspace without collapsing its git history:
+
+```bash
+curiator galleries adopt ../curiator-aviato
+```
+
+The command moves the repo to `galleries/curiator-aviato/`, refuses non-gallery or non-git sources,
+and rewrites the safe sibling-runner case from `runner: {mode: checkout, path: ../curiator}` to the
+nested equivalent `runner: {mode: checkout, path: ../..}`. Use `--copy` to leave the sibling checkout
+in place while testing the migration.
+
 From a nested gallery, use `runner: { mode: checkout, path: ../.. }` when ◆ General feedback should
 patch the parent runner checkout. Public/example collections that should work after `pip install
 curiator` should stay on `runner: { mode: pinned }`.
