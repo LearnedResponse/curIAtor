@@ -37,8 +37,9 @@ leave feedback → watch the fix land and the ⚙ reply arrive. Every item below
    collections carry those current paths and now default to `runner.mode: pinned` for standalone
    `pip install curiator` use (`curiator-aviato` `b23e0bc`, `curiator-ot` `36e21cf`,
    `curiator-geometry` `e6d9141`). `curiator doctor` now gives a local preflight for machine-absolute paths,
-   missing app roots/sources, weak smoke coverage, and suspicious proxy port wiring; `curiator smoke`
-   runs the same per-app smoke hooks used by git-as-memory commits. From the runner checkout,
+   missing app roots/sources, weak smoke coverage, suspicious proxy port wiring, missing command
+   executables, and common missing dependency manifests; `curiator smoke` runs the same per-app smoke
+   hooks used by git-as-memory commits. From the runner checkout,
    `curiator release-preflight` runs those checks across the nested public galleries and also rejects
    dirty nested repos or tracked machine-local paths; `curiator release-preflight --fresh-clone` repeats
    the same gate from temporary clones of the committed gallery histories. Remaining release work is

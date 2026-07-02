@@ -375,6 +375,87 @@ def _doctor_scan_portability(node, where: str, issues: list[dict], needles: tupl
             _doctor_scan_portability(value, f"{where}[{i}]", issues, needles)
 
 
+def _command_executable(command: str | None) -> str | None:
+    if not command:
+        return None
+    try:
+        parts = shlex.split(str(command))
+    except ValueError:
+        return None
+    if not parts:
+        return None
+    if parts[0] == "env":
+        parts = parts[1:]
+    while parts and "=" in parts[0] and not parts[0].startswith(("/", "./", "../")):
+        key, _, _ = parts[0].partition("=")
+        if not key.replace("_", "").isalnum():
+            break
+        parts = parts[1:]
+    return parts[0] if parts else None
+
+
+def _executable_exists(executable: str, cwd: Path) -> bool:
+    p = Path(executable)
+    if p.is_absolute():
+        return p.exists()
+    if any(sep in executable for sep in ("/", "\\")):
+        return (cwd / p).exists()
+    return shutil.which(executable) is not None
+
+
+def _doctor_warn_missing_executable(
+    issues: list[dict],
+    *,
+    where: str,
+    command: str | None,
+    cwd: Path,
+    label: str,
+) -> None:
+    executable = _command_executable(command)
+    if not executable or _executable_exists(executable, cwd):
+        return
+    issues.append({
+        "severity": "warning",
+        "where": where,
+        "message": f"{label} executable not found on PATH: {executable}",
+    })
+
+
+def _manifest_expectations(command: str | None) -> dict[str, list[str]]:
+    executable = (_command_executable(command) or "").lower()
+    command_text = str(command or "").lower()
+    if executable in {"npm", "pnpm", "yarn", "bun", "node"}:
+        return {"Node app": ["package.json"]}
+    if executable == "streamlit" or "streamlit run" in command_text:
+        return {"Python/Streamlit app": ["requirements.txt", "pyproject.toml", "environment.yml", "environment.yaml"]}
+    if executable == "cargo":
+        return {"Rust app": ["Cargo.toml"]}
+    return {}
+
+
+def _doctor_warn_missing_manifests(
+    issues: list[dict],
+    *,
+    name: str,
+    root: Path,
+    commands: list[str | None],
+) -> None:
+    seen: set[tuple[str, tuple[str, ...]]] = set()
+    for command in commands:
+        for label, filenames in _manifest_expectations(command).items():
+            key = (label, tuple(filenames))
+            if key in seen:
+                continue
+            seen.add(key)
+            if any((root / filename).exists() for filename in filenames):
+                continue
+            issues.append({
+                "severity": "warning",
+                "where": f"app {name} dependencies",
+                "message": f"{label} is missing dependency manifest ({' or '.join(filenames)}) in {root}",
+            })
+
+
 def _doctor_issues(cfg: dict) -> list[dict]:
     import yaml
 
@@ -399,6 +480,7 @@ def _doctor_issues(cfg: dict) -> list[dict]:
     for spec in app_specs(cfg):
         name = str(spec.get("name") or spec.get("app_name") or "<unknown>")
         mount = spec.get("mount") or {}
+        root_path = Path(spec.get("root") or repo)
         source_path = Path(spec.get("source") or "")
         for label in ("root", "source"):
             raw_path = spec.get(label)
@@ -421,15 +503,36 @@ def _doctor_issues(cfg: dict) -> list[dict]:
                 "where": f"app {name} smoke",
                 "message": "no smoke command configured; release preflight will use only a weak fallback",
             })
+        if spec.get("smoke"):
+            _doctor_warn_missing_executable(
+                issues,
+                where=f"app {name} smoke",
+                command=str(spec.get("smoke") or ""),
+                cwd=root_path,
+                label="smoke command",
+            )
         if mount.get("kind") == "proxy":
             cmd = str(mount.get("cmd") or "")
             port = mount.get("port")
+            _doctor_warn_missing_executable(
+                issues,
+                where=f"app {name} proxy",
+                command=cmd,
+                cwd=root_path,
+                label="proxy command",
+            )
             if port is not None and "{port}" not in cmd and str(port) not in cmd:
                 issues.append({
                     "severity": "warning",
                     "where": f"app {name} proxy",
                     "message": f"proxy command does not mention configured port {port}",
                 })
+        _doctor_warn_missing_manifests(
+            issues,
+            name=name,
+            root=root_path,
+            commands=[spec.get("smoke"), mount.get("cmd")],
+        )
     return issues
 
 

@@ -154,7 +154,7 @@ curiator stats compare ../curiator-aviato ../curiator-ot ../curiator-geometry --
 Before moving or publishing a collection, run the portability preflight:
 
 ```bash
-curiator doctor                # errors on absolute/missing paths; warns on weak smoke/proxy config
+curiator doctor                # errors on absolute/missing paths; warns on weak smoke/proxy/dependencies
 curiator doctor --json
 curiator smoke                 # runs each app's configured smoke command/fallback import
 curiator smoke --app revenue --json

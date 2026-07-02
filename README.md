@@ -117,10 +117,10 @@ and streams stdout/stderr to `feedback/replies/<feedback_id>.md`; click a `worki
 badge to inspect the trace. When you want the receipts, `curiator stats` summarizes the ledger and
 git-as-memory commits as human-readable text, JSON, Markdown tables, or CSV rows. Before publishing or
 moving a collection, `curiator doctor` flags machine-absolute paths, missing app roots/sources, weak
-smoke coverage, and suspicious proxy commands, then `curiator smoke` runs each app's configured smoke
-command. In this checkout, `curiator release-preflight` runs those checks across the nested public
-example galleries under `galleries/`; add `--fresh-clone` to verify the committed state survives a
-same-machine clone. Screenshot capture details and fidelity tradeoffs are in
+smoke coverage, missing command/dependency setup, and suspicious proxy commands, then `curiator smoke`
+runs each app's configured smoke command. In this checkout, `curiator release-preflight` runs those
+checks across the nested public example galleries under `galleries/`; add `--fresh-clone` to verify
+the committed state survives a same-machine clone. Screenshot capture details and fidelity tradeoffs are in
 [`docs/SCREENSHOT_CAPTURE.md`](docs/SCREENSHOT_CAPTURE.md).
 
 Already inside an app repo with Claude Code or Codex? Link it once and use the same loop interactively:

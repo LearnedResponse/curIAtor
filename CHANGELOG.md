@@ -37,8 +37,9 @@ All notable changes to curIAtor are documented here. The format follows
 - Generated task bundles now use repo-relative app roots, source scopes, screenshots, ledger paths, and
   ready commands for self-contained collections, reducing machine-absolute paths in published examples.
 - `curiator doctor` checks collection portability by flagging machine-absolute config paths and missing
-  app roots/sources as errors, with release-hardening warnings for missing smoke hooks and proxy commands
-  that do not mention their configured port.
+  app roots/sources as errors, with release-hardening warnings for missing smoke hooks, proxy commands
+  that do not mention their configured port, missing command executables, and common missing dependency
+  manifests such as `package.json`, `requirements.txt`, and `Cargo.toml`.
 - `curiator smoke` runs each app's configured smoke command or fallback import check across a collection,
   with `--app`, `--json`, and configurable `smoke_timeout` / `smoke.timeout` limits for release
   preflight automation.

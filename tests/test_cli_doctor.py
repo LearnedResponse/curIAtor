@@ -56,3 +56,56 @@ def test_doctor_warns_without_failing_for_weak_release_smoke(collection, capsys)
     messages = "\n".join(issue["message"] for issue in payload["issues"])
     assert "no smoke command configured" in messages
     assert "does not mention configured port 8800" in messages
+
+
+def test_doctor_warns_for_missing_smoke_executable_without_failing(collection, capsys, monkeypatch):
+    from curiator import cli
+
+    monkeypatch.setattr(cli.shutil, "which", lambda exe: None if exe == "missing-smoke-tool" else f"/usr/bin/{exe}")
+    (collection / "gallery.yaml").write_text(textwrap.dedent("""\
+        apps:
+          - name: sample
+            title: Sample
+            mount: { kind: dash-inproc, module: sample }
+            source: apps/sample.py
+            smoke: missing-smoke-tool --check apps/sample.py
+    """))
+
+    assert cli.main(["doctor", "--json"]) == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["ok"] is True
+    assert payload["errors"] == 0
+    messages = "\n".join(issue["message"] for issue in payload["issues"])
+    assert "smoke command executable not found on PATH: missing-smoke-tool" in messages
+
+
+def test_doctor_warns_for_missing_dependency_manifests_separately(collection, capsys, monkeypatch):
+    from curiator import cli
+
+    monkeypatch.setattr(cli.shutil, "which", lambda exe: f"/usr/bin/{exe}")
+    (collection / "apps" / "node_panel").mkdir()
+    (collection / "apps" / "node_panel" / "server.js").write_text("console.log('ok')\n")
+    (collection / "apps" / "streamlit_panel").mkdir()
+    (collection / "apps" / "streamlit_panel" / "app.py").write_text("print('ok')\n")
+    (collection / "gallery.yaml").write_text(textwrap.dedent("""\
+        apps:
+          - name: node_panel
+            root: apps/node_panel
+            source: .
+            smoke: npm run build
+            mount: { kind: proxy, cmd: "npm run dev -- --port 8800", port: 8800 }
+          - name: streamlit_panel
+            root: apps/streamlit_panel
+            source: .
+            smoke: python -m py_compile app.py
+            mount: { kind: proxy, cmd: "streamlit run app.py --server.port 8801", port: 8801 }
+    """))
+
+    assert cli.main(["doctor", "--json"]) == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["ok"] is True
+    assert payload["errors"] == 0
+    messages = "\n".join(issue["message"] for issue in payload["issues"])
+    assert "Node app is missing dependency manifest (package.json)" in messages
+    assert "Python/Streamlit app is missing dependency manifest" in messages
+    assert "requirements.txt or pyproject.toml" in messages
