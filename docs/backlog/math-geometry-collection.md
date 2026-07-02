@@ -1,6 +1,6 @@
 # Backlog — math/geometry example collection (public)
 
-> **Status:** scaffolded 2026-07-01 in sibling repo `../curiator-geometry`. The third public example for the
+> **Status:** scaffolded 2026-07-01 in nested repo `galleries/curiator-geometry`. The third public example for the
 > [release](public-release.md) — and the origin story made public: curIAtor's shell was proven over
 > dozens of feedback→fix cycles in a private research repo full of interactive geometry explainers
 > before it was extracted. **The IP guardrail up front:** this is a NEW collection of public-knowledge
@@ -55,7 +55,7 @@ feedback ledger has 12 apps with at least one 4+ star rating:
 
 ## Work-order
 
-1. `curiator init ../curiator-geometry` — done.
+1. `curiator init galleries/curiator-geometry` — done.
 2. Write the apps — numpy/plotly only, deterministic, no data files beyond generated ones — done for
    the first seven-app seed.
 3. `seed/feedback.yaml` authored as a mathematician-reviewer — done; the feedback must read like a colleague
@@ -67,10 +67,10 @@ feedback ledger has 12 apps with at least one 4+ star rating:
 
 ## Current checks
 
-- `curiator doctor` against `../curiator-geometry/gallery.yaml`: passing, no errors or warnings.
-- `curiator smoke` against `../curiator-geometry/gallery.yaml`: passing for all seven apps.
+- `curiator doctor` against `galleries/curiator-geometry/gallery.yaml`: passing, no errors or warnings.
+- `curiator smoke` against `galleries/curiator-geometry/gallery.yaml`: passing for all seven apps.
 - Direct import/build check: every Dash module exposes a layout through `build_app()`.
-- `../curiator-geometry` is initialized as a git repo on `main` with seed commit `c409fcf`; current
+- `galleries/curiator-geometry` is initialized as a git repo on `main` with seed commit `c409fcf`; current
   head `e6d9141` adds repo-local `.claude/commands/curiator.md` /
   `.agents/skills/curiator/SKILL.md` interactive shims and switches the public collection to
   `runner.mode: pinned`.

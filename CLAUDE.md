@@ -65,10 +65,12 @@ task/trace artifacts, elevated agent profiles, and the **interactive app-repo wo
 (`link` / `status` / `context` / `work` / `done` / `commands`) so a Claude Code/Codex session drives the
 same ledger/reply/reload/git path as the headless watcher.
 
-Real collections dogfooding it (siblings of this repo):
-- `../curiator-finance` — codex adapter, seeded "self-building demo" (Paola's feedback queue).
-- `../curiator-aviato` — mixed content: multi-mount Dash dir, React/Node SSR + Rust via `proxy`, link + command shims.
-- `../curiator-Kwisatz` — the original research repo with curIAtor overlaid: 63 generated `dash-inproc` apps.
+Real collections dogfooding it (nested repos under `galleries/`, ignored by the parent repo):
+- `galleries/curiator-finance` — codex adapter, seeded "self-building demo" (Paola's feedback queue).
+- `galleries/curiator-aviato` — mixed content: multi-mount Dash dir, React/Node SSR + Rust via `proxy`, link + command shims.
+- `galleries/curiator-ot` — OT/HMI-maintenance flagship collection.
+- `galleries/curiator-geometry` — public-knowledge math/geometry quickstart collection.
+- `galleries/curiator-Kwisatz` — the original private research repo with curIAtor overlaid: 63 generated `dash-inproc` apps.
 
 The backlog (`docs/backlog/`) is now organized around a **public release track**: GitHub release v0.2.x
 with three public example collections (aviato, OT/HMI, math/geometry) + Zenodo DOI + a companion paper.

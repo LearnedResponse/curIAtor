@@ -29,6 +29,20 @@ my-collection/
   README.md
 ```
 
+For dogfooding multiple collections next to the runner checkout, keep each collection as an
+independent nested repo under `galleries/`:
+
+```
+curiator/
+  galleries/
+    curiator-aviato/      # independent git repo, ignored by the parent runner repo
+    curiator-ot/          # independent git repo
+```
+
+From a nested gallery, use `runner: { mode: checkout, path: ../.. }` when ◆ General feedback should
+patch the parent runner checkout. Public/example collections that should work after `pip install
+curiator` should stay on `runner: { mode: pinned }`.
+
 **Add an app with the CLI:** this creates an app directory and updates `gallery.yaml`:
 
 ```bash
@@ -147,6 +161,7 @@ curiator smoke --app revenue --json
 |---|---|---|---|
 | **Pinned package** *(default)* | `pip install curiator` | `runner: { mode: pinned }` | consumers — you just use the runner |
 | **Editable checkout** | `pip install -e ../curiator` (a sibling git checkout) | `runner: { mode: checkout, path: ../curiator }` | contributors — you also improve the runner |
+| **Nested gallery** | run from this checkout | `runner: { mode: checkout, path: ../.. }` | local dogfooding under `galleries/<collection>` |
 
 Both keep your apps repo clean: the runner is a dependency, never entangled with your app code. The
 public surface (the `gallery.yaml` schema, the adapter interface, the CLI) is small and stable, so

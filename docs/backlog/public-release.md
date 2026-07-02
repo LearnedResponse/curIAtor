@@ -4,8 +4,8 @@
 > GitHub as v0.2.x with **three public example collections** — `curiator-aviato` (mixed frameworks,
 > local and same-machine temp-clone portability preflights now pass; off-machine fresh-clone gate
 > remains), `curiator-ot`
-> ([the OT/HMI flagship](ot-hmi-demo.md), scaffolded in `../curiator-ot`), and a
-> [math/geometry explainer collection](math-geometry-collection.md) (scaffolded in `../curiator-geometry`) — plus a Zenodo-archived,
+> ([the OT/HMI flagship](ot-hmi-demo.md), scaffolded in `galleries/curiator-ot`), and a
+> [math/geometry explainer collection](math-geometry-collection.md) (scaffolded in `galleries/curiator-geometry`) — plus a Zenodo-archived,
 > DOI-citable release and a companion paper ([zenodo-paper](zenodo-paper.md)).
 
 ## The bar

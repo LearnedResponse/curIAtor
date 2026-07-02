@@ -128,8 +128,10 @@ only; real apps never live in the generic repo (that's what keeps it generic).
 | **C — template + upstream** | create-from-template, merge upstream for updates | ✅ at start, drifts | merge/cherry-pick friction |
 
 **Recommend A + an editable escape hatch.** Default: pin the package. To improve the runner while
-dogfooding, `pip install -e ../curiator` from a sibling checkout — both live, runner edits PR straight
-up, your apps repo untouched. A runner improvement is then always a self-contained diff against the
+dogfooding, either `pip install -e ../curiator` from a sibling checkout or keep the collection as a
+nested repo under `curiator/galleries/<collection>` with `runner: {mode: checkout, path: ../..}`.
+Both layouts keep the apps repo's git history separate while letting runner edits land as tracked
+diffs against the generic repo. A runner improvement is then always a self-contained diff against the
 generic repo, never entangled with anyone's apps. **Keep the public surface small + stable** (the
 `gallery.yaml` schema + the adapter interface + the CLI) so configs survive runner upgrades and runner
 PRs need know nothing about apps.
@@ -157,12 +159,13 @@ patching it there is a dead end. So the General channel's *action* keys off the 
 | **editable checkout** (early / contributor) | curator **patches the runner locally** (tracked) → you PR it upstream |
 | **pinned package** (mature / consumer) | curator **drafts an upstream issue/PR** — the feedback becomes a *contribution*, not a local edit |
 
-`gallery.yaml` can carry `runner: { mode: checkout|pinned, path: ../curiator }` so the channel knows
-which behavior to use. It **degrades gracefully**: early you run the checkout and the runner is fair
-game; as it stabilizes you pin the package and the *same gesture* switches from "local patch" to "file
-upstream" — no up-front decision about whether you'll ever need generic mutability. Bonus: with the
-checkout, **curiator maintains curiator** — feedback on the shell chrome patches the shell. Good dev
-loop, good README story.
+`gallery.yaml` can carry `runner: { mode: checkout|pinned, path: ../curiator }` for sibling layouts or
+`runner: { mode: checkout, path: ../.. }` for nested `galleries/<collection>` layouts, so the channel
+knows which behavior to use. It **degrades gracefully**: early you run the checkout and the runner is
+fair game; as it stabilizes you pin the package and the *same gesture* switches from "local patch" to
+"file upstream" — no up-front decision about whether you'll ever need generic mutability. Bonus: with
+the checkout, **curiator maintains curiator** — feedback on the shell chrome patches the shell. Good
+dev loop, good README story.
 
 ## Git as the memory
 

@@ -1,6 +1,6 @@
 # Backlog — OT / HMI-maintenance example collection (flagship demo)
 
-> **Status:** scaffolded 2026-07-01 in sibling repo `../curiator-ot`. A flagship cross-domain example and one of the three collections in
+> **Status:** scaffolded 2026-07-01 in nested repo `galleries/curiator-ot`. A flagship cross-domain example and one of the three collections in
 > the [public release](public-release.md). Captured 2026-06-29. **v1 scope cut (2026-07-01): no MING
 > stack in v1.** The sim writes straight to a lightweight local historian (SQLite/parquet); the full
 > Mosquitto → Telegraf → InfluxDB compose moves to v2. Rationale: the curator never touches the data
@@ -58,12 +58,12 @@ feedback" is a pitch the OT crowd feels in their bones.
 
 ## Current checks
 
-- `curiator status` / `curiator context --app overview` work against `../curiator-ot/gallery.yaml`.
-- `curiator doctor` against `../curiator-ot/gallery.yaml`: passing, no errors or warnings.
-- `curiator smoke` against `../curiator-ot/gallery.yaml`: passing; smoke regenerates deterministic
+- `curiator status` / `curiator context --app overview` work against `galleries/curiator-ot/gallery.yaml`.
+- `curiator doctor` against `galleries/curiator-ot/gallery.yaml`: passing, no errors or warnings.
+- `curiator smoke` against `galleries/curiator-ot/gallery.yaml`: passing; smoke regenerates deterministic
   historian data and imports/builds the Dash HMI.
 - Direct import/build check: `overview.build_app()` exposes a layout and reads historian rows.
-- `../curiator-ot` is initialized as a git repo on `main` with seed commit `6c5e2d6`; the current
+- `galleries/curiator-ot` is initialized as a git repo on `main` with seed commit `6c5e2d6`; the current
   `curiator/auto` head is `36e21cf`, which migrates the Codex shim from `.codex/skills` to
   `.agents/skills` and switches the public collection to `runner.mode: pinned`.
 - Seeded feedback loop is complete on `curiator/auto`: 10 curator commits (`6e587f2`, `a7009b1`,
