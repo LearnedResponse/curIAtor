@@ -88,8 +88,12 @@ def test_react_shell_has_burned_screenshot_annotations(web_client):
     assert "function useAnnotationDraft" in js
     assert "function composeShot" in js
     assert "function withDomTarget" in js
+    assert "function annotationDoc" in js
     assert "function selectorFor" in js
     assert "function annotationTarget" in js
+    assert 'mark.tool === "redact" || !doc || !doc.elementFromPoint' in js
+    assert "return withDomTarget(mark, annotationDoc())" in js
+    assert "return null;" in js
     assert "rshell-annotation-preview-btn" in js
     assert "rshell-annotation-modal" in js
     assert "rshell-annotation-replay-overlay" in js

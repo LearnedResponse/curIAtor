@@ -1,6 +1,7 @@
 # Backlog — annotated screen captures (point the agent at the element)
 
-> **Status:** v1 burn-in landed 2026-07-01; v2 structured annotation metadata started 2026-07-02.
+> **Status:** v1 burn-in landed 2026-07-01; core v2 structured annotation metadata/replay/editing
+> landed 2026-07-02. Broader dogfood validation is still open.
 > A core feedback-overlay upgrade: draw on the captured screenshot so feedback points at exactly the
 > element it means.
 > Captured 2026-06-30.
@@ -72,8 +73,10 @@ Two tiers, and the second is the one only curiator can do:
    redactions, and pins from normalized coordinates on top of the preview image. The modal can switch
    into an editable-copy view, then load that screenshot and adjusted mark set into the reply composer;
    historical ledger entries stay immutable.
-6. **Graceful fallback.** Same-origin only (already the screenshot moat's requirement); for
-   a cross-origin proxy iframe, fall back to burn-in-only for that mount.
+6. **Graceful fallback** — landed in the React shell. Same-origin DOM lookup is attempted only when
+   the mounted iframe document is readable and exposes `elementFromPoint`; redactions, uploads, and
+   unreadable/cross-origin mounts still save burned-in marks and structured coordinates, just without a
+   DOM target.
 
 ## Guardrails
 
@@ -84,7 +87,8 @@ Two tiers, and the second is the one only curiator can do:
 - **Element-relative coords** (survive re-render/replay); don't pin to the viewport.
 - **Additive, not a regression.** The existing plain-screenshot feedback path must keep
   working untouched; annotation is opt-in.
-- **Same-origin gate for v2** — degrade to burn-in for cross-origin mounts, don't error.
+- **Same-origin gate for v2** — degrade to burn-in/coordinates-only for cross-origin mounts, don't
+  error.
 
 ## Why curiator (the differentiator)
 

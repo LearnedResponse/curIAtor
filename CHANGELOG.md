@@ -29,7 +29,8 @@ All notable changes to curIAtor are documented here. The format follows
   blocks; annotations are burned into the PNG before it is saved to the ledger, and structured
   annotation metadata records per-mark notes plus same-origin DOM target hints for task bundles and
   saved-feedback preview, including a modal replay overlay reconstructed from the saved mark
-  coordinates and an editable-copy path back into the reply composer.
+  coordinates and an editable-copy path back into the reply composer. DOM target lookup now explicitly
+  degrades to coordinates-only when the mounted app frame is unreadable or cross-origin.
 - Interactive app-repo workflow: `curiator link`, `status`, `context`, `work`, `done`, `open`, and
   `commands install` let Claude Code/Codex sessions use the same ledger/task/reply/git path without
   spawning a separate headless agent.

@@ -153,8 +153,9 @@ The current screenshot path uses same-origin `html2canvas` with upload as the fa
 [`SCREENSHOT_CAPTURE.md`](SCREENSHOT_CAPTURE.md) for fidelity, privacy, and native-capture options.
 In the React shell, burned-in annotations also carry sanitized normalized coordinates and same-origin
 DOM target hints into the task bundle when available, plus any short per-mark notes you enter;
-redaction marks do not carry targets. Prior feedback threads show those annotation summaries, and
-saved annotated entries can be reopened as a scrollable preview from the feedback panel.
+redaction marks, uploads, and unreadable/cross-origin mounts do not carry DOM targets. Prior feedback
+threads show those annotation summaries, and saved annotated entries can be reopened as a scrollable
+preview from the feedback panel or loaded as an editable reply draft.
 
 ## 3. Work Interactively From An App Repo
 

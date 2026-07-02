@@ -622,14 +622,17 @@
       r.readAsDataURL(file);
     }
 
-    function annotate(mark) {
+    function annotationDoc() {
       try {
         const iframe = document.getElementById("app-frame");
-        const doc = iframe && (iframe.contentDocument || (iframe.contentWindow && iframe.contentWindow.document));
-        return withDomTarget(mark, doc);
+        return iframe && (iframe.contentDocument || (iframe.contentWindow && iframe.contentWindow.document));
       } catch (e) {
-        return mark;
+        return null;
       }
+    }
+
+    function annotate(mark) {
+      return withDomTarget(mark, annotationDoc());
     }
 
     function useAnnotationDraft(entry, marks) {
