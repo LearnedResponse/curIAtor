@@ -79,7 +79,10 @@ lightweight proxy's production reverse-proxy limits.
 
 When a proxied app cannot start or the backend port never responds, the app iframe shows a proxy
 diagnostic page with the configured command, working directory, port, target URL, process state, and
-recent stdout/stderr from the launched process.
+recent stdout/stderr from the launched process. The built-in proxy is intentionally lightweight: if a
+framework dev server sends WebSocket upgrade requests for HMR, curIAtor returns an explicit
+WebSocket/HMR diagnostic rather than silently failing. Use the scaffold `commands.preview` path or put
+a full reverse proxy such as nginx/Caddy in front when live HMR is required.
 
 You can also register an existing app manually: drop `apps/<name>.py` (exposing
 `build_app() -> dash.Dash`, plus a module-level `app`), then add an entry to `gallery.yaml`:

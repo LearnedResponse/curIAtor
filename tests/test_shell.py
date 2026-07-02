@@ -89,6 +89,35 @@ def test_proxy_diagnostics_include_command_cwd_port_and_recent_logs(shell_mod, t
     assert "dev server booting" in body
 
 
+def test_proxy_websocket_upgrade_reports_hmr_limit(shell_mod, monkeypatch, tmp_path):
+    from io import BytesIO
+
+    monkeypatch.setattr(shell_mod, "_ensure_proxy", lambda key, rec: (True, None))
+    statuses = []
+
+    def start_response(status, headers):
+        statuses.append((status, headers))
+
+    body = b"".join(shell_mod._proxy_call(
+        "react_board",
+        {"root": str(tmp_path), "mount": {"kind": "proxy", "cmd": "npm run dev", "port": 8700}},
+        "/@vite/client",
+        {
+            "REQUEST_METHOD": "GET",
+            "QUERY_STRING": "",
+            "HTTP_CONNECTION": "Upgrade",
+            "HTTP_UPGRADE": "websocket",
+            "wsgi.input": BytesIO(b""),
+        },
+        start_response,
+    )).decode()
+
+    assert statuses[0][0] == "501 Not Implemented"
+    assert "WebSocket/HMR upgrade requests are not supported" in body
+    assert "npm run dev" in body
+    assert "http://127.0.0.1:8700/@vite/client" in body
+
+
 # ── boot + the pages that crashed ────────────────────────────────────────────
 def test_index_and_general_serve(client):
     assert client.get("/").status_code == 200            # the Dash shell index

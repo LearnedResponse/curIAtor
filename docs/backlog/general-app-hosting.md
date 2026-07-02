@@ -128,8 +128,9 @@ svelte / vue / streamlit / gradio), each emitting a directory + the right `mount
    Gradio has the same first-pass shape using `root_path` and a prefix-preserving proxy mount.
 4. JS-specific niceties beyond the first scaffold pass: `commands.preview` now lands in Vite scaffold
    gallery entries and appears in `curiator status` / `curiator context`; proxy failures now render a
-   diagnostic page with command/cwd/port/target/process state plus recent stdout/stderr. Richer
-   HMR-specific diagnostics remain demand-paced per framework.
+   diagnostic page with command/cwd/port/target/process state plus recent stdout/stderr. WebSocket/HMR
+   upgrade requests now get an explicit lightweight-proxy diagnostic instead of falling through the
+   HTTP proxy path; full live-HMR reverse proxying remains demand-paced per framework.
 
 Dash-first is the *launch wedge* (ship fast, own the data/HMI audience), **not the identity** — the
 overlay stayed framework-agnostic and the non-Dash proof now runs (`curiator-aviato`: React SSR + Rust +

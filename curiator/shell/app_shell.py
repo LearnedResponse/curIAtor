@@ -1152,6 +1152,12 @@ def _proxy_diagnostics_html(key: str, rec: dict, *, message: str, url: str | Non
     )
 
 
+def _is_websocket_upgrade(environ) -> bool:
+    upgrade = (environ.get("HTTP_UPGRADE") or "").lower()
+    connection = (environ.get("HTTP_CONNECTION") or "").lower()
+    return upgrade == "websocket" or ("upgrade" in connection and "websocket" in upgrade)
+
+
 def _proxy_backend_path(key: str, rest: str, mount_cfg: dict) -> str:
     path = rest or "/"
     if not path.startswith("/"):
@@ -1171,6 +1177,12 @@ def _proxy_call(key: str, rec: dict, rest: str, environ, start_response):
     path = _proxy_backend_path(key, rest, mount_cfg)
     qs = environ.get("QUERY_STRING") or ""
     url = f"http://127.0.0.1:{port}{path}" + (f"?{qs}" if qs else "")
+    if _is_websocket_upgrade(environ):
+        start_response("501 Not Implemented", [("Content-Type", "text/html; charset=utf-8")])
+        message = ("WebSocket/HMR upgrade requests are not supported by curIAtor's lightweight built-in "
+                   "proxy; use a production reverse proxy for live HMR, or use the scaffold preview/build "
+                   "commands for this mount.")
+        return [_proxy_diagnostics_html(key, rec, message=message, url=url).encode()]
     method = environ.get("REQUEST_METHOD", "GET")
     length = int(environ.get("CONTENT_LENGTH") or 0)
     body = environ["wsgi.input"].read(length) if length else None
