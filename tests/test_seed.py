@@ -26,3 +26,34 @@ def test_seed_loads_attributed_new_feedback(cfg, collection, tmp_path):
     # default author (Paola) applied, per-item override honored
     assert data["sample"][0]["user"]["email"] == "paola@acme.example" and data["sample"][0]["stars"] == 2
     assert data["other"][0]["user"]["email"] == "bob@x.io"
+
+
+def test_seed_loads_sanitized_annotations(cfg, tmp_path):
+    seed = tmp_path / "seed.yaml"
+    seed.write_text(textwrap.dedent('''\
+        items:
+          - app: sample
+            comment: "fix the marked legend"
+            annotations:
+              - tool: box
+                x1: -1
+                y1: 0.2
+                x2: 0.8
+                y2: 2
+                note: "  legend   overlaps "
+                target:
+                  selector: "#chart .legend"
+                  text: "not stored"
+              - tool: unknown
+                x1: 0.5
+                y1: 0.5
+    '''))
+    cmd_seed(argparse.Namespace(file=str(seed)))
+
+    entry = ledger.load(cfg)["sample"][-1]
+    assert len(entry["annotations"]) == 1
+    assert entry["annotations"][0]["x1"] == 0.0
+    assert entry["annotations"][0]["y2"] == 1.0
+    assert entry["annotations"][0]["note"] == "legend overlaps"
+    assert entry["annotations"][0]["target"]["selector"] == "#chart .legend"
+    assert "text" not in entry["annotations"][0]["target"]

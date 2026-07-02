@@ -1,7 +1,9 @@
 # Backlog — annotated screen captures (point the agent at the element)
 
 > **Status:** v1 burn-in landed 2026-07-01; core v2 structured annotation metadata/replay/editing
-> landed 2026-07-02. Broader dogfood validation is still open.
+> landed 2026-07-02. Headless marked-feedback seeding via `curiator feedback add
+> --annotations-json|--annotations-file` and YAML `curiator seed` is available; broader browser→agent
+> dogfood validation is still open.
 > A core feedback-overlay upgrade: draw on the captured screenshot so feedback points at exactly the
 > element it means.
 > Captured 2026-06-30.
@@ -48,8 +50,10 @@ Two tiers, and the second is the one only curiator can do:
    `_shot_path`, task bundles, and loop code stay unchanged.
 5. **Element-relative coordinates** — landed for v1. Draw coordinates are normalized against the
    captured image/canvas, not the viewport.
-6. **Verify by running** — partially covered by asset/parser tests; still dogfood with a real feedback
-   item such as "fix the ①-marked legend" before calling the broader v2 item complete.
+6. **Verify by running** — partially covered by asset/parser tests and a repeatable headless seeding
+   path (`curiator feedback add ... --annotations-json`, or `curiator seed` with `annotations:`).
+   Still dogfood with a real browser-marked feedback item such as "fix the ①-marked legend" before
+   calling the broader v2 item complete.
 
 ## v2 — DOM-mapped annotations (follow-on)
 

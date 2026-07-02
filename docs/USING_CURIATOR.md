@@ -189,7 +189,14 @@ You can also add feedback from the terminal:
 
 ```bash
 curiator feedback add revenue "the filter panel needs a reset button"
+curiator feedback add revenue "fix the marked legend" \
+  --annotations-json '[{"tool":"pin","x1":0.72,"y1":0.18,"n":1,"note":"legend overlaps chart","target":{"selector":"#chart .legend"}}]'
+curiator feedback add revenue "use these saved marks" --annotations-file marks.json
 ```
+
+The annotation options use the same sanitized mark format the React shell stores after screenshot
+markup, so terminal-seeded dogfood items still render a `Screenshot annotations` block in the agent
+task bundle. `curiator seed seed/feedback.yaml` also accepts an `annotations:` list on each item.
 
 For feedback that should not wake an agent yet, add or review it through the held queue:
 

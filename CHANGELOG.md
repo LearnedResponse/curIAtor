@@ -38,6 +38,9 @@ All notable changes to curIAtor are documented here. The format follows
 - Interactive app-repo workflow: `curiator link`, `status`, `context`, `work`, `done`, `open`, and
   `commands install` let Claude Code/Codex sessions use the same ledger/task/reply/git path without
   spawning a separate headless agent.
+- `curiator feedback add` and YAML `curiator seed` items can carry sanitized screenshot annotation
+  metadata, giving headless dogfood queues the same structured task-bundle hints as browser-marked
+  feedback.
 - `curiator stats` summarizes feedback cycles, status distribution, per-app counts, first-reply
   latency, direct-fix/proposal/no-dispatch/human-intervention rates, and git-as-memory commits, with
   JSON, Markdown, and CSV output for reproducible release/paper case studies.

@@ -54,9 +54,11 @@ from flask import has_request_context, request, send_from_directory
 from werkzeug.middleware.dispatcher import DispatcherMiddleware  # noqa: F401 (kept for reference)
 
 HERE = Path(__file__).resolve().parent
+sys.path.insert(0, str(HERE.parents[1]))
 sys.path.insert(0, str(HERE))
 PORT = 8200  # default; overridden by gallery.yaml shell.port just below (after the registry import)
 
+from curiator.annotations import clean_annotations  # noqa: E402
 import registry as REG  # gallery.yaml-backed registry (curIAtor drop-in for all_apps_index)
 from curiator import auth, ledger  # identity/provenance + shared SQLite feedback ledger
 PORT = REG.SHELL_CFG.get("port", PORT)  # honor gallery.yaml: shell.port
@@ -438,63 +440,6 @@ def _current_user():
         return None
 
 
-def _clamp01(value):
-    try:
-        n = float(value)
-    except (TypeError, ValueError):
-        return None
-    return max(0.0, min(1.0, n))
-
-
-def _short_text(value, limit: int = 240) -> str | None:
-    if value is None:
-        return None
-    text = str(value).strip()
-    return text[:limit] if text else None
-
-
-def _clean_annotations(raw) -> list[dict]:
-    """Sanitize optional screenshot annotation metadata before it enters the durable ledger."""
-    if not isinstance(raw, list):
-        return []
-    out: list[dict] = []
-    for item in raw[:50]:
-        if not isinstance(item, dict):
-            continue
-        tool = item.get("tool")
-        if tool not in {"box", "arrow", "pin", "redact"}:
-            continue
-        mark = {"tool": tool}
-        for field in ("x1", "y1", "x2", "y2"):
-            n = _clamp01(item.get(field))
-            if n is not None:
-                mark[field] = n
-        if "x1" not in mark or "y1" not in mark:
-            continue
-        if tool == "pin":
-            try:
-                mark["n"] = max(1, min(99, int(item.get("n") or 1)))
-            except (TypeError, ValueError):
-                mark["n"] = 1
-        note = _short_text(item.get("note"), 500)
-        if note:
-            mark["note"] = " ".join(note.split())
-        if tool != "redact" and isinstance(item.get("target"), dict):
-            target = item["target"]
-            clean_target: dict = {}
-            for field in ("selector", "tag", "id", "data_testid", "role"):
-                text = _short_text(target.get(field))
-                if text:
-                    clean_target[field] = text
-            classes = target.get("classes")
-            if isinstance(classes, list):
-                clean_target["classes"] = [c for c in (_short_text(v, 80) for v in classes[:5]) if c]
-            if clean_target:
-                mark["target"] = clean_target
-        out.append(mark)
-    return out
-
-
 def _annotation_label(mark: dict, idx: int) -> str:
     tool = mark.get("tool")
     if tool == "pin":
@@ -598,7 +543,7 @@ def save_entry(key, stars, comment, shot_dataurl, user=None, reply_to=None, stat
     extra = {"proposed_plan": None, "reply_to": reply_to or []}
     if status != "new":
         extra["status"] = status
-    cleaned_annotations = _clean_annotations(annotations)
+    cleaned_annotations = clean_annotations(annotations)
     if cleaned_annotations:
         extra["annotations"] = cleaned_annotations
     ledger.save_entry(

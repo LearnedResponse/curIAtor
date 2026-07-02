@@ -157,6 +157,53 @@ def test_feedback_add_rejects_unknown_app(collection, monkeypatch):
         cli.main(["feedback", "add", "great app", "--stars", "5"])
 
 
+def test_feedback_add_stores_sanitized_annotations_for_task_bundle(collection, monkeypatch, capsys):
+    import json
+    from pathlib import Path
+
+    from curiator import cli, ledger
+    from curiator.config import load_config
+    from curiator.loop.adapters import build_task
+
+    monkeypatch.chdir(collection)
+    marks = [
+        {
+            "tool": "pin",
+            "x1": 1.4,
+            "y1": 0.25,
+            "n": 7,
+            "note": "  marked   legend\nneeds room ",
+            "target": {"selector": "#chart .legend", "classes": ["legend", "wide"]},
+        },
+        {"tool": "redact", "x1": 0.1, "y1": 0.2, "target": {"selector": "#secret"}},
+    ]
+
+    assert cli.main([
+        "feedback",
+        "add",
+        "sample",
+        "fix the marked legend",
+        "--annotations-json",
+        json.dumps(marks),
+    ]) == 0
+    cfg = load_config()
+    entry = ledger.load(cfg)["sample"][-1]
+    assert entry["annotations"][0]["x1"] == 1.0
+    assert entry["annotations"][0]["note"] == "marked legend needs room"
+    assert entry["annotations"][0]["target"]["selector"] == "#chart .legend"
+    assert "target" not in entry["annotations"][1]
+    assert "with 2 annotation(s)" in capsys.readouterr().out
+
+    task = build_task(cfg, "sample", entry)
+    body = Path(task.task_file).read_text()
+    assert "## Screenshot annotations" in body
+    assert "pin 7: `pin` at x1=1.000, y1=0.250" in body
+    assert "selector `#chart .legend`" in body
+    assert "marked legend needs room" in body
+    assert "target omitted for redaction" in body
+    assert "#secret" not in body
+
+
 def test_queue_reviews_held_feedback_without_dispatching_it(collection, monkeypatch, capsys):
     import json
     import pytest

@@ -1597,16 +1597,23 @@ def cmd_reset_demo(args) -> int:
 def cmd_seed(args) -> int:
     """Load canned feedback (a YAML file) into the ledger as new entries — the self-building-demo
     build queue. Each item becomes a status:new entry, attributed to the seed's `user:` (provenance),
-    so the loop services it like any feedback. Format: `user: {…}` + `items: [{app, comment, stars?, user?}]`."""
+    so the loop services it like any feedback. Format: `user: {…}` +
+    `items: [{app, comment, stars?, user?, annotations?}]`."""
     import yaml
+    from .annotations import clean_annotations
+
     cfg = load_config()
     spec = yaml.safe_load(Path(args.file).read_text()) or {}
     default_user = spec.get("user")
     ts = datetime.now(timezone.utc).isoformat()
     n = 0
     for it in (spec.get("items") or []):
+        extra = {}
+        annotations = clean_annotations(it.get("annotations"))
+        if annotations:
+            extra["annotations"] = annotations
         ledger.save_entry(cfg, it["app"], stars=it.get("stars"), comment=it.get("comment", ""),
-                          ts=ts, user=it.get("user", default_user))
+                          ts=ts, user=it.get("user", default_user), extra=extra or None)
         n += 1
     who = (default_user or {}).get("name") or "—"
     print(f"curiator: seeded {n} feedback item(s) from {args.file} (author: {who}) — `curiator watch` to build.")
@@ -1636,6 +1643,23 @@ def _print_feedback_items(cfg: dict, app: str, limit: int = 20) -> None:
         print(f"  {e.get('id')} {e.get('status')} {e.get('kind')} {who}: {comment[:160]}{extra}")
 
 
+def _cli_annotations(args) -> list[dict]:
+    raw_text = args.annotations_json
+    if args.annotations_file:
+        raw_text = Path(args.annotations_file).read_text()
+    if not raw_text:
+        return []
+    try:
+        raw = json.loads(raw_text)
+    except json.JSONDecodeError as exc:
+        raise SystemExit(f"curIAtor: invalid annotation JSON: {exc}") from exc
+    from .annotations import clean_annotations
+    marks = clean_annotations(raw)
+    if not marks:
+        raise SystemExit("curIAtor: annotation JSON did not contain any valid marks.")
+    return marks
+
+
 def cmd_feedback(args) -> int:
     """Inspect the SQLite feedback ledger. This is intentionally CLI-level tooling so headless agents can
     inspect history without treating the SQLite file format as a private API."""
@@ -1651,9 +1675,13 @@ def cmd_feedback(args) -> int:
             extra["reply_to"] = [args.reply_to]
         if args.status and args.status != "new":
             extra["status"] = args.status
+        annotations = _cli_annotations(args)
+        if annotations:
+            extra["annotations"] = annotations
         eid = ledger.save_entry(cfg, app, stars=args.stars, comment=comment, user=_cli_user(cfg),
                                 extra=extra or None)
-        print(f"curiator: added feedback {app}/{eid}")
+        suffix = f" with {len(annotations)} annotation(s)" if annotations else ""
+        print(f"curiator: added feedback {app}/{eid}{suffix}")
         return 0
     data = ledger.load(cfg)
     if args.app:
@@ -2819,6 +2847,9 @@ def main(argv=None) -> int:
     fb.add_argument("--reply-to")
     fb.add_argument("--status", choices=["new", "held"], default="new",
                     help="initial feedback status; held items wait for `curiator queue approve`")
+    annotation_src = fb.add_mutually_exclusive_group()
+    annotation_src.add_argument("--annotations-json", help="JSON list of screenshot annotation marks to store")
+    annotation_src.add_argument("--annotations-file", help="path to a JSON file containing annotation marks")
     fb.add_argument("--limit", type=int, default=20)
     fb.set_defaults(func=cmd_feedback)
     us = sub.add_parser("user", help="manage local-login users (auth.mode: local)")
