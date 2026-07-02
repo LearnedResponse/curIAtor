@@ -58,7 +58,7 @@ sys.path.insert(0, str(HERE))
 PORT = 8200  # default; overridden by gallery.yaml shell.port just below (after the registry import)
 
 from curiator.annotations import clean_annotations  # noqa: E402
-from curiator.narrative import build_narrative  # noqa: E402
+from curiator.narrative import build_narrative, narrative_rows  # noqa: E402
 from curiator.transcripts import clean_transcript_segments  # noqa: E402
 import registry as REG  # gallery.yaml-backed registry
 from curiator import auth, ledger  # identity/provenance + shared SQLite feedback ledger
@@ -586,8 +586,7 @@ def _voice_segments(entry: dict) -> list[dict]:
 
 def _voice_summary_rows(entry: dict):
     segments = _voice_segments(entry)
-    raw_segments = entry.get("transcript_segments") if isinstance(entry.get("transcript_segments"), list) else []
-    narrative = build_narrative(_annotation_marks(entry), raw_segments)
+    narrative = narrative_rows(entry)
     if narrative:
         rows = []
         for row in narrative[:8]:
@@ -739,6 +738,9 @@ def save_entry(
     cleaned_segments = clean_transcript_segments(transcript_segments)
     if cleaned_segments:
         extra["transcript_segments"] = cleaned_segments
+    narrative = build_narrative(cleaned_annotations, cleaned_segments)
+    if narrative:
+        extra["narrative"] = narrative
     audio = _claim_audio_ref(key, eid, audio_ref)
     if audio:
         extra["audio"] = audio

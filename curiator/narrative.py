@@ -82,3 +82,59 @@ def build_narrative(annotations, transcript_segments) -> list[dict]:
         rows.append(row)
     rows.sort(key=lambda row: (row["start_ms"], row["mark_index"]))
     return rows
+
+
+def _clean_persisted_row(item: dict, idx: int) -> dict | None:
+    interval = _interval(item)
+    if interval is None:
+        return None
+    try:
+        mark_index = max(1, min(50, int(item.get("mark_index") or item.get("index") or idx)))
+    except (TypeError, ValueError):
+        mark_index = idx
+    row = {
+        "mark_index": mark_index,
+        "label": str(item.get("label") or _label(item, mark_index)).strip() or f"mark {mark_index}",
+        "tool": str(item.get("tool") or "mark").strip() or "mark",
+        "start_ms": interval[0],
+        "end_ms": interval[1],
+        "text": " ".join(str(item.get("text") or "").split()),
+        "segment_indexes": [],
+    }
+    indexes = item.get("segment_indexes")
+    if isinstance(indexes, list):
+        clean_indexes = []
+        for value in indexes[:200]:
+            try:
+                n = int(value)
+            except (TypeError, ValueError):
+                continue
+            if n > 0:
+                clean_indexes.append(n)
+        row["segment_indexes"] = clean_indexes
+    note = str(item.get("note") or "").strip()
+    if note:
+        row["note"] = " ".join(note.split())
+    target = item.get("target") if isinstance(item.get("target"), dict) else None
+    if target and item.get("tool") != "redact":
+        clean_target = {k: v for k, v in target.items() if k in {"selector", "tag", "data_testid", "role"} and v}
+        if clean_target:
+            row["target"] = clean_target
+    return row
+
+
+def narrative_rows(entry: dict) -> list[dict]:
+    """Return persisted narrative rows, falling back to derivation for older ledger entries."""
+    raw = entry.get("narrative")
+    if isinstance(raw, list):
+        rows = []
+        for idx, item in enumerate(raw[:50], start=1):
+            if not isinstance(item, dict):
+                continue
+            row = _clean_persisted_row(item, idx)
+            if row:
+                rows.append(row)
+        if rows:
+            rows.sort(key=lambda row: (row["start_ms"], row["mark_index"]))
+            return rows
+    return build_narrative(entry.get("annotations"), entry.get("transcript_segments"))

@@ -2,7 +2,8 @@
 
 > **Status:** Tier 0, command-backed local transcription, packaged faster-whisper setup, explicit
 > public/hosted Web Speech opt-in, shared-clock mark/transcript timing, segment persistence,
-> task-bundle narrative merge, visible feedback narrative summaries, transcript-timed replay, and
+> task-bundle narrative merge, persisted narrative rows, visible feedback narrative summaries,
+> transcript-timed replay, and
 > opt-in retained-audio replay landed
 > 2026-07-02. **North star:
 > "narrated feedback"** — voice + annotation on a shared clock, so a review is an
@@ -15,7 +16,7 @@
 > `curiator.voice.faster_whisper` adapter for `pip install 'curiator[voice]'`. The React shell records
 > mic audio with `MediaRecorder`, POSTs it to `/api/transcribe`, appends the returned transcript to the
 > comment box, and stores returned segment timestamps on the feedback entry so agents see
-> `Voice transcript segments` plus a derived `Narrated feedback` block when timed marks overlap timed
+> `Voice transcript segments` plus a persisted `Narrated feedback` block when timed marks overlap timed
 > speech. Prior feedback threads now show the compact `Narrated feedback` summary, with a `Voice
 > transcript` fallback when saved speech has no timed marks, and the annotation preview can replay a
 > transcript-timed narrative tour that highlights each saved mark with its overlapping phrase. If
@@ -107,10 +108,11 @@ to retrofit.
    persisted into the feedback ledger and task bundle, and React recording mode aligns marks plus
    transcript segments to the same `t=0`.
 5. **Narrated feedback** — first task-bundle, UI summaries, transcript-timed replay, and opt-in
-   retained-audio replay landed: timed marks pair with overlapping transcript segments into an ordered
-   `Narrated feedback` block, prior feedback threads expose the same compact summary, and the
-   annotation preview can step through the saved mark/phrase sequence, optionally with the retained
-   local audio clip. Remaining: persist any richer narrative metadata that proves useful.
+   retained-audio replay landed: timed marks pair with overlapping transcript segments into persisted
+   ordered `narrative` rows plus a `Narrated feedback` block, prior feedback threads expose the same
+   compact summary, and the annotation preview can step through the saved mark/phrase sequence,
+   optionally with the retained local audio clip. Older entries without stored rows still derive the
+   same shape from annotations and transcript segments.
 6. **Verify by running** — a spoken-while-drawing review round-trips; the agent's reply follows the
    ordered narrative and lands the marks in sequence.
 

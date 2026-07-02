@@ -270,6 +270,26 @@
   }
 
   function buildNarrative(entry) {
+    const persisted = (entry && entry.narrative) || [];
+    if (Array.isArray(persisted) && persisted.length) {
+      return persisted.slice(0, 50).map((row, idx) => {
+        if (!row || typeof row !== "object") return null;
+        const start = numberValue(row.start_ms);
+        const end = numberValue(row.end_ms);
+        if (!Number.isFinite(start) && !Number.isFinite(end)) return null;
+        const markIndex = Number(row.mark_index || row.index || idx + 1) || idx + 1;
+        return {
+          index: markIndex,
+          label: String(row.label || "mark " + markIndex),
+          tool: String(row.tool || "mark"),
+          note: String(row.note || "").replace(/\s+/g, " ").trim(),
+          target: row.tool === "redact" ? "" : narrativeTargetText(row.target),
+          start_ms: Number.isFinite(start) ? start : end,
+          end_ms: Number.isFinite(end) ? Math.max(Number.isFinite(start) ? start : end, end) : start,
+          text: String(row.text || "").replace(/\s+/g, " ").trim()
+        };
+      }).filter(Boolean).sort((a, b) => (a.start_ms - b.start_ms) || (a.index - b.index));
+    }
     const marks = (entry && entry.annotations) || [];
     if (!Array.isArray(marks)) return [];
     const segments = transcriptRows(entry).filter((segment) => segment.interval);

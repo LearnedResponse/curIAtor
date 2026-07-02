@@ -19,7 +19,7 @@ from pathlib import Path
 
 from ... import ledger
 from ...config import app_spec as _app_spec   # the gallery.yaml schema logic lives in config.py
-from ...narrative import build_narrative
+from ...narrative import narrative_rows
 from .. import runlog
 from . import headless_cc, codex, api as api_adapter, command as command_adapter
 
@@ -234,7 +234,7 @@ def _transcript_block(entry: dict) -> str:
 def _narrative_block(entry: dict) -> str:
     """Prompt-facing ordered tour that pairs timed marks with overlapping speech."""
     rows = []
-    for idx, row in enumerate(build_narrative(entry.get("annotations"), entry.get("transcript_segments")), start=1):
+    for idx, row in enumerate(narrative_rows(entry), start=1):
         times = f"[start={row['start_ms']:.0f}ms, end={row['end_ms']:.0f}ms]"
         line = f"- {idx}. {row['label']}: `{row['tool']}` {times}"
         target = row.get("target") if isinstance(row.get("target"), dict) else {}

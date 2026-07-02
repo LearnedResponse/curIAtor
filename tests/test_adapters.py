@@ -105,6 +105,21 @@ def test_app_bundle_includes_narrated_feedback_when_timings_overlap(cfg):
     assert "(mark note: legend area)" in body
 
 
+def test_app_bundle_uses_persisted_narrative_rows(cfg):
+    entry = _entry(
+        annotations=[
+            {"tool": "box", "x1": 0.1, "y1": 0.2, "start_ms": 100, "end_ms": 500},
+        ],
+        narrative=[
+            {"mark_index": 1, "label": "saved mark", "tool": "arrow", "start_ms": 900,
+             "end_ms": 1200, "text": "persisted text", "target": {"selector": "#saved"}},
+        ],
+    )
+
+    body = Path(build_task(cfg, "sample", entry).task_file).read_text()
+    assert "saved mark: `arrow` [start=900ms, end=1200ms] -> selector `#saved`: persisted text" in body
+
+
 def test_runner_routing_checkout_vs_pinned(cfg):
     g = build_task(cfg, GENERAL_KEY, _entry(id="g1", comment="the shell chrome is ugly"))
     body = Path(g.task_file).read_text()

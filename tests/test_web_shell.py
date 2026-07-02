@@ -90,6 +90,7 @@ def test_react_shell_has_burned_screenshot_annotations(web_client):
     assert "function AnnotationReplayOverlay" in js
     assert "function VoiceSummary" in js
     assert "function buildNarrative" in js
+    assert "entry.narrative" in js
     assert "function NarrativeReplay" in js
     assert "function narrativeStepDuration" in js
     assert "function copyAnnotations" in js
@@ -537,6 +538,11 @@ def test_react_shell_feedback_api_stores_sanitized_annotations(web_client):
         {"start_ms": 200.0, "end_ms": 800.0, "text": "move the legend"},
         {"start_ms": 900.0, "end_ms": 1000.0, "text": "then widen the plot"},
     ]
+    narrative = r.get_json()["entry"]["narrative"]
+    assert narrative[0]["label"] == "mark 1"
+    assert narrative[0]["text"] == "move the legend"
+    assert narrative[0]["segment_indexes"] == [1]
+    assert narrative[0]["target"]["selector"] == "#chart .legend"
 
     home = web_client.get("/general").get_data(as_text=True)
     assert "Annotations" in home

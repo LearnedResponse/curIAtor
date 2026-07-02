@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from curiator.narrative import build_narrative
+from curiator.narrative import build_narrative, narrative_rows
 
 
 def test_build_narrative_pairs_timed_marks_with_overlapping_segments():
@@ -41,4 +41,40 @@ def test_build_narrative_keeps_timed_mark_without_matching_speech():
         "end_ms": 1000.0,
         "text": "",
         "segment_indexes": [],
+    }]
+
+
+def test_narrative_rows_prefers_persisted_rows_with_fallback_sanitizing():
+    rows = narrative_rows({
+        "annotations": [
+            {"tool": "box", "x1": 0.1, "y1": 0.2, "start_ms": 10, "end_ms": 20},
+        ],
+        "transcript_segments": [
+            {"start_ms": 0, "end_ms": 30, "text": "derived text"},
+        ],
+        "narrative": [
+            {
+                "mark_index": "3",
+                "label": "saved mark",
+                "tool": "arrow",
+                "start_ms": 500,
+                "end_ms": 700,
+                "text": " persisted   text ",
+                "segment_indexes": ["2", "bad", 4],
+                "note": " saved   note ",
+                "target": {"selector": "#saved", "classes": ["ignored"]},
+            }
+        ],
+    })
+
+    assert rows == [{
+        "mark_index": 3,
+        "label": "saved mark",
+        "tool": "arrow",
+        "start_ms": 500.0,
+        "end_ms": 700.0,
+        "text": "persisted text",
+        "segment_indexes": [2, 4],
+        "note": "saved note",
+        "target": {"selector": "#saved"},
     }]
