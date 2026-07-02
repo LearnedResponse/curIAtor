@@ -102,12 +102,13 @@ Screenshot annotation redaction is client-side and burns opaque blocks into the 
 it when collecting feedback, but still audit `feedback/shots/` before sharing a ledger or publishing an
 example collection.
 
-For the three release example collections, run `curiator release-preflight --fresh-clone` from the
+For the release/public example collections, run `curiator release-preflight --fresh-clone` from the
 runner checkout before publishing. It catches dirty source repos, missing app paths, weak smoke
 coverage, tracked machine-local paths, tracked local user stores, task/reply traces, screenshots,
-SQLite sidecars, env files, and smoke failures in the committed state. The committed SQLite feedback
-ledger may still be published intentionally as part of a demo history. This preflight is not a full
-secrets scanner; still review ledgers, screenshots, traces, commits, and app data manually.
+SQLite sidecars, env files, local editable/path dependency pins, and smoke failures in the committed
+state. The committed SQLite feedback ledger may still be published intentionally as part of a demo
+history. This preflight is not a full secrets scanner; still review ledgers, screenshots, traces,
+commits, and app data manually.
 
 ## Public Internet Use
 

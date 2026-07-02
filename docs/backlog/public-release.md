@@ -65,7 +65,10 @@ leave feedback → watch the fix land and the ⚙ reply arrive. Every item below
    seeded feedback loop is complete on `curiator/auto` with ten curator commits from rainbow baseline
    toward HP-HMI, and `curiator release-preflight --gallery curiator-ot --fresh-clone --json` passes at
    `36e21cf`.
-   (`curiator-finance` can join as a fourth if the cleanup is cheap; the three above are the release set.)
+   `curiator-finance` is now a verified optional fourth: its public-demo posture is pinned/no-login,
+   the stale machine-local ledger note is sanitized, and
+   `curiator release-preflight --gallery curiator-finance --fresh-clone --strict` passes at `d6270bd`.
+   The three above remain the minimum release set unless scope expands.
 5. **SECURITY.md — reviewed against current defaults; re-read once at release cut.** The product auto-runs a coding agent against
    feedback text. The first policy now states: one-container-per-collection as the blast-radius unit,
    the autonomy dial, group-gated elevated profiles, dispatch quotas/trusted dispatch groups as admission

@@ -197,7 +197,7 @@ thin to maintain.
   coloring, curvature, convex hull, simple normal crossings, and a conifold slice. Public-knowledge
   toy models only; no private research content.
 - **[curiator-finance](https://github.com/LearnedResponse/curiator-finance)** — a *self-building* demo
-  collection: deliberately-rough finance apps (portfolio, watchlist, correlation, returns) on
+  collection: deliberately-rough finance apps (portfolio, watchlist, correlation, returns, literature) on
   reproducible committed data + a **seeded review queue** authored by an analyst. Run
   `curiator seed seed/feedback.yaml && curiator watch` and the curator builds the apps up — one commit
   per fix, each carrying a `Feedback-From:` trailer. **`git log` is the build story.** This is the
