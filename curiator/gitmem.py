@@ -94,13 +94,6 @@ def source_for(cfg: dict, app: str) -> str | None:
     return spec.get("source_rel") if spec else None
 
 
-def _resolve(base: Path, value: str | None) -> Path | None:
-    if not value:
-        return None
-    p = Path(value)
-    return p if p.is_absolute() else (base / p).resolve()
-
-
 def _rel_to_repo(cfg: dict, path: Path | None) -> str | None:
     if not path:
         return None
@@ -111,36 +104,20 @@ def _rel_to_repo(cfg: dict, path: Path | None) -> str | None:
 
 
 def _app_spec(cfg: dict, app: str) -> dict | None:
-    repo = Path(cfg["repo_root"]).resolve()
-    for a in (cfg.get("apps") or []):
-        root = _resolve(repo, a.get("root")) or repo
-        mounts = a.get("mounts")
-        if mounts:
-            candidates = []
-            for m in mounts:
-                mount = dict(m.get("mount") or m)
-                if m.get("mount"):
-                    for k in ("source", "title", "tags", "color", "smoke", "cwd", "port", "cmd"):
-                        if k in m and k not in mount:
-                            mount[k] = m[k]
-                name = m.get("name") or mount.get("name") or a.get("name")
-                candidates.append((name, mount))
-        else:
-            candidates = [(a.get("name"), dict(a.get("mount") or {}))]
-        for name, mount in candidates:
-            if app not in {name, a.get("name"), mount.get("module")}:
-                continue
-            source = mount.get("source", a.get("source", "." if a.get("root") else None))
-            source_base = root if a.get("root") else repo
-            source_path = _resolve(source_base, source) or root
-            return {
-                "root": root,
-                "root_rel": _rel_to_repo(cfg, root),
-                "source": source_path,
-                "source_rel": _rel_to_repo(cfg, source_path),
-                "smoke": mount.get("smoke", a.get("smoke")),
-            }
-    return None
+    """config.app_spec + the repo-relative paths gitmem needs for git pathspecs."""
+    from .config import app_spec
+    spec = app_spec(cfg, app)
+    if not spec:
+        return None
+    root, source = Path(spec["root"]), Path(spec["source"])
+    return {
+        "root": root,
+        "root_rel": _rel_to_repo(cfg, root),
+        "source": source,
+        "source_rel": _rel_to_repo(cfg, source),
+        "smoke": spec.get("smoke"),
+        "smoke_timeout": spec.get("smoke_timeout"),
+    }
 
 
 def _ledger_relpath(cfg: dict) -> str:
@@ -182,6 +159,22 @@ def smoke_source(path: Path) -> tuple[bool, str]:
         return False, f"{type(exc).__name__}: {exc}"
 
 
+def _smoke_timeout(cfg: dict, spec: dict) -> tuple[float | None, str | None]:
+    value = spec.get("smoke_timeout")
+    global_smoke = cfg.get("smoke") or {}
+    if value is None and isinstance(global_smoke, dict):
+        value = global_smoke.get("timeout")
+    if value in (None, ""):
+        return None, None
+    try:
+        seconds = float(value)
+    except (TypeError, ValueError):
+        return None, f"invalid smoke timeout: {value!r}"
+    if seconds <= 0:
+        return None, None
+    return seconds, None
+
+
 def smoke_app(cfg: dict, app: str, src: str | None) -> tuple[bool, str]:
     spec = _app_spec(cfg, app) or {}
     cmd = spec.get("smoke")
@@ -189,7 +182,14 @@ def smoke_app(cfg: dict, app: str, src: str | None) -> tuple[bool, str]:
         root = spec.get("root") or Path(cfg["repo_root"])
         source = spec.get("source") or (Path(cfg["repo_root"]) / src if src else root)
         rendered = str(cmd).format(root=str(root), source=str(source), app=app)
-        r = subprocess.run(shlex.split(rendered), cwd=root, capture_output=True, text=True)
+        timeout, err = _smoke_timeout(cfg, spec)
+        if err:
+            return False, err
+        try:
+            r = subprocess.run(shlex.split(rendered), cwd=root, capture_output=True, text=True, timeout=timeout)
+        except subprocess.TimeoutExpired:
+            label = int(timeout) if timeout and float(timeout).is_integer() else timeout
+            return False, f"timeout after {label}s"
         if r.returncode == 0:
             return True, "passed"
         return False, (r.stderr or r.stdout or f"exit {r.returncode}").strip()[:500]

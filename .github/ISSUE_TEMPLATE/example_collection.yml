@@ -1,0 +1,39 @@
+name: Example collection problem
+description: Report a broken or confusing quickstart in a curIAtor example collection.
+title: "[Example]: "
+labels: ["example-collection", "needs-triage"]
+body:
+  - type: input
+    id: collection
+    attributes:
+      label: Collection
+      placeholder: "curiator-aviato, curiator-ot, math-geometry, finance, other"
+    validations:
+      required: true
+  - type: textarea
+    id: fresh-clone-steps
+    attributes:
+      label: Fresh-clone steps tried
+      description: Include the exact commands from clone/install through `curiator up` or `curiator serve`.
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: failure
+    attributes:
+      label: Where did the loop fail?
+      description: Note whether the failure was install, app mount, feedback capture, agent run, reload, or reply.
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: OS, Python version, browser, agent adapter, and whether this was Docker or local.
+      render: text
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs or screenshots
+      description: Paste small sanitized excerpts only.
+      render: text

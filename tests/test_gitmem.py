@@ -5,6 +5,7 @@ LESSONS.md. Runs against the tmp collection's real git repo — no agent needed.
 from __future__ import annotations
 
 import subprocess
+import sys
 from pathlib import Path
 
 from curiator import gitmem, ledger
@@ -58,6 +59,22 @@ def test_smoke_gate_blocks_broken_commit(cfg, collection):
     assert not res["committed"] and "smoke-test failed" in res["reason"]
     # the broken edit was reverted, nothing committed
     assert "{{{" not in src.read_text()
+    assert _log(collection, "--format=%s").splitlines()[0] == "init"
+
+
+def test_smoke_timeout_blocks_and_reverts_commit(cfg, collection):
+    src = collection / "apps" / "sample.py"
+    src.write_text(src.read_text().replace('"sample"', '"sample (slow)"'))
+    cfg["apps"][0]["smoke"] = f'{sys.executable} -c "import time; time.sleep(2)"'
+    cfg["apps"][0]["smoke_timeout"] = 0.1
+    fid = ledger.save_entry(cfg, "sample", comment="x", ts="t0")
+    ledger.add_system_note(cfg, "sample", "tried", reply_to=[fid], ts="t1")
+    ledger.set_status(cfg, "sample", [fid], "done")
+
+    res = gitmem.commit_run(cfg, "sample", fid, status="done", note_text="tried")
+
+    assert not res["committed"] and "timeout after 0.1s" in res["reason"]
+    assert "(slow)" not in src.read_text()
     assert _log(collection, "--format=%s").splitlines()[0] == "init"
 
 

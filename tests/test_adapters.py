@@ -24,7 +24,12 @@ def test_app_bundle_paths_and_commands(cfg, collection):
     assert Path(t.reply_file) == collection / "feedback" / "replies" / "f1.md"
     assert "feedback/shots/sample_f1.png" in body          # screenshot path joined ONCE
     assert "shots/shots/" not in body                       # M2 double-join regression guard
-    assert "CURIATOR_GALLERY=" in body and "curiator reply sample f1" in body  # ready-to-run reply
+    assert "CURIATOR_GALLERY=" not in body                  # task bundles stay clone-portable
+    assert str(collection) not in body
+    assert "app root: `.`" in body
+    assert "source scope to edit: `apps/sample.py`" in body
+    assert "SQLite source of truth: `feedback/app_feedback.sqlite`" in body
+    assert "curiator reply sample f1" in body               # ready-to-run reply
     assert "SMOKE OK" in body                               # smoke-test recipe
 
 
@@ -46,7 +51,10 @@ def test_general_new_app_request_routes_to_collection(cfg, collection):
     assert t.source == str(collection.resolve())
     assert "General collection feedback" in body
     assert "Do NOT edit the runner checkout" in body
-    assert "CURIATOR_GALLERY=" in body and "curiator app create" in body
+    assert "CURIATOR_GALLERY=" not in body
+    assert str(collection) not in body
+    assert "collection root: `.`" in body
+    assert "curiator app create" in body
     assert "gallery.yaml" in body and "curiator reply __general__ g3" in body
     assert adapters.general_targets_collection(entry)
     assert not adapters.general_targets_collection(_entry(comment="make the shell chrome clearer"))
@@ -67,7 +75,9 @@ def test_general_example_dash_app_request_routes_to_collection(cfg, collection):
     assert t.source == str(collection.resolve())
     assert "General collection feedback" in body
     assert "Do NOT edit the runner checkout" in body
-    assert "CURIATOR_GALLERY=" in body and "curiator app create" in body
+    assert "CURIATOR_GALLERY=" not in body
+    assert str(collection) not in body
+    assert "curiator app create" in body
     assert adapters.general_targets_collection(entry)
 
 

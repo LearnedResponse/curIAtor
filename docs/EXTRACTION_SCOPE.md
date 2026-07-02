@@ -6,7 +6,7 @@
 
 > **Name — LOCKED 2026-06-28: `curIAtor`** (curator + IA; also reads as *creator + curator* — the IA
 > both *creates* the fix and *curates* the collection). Identifiers: brand **curIAtor** · repo
-> `LearnedResponse/curiator` · PyPI `pip install curiator` (free) · CLI `curiator` · skill `/curiator`.
+> `LearnedResponse/curiator` · PyPI `pip install curiator` (free) · CLI `curiator` · skill `curiator`.
 > Easter egg: the deliberately-broken demo app the curator has to rescue is named **`aviato`**.
 
 ## The v0 bet (definition of done)
@@ -109,7 +109,7 @@ stay in this repo. The shell never needed to know what it displays (0 coupling),
 1. ~~Name~~ → **curIAtor** (`curiator`). **License** → still open; recommend **MIT** (max adoption). ← only remaining decision.
 2. ~~Dash-first vs framework-agnostic~~ → **Dash-first** (own the niche; `proxy` mount kind keeps the door open).
 3. ~~Where it lives~~ → **fresh public repo `LearnedResponse/curiator`**, separate from Kwisatz.
-4. ~~Distribution~~ → **both** — standalone repo (the shell) **and** a Claude Code / Codex **skill** `/curiator` (the loop), per the Graphify channel.
+4. ~~Distribution~~ → **both** — standalone repo (the shell) **and** Claude Code / Codex interactive shims (the loop), per the Graphify channel.
 
 Only open knob: **MIT vs Apache-2.0**. Everything else is locked → ready for **M0**.
 

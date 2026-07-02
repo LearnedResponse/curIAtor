@@ -1,6 +1,6 @@
 # curIAtor — AI-maintained app gallery (OSS design sketch)
 
-> **Name LOCKED 2026-06-28: `curIAtor`** (curator + IA; also *creator + curator*) · repo `LearnedResponse/curiator` · `pip install curiator` · skill `/curiator`. Extraction plan: `AI_GALLERY_OSS_EXTRACTION_SCOPE.md`.
+> **Name LOCKED 2026-06-28: `curIAtor`** (curator + IA; also *creator + curator*) · repo `LearnedResponse/curiator` · `pip install curiator` · skill `curiator`. Extraction plan: `AI_GALLERY_OSS_EXTRACTION_SCOPE.md`.
 
 > ⚠️ **Orthogonal to the math program.** This is a design note for extracting the viewer
 > shell + feedback + loop we built this session into a standalone open-source project. It has
@@ -181,8 +181,8 @@ queryable, revertible memory** of every action. The branch these land on is your
 environment** (dbt-style); promotion to dev/main is a later CI/CD step (see below). Three layers, not
 one:
 - **git = episodic memory** — the diffs: *what* changed and *why*, one commit per fix.
-- **the ledger = the conversation** — the ★/comment/⚙ thread, now pointing *at* commits (the reply
-  carries the short SHA).
+- **the ledger = the conversation** — the ★/comment/⚙ thread. The linked git history carries the
+  commit IDs so the ledger does not need a self-referential post-commit mutation.
 - **`LESSONS.md` = distilled memory** — a `curiator reflect` step summarizing recent `curator(*)`
   commits, which each fresh one-shot then loads (cross-item learning without a live session).
 
@@ -211,7 +211,8 @@ what make "commit freely" safe and keep the memory trustworthy:
 4. **Structured message + trailers** (above) + attribution (`Co-Authored-By`, and `Signed-off-by` where the project uses the DCO).
 5. **Commit only — never `push`, never merge to main, never force-push, never rewrite published history** (no `amend`/`rebase` of commits you didn't just make).
 6. **Undo with `git revert`, never `reset --hard` / force** — preserve the record.
-7. **Reference the SHA in the ⚙ reply**, so the conversation and the history stay linked.
+7. **Keep the ledger clean after committing.** The SHA is printed and queryable from git trailers; do
+   not mutate the SQLite ledger after the commit just to stamp the hash back into the reply.
 
 ### The gate (now) and branching (deferred)
 

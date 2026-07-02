@@ -65,11 +65,7 @@ def _read_json_snapshot(cfg: dict) -> dict:
     return data if isinstance(data, dict) else {}
 
 
-def _connect(cfg: dict) -> sqlite3.Connection:
-    p = db_path(cfg)
-    p.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(str(p), timeout=30)
-    conn.row_factory = sqlite3.Row
+def _init_schema(cfg: dict, conn: sqlite3.Connection) -> None:
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute(
         """
@@ -88,6 +84,31 @@ def _connect(cfg: dict) -> sqlite3.Connection:
     conn.execute("CREATE INDEX IF NOT EXISTS idx_entries_status ON entries(status)")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_entries_app ON entries(app_key)")
     _migrate_json_if_empty(cfg, conn)
+
+
+def _connect(cfg: dict) -> sqlite3.Connection:
+    p = db_path(cfg)
+    p.parent.mkdir(parents=True, exist_ok=True)
+    conn = sqlite3.connect(str(p), timeout=30)
+    conn.row_factory = sqlite3.Row
+    _init_schema(cfg, conn)
+    return conn
+
+
+def _connect_for_load(cfg: dict) -> sqlite3.Connection | None:
+    """Open an existing SQLite ledger without write-time setup.
+
+    `curiator status/context/feedback show` are read paths. Re-running schema setup and
+    `PRAGMA journal_mode=WAL` on every read dirties git-tracked ledgers, which breaks the
+    git-as-memory story for collections that inspect history between commits.
+    """
+    p = db_path(cfg)
+    if not p.exists():
+        # Legacy JSON import is intentionally a one-time write; otherwise a missing ledger is just empty.
+        return _connect(cfg) if json_path(cfg).exists() else None
+    uri = f"file:{p.resolve()}?mode=ro"
+    conn = sqlite3.connect(uri, uri=True, timeout=30)
+    conn.row_factory = sqlite3.Row
     return conn
 
 
@@ -127,9 +148,19 @@ def _insert_payload(conn: sqlite3.Connection, app_key: str, payload: dict) -> No
 
 
 def load(cfg: dict) -> dict:
-    with closing(_connect(cfg)) as conn:
+    conn = _connect_for_load(cfg)
+    if conn is None:
+        return {}
+    with closing(conn):
         data: dict[str, list[dict]] = {}
-        rows = conn.execute("SELECT app_key, payload FROM entries ORDER BY rowid").fetchall()
+        try:
+            rows = conn.execute("SELECT app_key, payload FROM entries ORDER BY rowid").fetchall()
+        except sqlite3.OperationalError as exc:
+            if "no such table" not in str(exc).lower():
+                raise
+            conn.close()
+            with closing(_connect(cfg)) as writable:
+                rows = writable.execute("SELECT app_key, payload FROM entries ORDER BY rowid").fetchall()
         for row in rows:
             try:
                 payload = json.loads(row["payload"])

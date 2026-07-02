@@ -36,8 +36,10 @@ curiator app create revenue --template dash --title "Revenue dashboard" --tags f
 # alias: curiator init-app revenue --template dash
 ```
 
-Templates today: `dash` (in-process Dash), `static` (same-origin proxy using `http.server`), and
-`python` (tiny proxy-served Python HTTP app).
+Templates today: `dash` (in-process Dash), `static` (same-origin proxy using `http.server`), `python`
+(tiny proxy-served Python HTTP app), `react` (Vite + React), and `svelte` (Vite + Svelte). The JS
+templates use `proxy` mounts and set Vite's base path from `CURIATOR_APP` so assets resolve under
+`/app/<name>/`.
 
 You can also register an existing app manually: drop `apps/<name>.py` (exposing
 `build_app() -> dash.Dash`, plus a module-level `app`), then add an entry to `gallery.yaml`:
@@ -60,11 +62,18 @@ apps:
     root: apps/lab_suite
     source: .
     smoke: python -m compileall -q .
+    smoke_timeout: 30
     mounts:
       - name: overview
         mount: { kind: dash-inproc, module: overview, source: overview.py }
       - name: node_ssr
         mount: { kind: proxy, cmd: "npm start -- --port {port}", port: 8710 }
+```
+
+Use a top-level default when most app builds should share a timeout:
+
+```yaml
+smoke: { timeout: 60 }
 ```
 
 `proxy` mounts are still same-origin: the iframe opens `/app/<name>/...`, and curIAtor forwards that
@@ -84,7 +93,55 @@ Open the gallery, **★ / 💬 / 📷** an app, and the curator reads the note +
 the fix (auto-small) or proposes a plan (propose-only), smoke-tests, reloads the app, and replies in
 the panel. Edits land **uncommitted** in your working tree for review — the curator never commits.
 
-## 3. Two install profiles
+## 3. Work Interactively From An App Repo
+
+If you are already inside Claude Code, Codex, or another coding agent in an app repo, use the same
+curIAtor loop without spawning a separate headless agent:
+
+```bash
+curiator link --gallery ../my-collection/gallery.yaml --app revenue --commands
+curiator status
+curiator context
+curiator work <feedback_id>       # prints the same task bundle a headless agent would receive
+# edit + smoke-test in the current CLI session
+curiator done <feedback_id> "Changed X and smoke-tested with Y"
+```
+
+`curiator link` writes `.curiator/app.yaml`, using a relative gallery path when possible, so commands
+run from a separate app repo can still find the collection's gallery, ledger, smoke command, and app
+source scope after the repos move together. `--commands` installs lightweight Claude/Codex shims
+(`.claude/commands/curiator.md` and `.agents/skills/curiator/SKILL.md`) so Claude `/curiator`
+or Codex `$curiator` can call `curiator status`, `curiator context`, and `curiator work`.
+
+This is not a second memory system. `curiator work` marks the feedback `working` and writes
+`feedback/tasks/<id>.md`; `curiator done` posts the ⚙ reply, reloads the app, and uses the same
+git-as-memory commit path as the watcher when `git.commit: true`.
+
+You can also add feedback from the terminal:
+
+```bash
+curiator feedback add revenue "the filter panel needs a reset button"
+```
+
+And summarize the collection's feedback history for release notes or case studies:
+
+```bash
+curiator stats                 # human-readable ledger + git-as-memory summary
+curiator stats --json --app revenue
+curiator stats --markdown      # paper/release-note tables
+curiator stats --csv           # app-level spreadsheet/plotting rows
+```
+
+Before moving or publishing a collection, run the portability preflight:
+
+```bash
+curiator doctor                # errors on absolute/missing paths; warns on weak smoke/proxy config
+curiator doctor --json
+curiator smoke                 # runs each app's configured smoke command/fallback import
+curiator smoke --app revenue --json
+```
+
+## 4. Two install profiles
 
 | profile | install | `gallery.yaml` | who |
 |---|---|---|---|
@@ -95,7 +152,7 @@ Both keep your apps repo clean: the runner is a dependency, never entangled with
 public surface (the `gallery.yaml` schema, the adapter interface, the CLI) is small and stable, so
 configs survive runner upgrades.
 
-## 4. The `runner:` field + the ◆ General channel
+## 5. The `runner:` field + the ◆ General channel
 
 Feedback splits in two:
 
@@ -145,7 +202,7 @@ Passwords are stored only as **hashes** (`werkzeug`) in a gitignored `.curiator-
 — no plaintext, no extra dependency. The `header` / `oidc` settings live in the same `auth:` block; see
 the `gallery.yaml` comments. `oidc` needs the `[oidc]` extra (`pip install 'curiator[oidc]'`).
 
-## 5. Run it in a container (one sandbox per collection)
+## 6. Run it in a container (one sandbox per collection)
 
 The curator **auto-edits and runs** your code, so the safety unit is **one container per collection** —
 that's the blast-radius boundary.
@@ -172,7 +229,7 @@ This maps onto the deployment modes: a **personal container** (`headless-cc`, `a
 > pre-release runner, build from a checkout with `--build-arg CURIATOR_PIP=<path-or-spec>` (see the
 > comments in the `Dockerfile`).
 
-## 6. Adapters & autonomy (recap)
+## 7. Adapters & autonomy (recap)
 
 ```yaml
 agent:
@@ -182,7 +239,7 @@ agent:
 
 See the [README](../README.md#the-agent-and-where-it-runs) for the full adapter / autonomy matrix.
 
-## 7. Providers & local models
+## 8. Providers & local models
 
 curIAtor doesn't manage models or API keys — **your agent CLI does**. The provider lives in that CLI's
 own config, so any setup it supports works here unchanged. (Env-var names below are illustrative — they

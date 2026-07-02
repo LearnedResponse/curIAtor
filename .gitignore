@@ -7,8 +7,10 @@ build/
 dist/
 .pytest_cache/
 .DS_Store
+.claude/settings.local.json
 
-# feedback artifacts: keep the ledger, ignore shots + generated task/output files
+# feedback artifacts are runtime state: the SQLite ledger, shots, and generated task/trace files all
+# stay local (a legacy app_feedback.json is import-only — see curiator/ledger.py)
 feedback/shots/
 feedback/task_*.md
 feedback/tasks/

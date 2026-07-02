@@ -18,9 +18,43 @@ All notable changes to curIAtor are documented here. The format follows
 - Same-origin `proxy` mount support for local web servers under `/app/<name>/...`, with process restart
   on curIAtor reload.
 - `curiator app create` / `curiator init-app` to scaffold app directories and register them in
-  `gallery.yaml` using Dash, static, or tiny Python-server templates.
+  `gallery.yaml` using Dash, static, tiny Python-server, React/Vite, or Svelte/Vite templates.
 - Per-feedback run artifacts: task bundles live under `feedback/tasks/<id>.md`, agent stdout/stderr
   streams live to `feedback/replies/<id>.md`, and feedback status badges link to a scrollable trace view.
+- Interactive app-repo workflow: `curiator link`, `status`, `context`, `work`, `done`, `open`, and
+  `commands install` let Claude Code/Codex sessions use the same ledger/task/reply/git path without
+  spawning a separate headless agent.
+- `curiator stats` summarizes feedback cycles, status distribution, per-app counts, first-reply
+  latency, and git-as-memory commits, with JSON, Markdown, and CSV output for reproducible
+  release/paper case studies.
+- `curiator link` now writes relative gallery paths when possible, so linked app repos keep working
+  when moved or cloned next to their collection.
+- Generated task bundles now use repo-relative app roots, source scopes, screenshots, ledger paths, and
+  ready commands for self-contained collections, reducing machine-absolute paths in published examples.
+- `curiator doctor` checks collection portability by flagging machine-absolute config paths and missing
+  app roots/sources as errors, with release-hardening warnings for missing smoke hooks and proxy commands
+  that do not mention their configured port.
+- `curiator smoke` runs each app's configured smoke command or fallback import check across a collection,
+  with `--app`, `--json`, and configurable `smoke_timeout` / `smoke.timeout` limits for release
+  preflight automation.
+- `SECURITY.md` documents the prompt-injection caveat, collection-level containment boundary, autonomy
+  defaults, elevated-run risks, and data-handling expectations for ledgers/screenshots/traces.
+- `CITATION.cff` provides machine-readable software citation metadata for GitHub and Zenodo.
+- GitHub issue templates cover runner bugs, feature requests, and example-collection quickstart
+  failures.
+- Repository labels and `docs/GOOD_FIRST_ISSUES.md` seed a publish-time set of small contribution
+  issues with scopes and done criteria.
+- The release workflow now publishes tagged builds through PyPI trusted publishing and blocks tags
+  whose `vX.Y.Z` does not match `pyproject.toml`.
+
+### Fixed
+- `curiator commands install` now writes the Codex repo skill to `.agents/skills/curiator/SKILL.md`,
+  matching current Codex skill discovery, while keeping Claude's `.claude/commands/curiator.md`;
+  generated legacy `.codex/skills/curiator/SKILL.md` shims are cleaned up on reinstall.
+- Ledger inspection commands now open existing SQLite ledgers read-only, so `curiator status`,
+  `context`, and `feedback show` do not dirty git-tracked collection ledgers.
+- Git-as-memory replies no longer mutate the SQLite ledger after creating a curator commit; the commit
+  SHA is printed and remains queryable from git, while the collection stays clean after `curiator done`.
 
 ## [0.1.0] — 2026-06-29
 

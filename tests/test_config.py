@@ -46,6 +46,50 @@ def test_defaults_when_blocks_absent(tmp_path, monkeypatch):
     assert cfg["auth"]["admin_groups"] == ["admin"]   # who may change agent settings (mode != none)
 
 
+def test_infer_current_app_requires_an_unambiguous_match(tmp_path):
+    from curiator.config import infer_current_app
+    (tmp_path / "apps" / "alpha").mkdir(parents=True)
+    (tmp_path / "apps" / "beta").mkdir(parents=True)
+    cfg = {"repo_root": str(tmp_path), "apps": [
+        {"name": "alpha", "source": "apps/alpha", "mount": {"kind": "dash-inproc", "module": "alpha"}},
+        {"name": "beta", "source": "apps/beta", "mount": {"kind": "dash-inproc", "module": "beta"}},
+    ]}
+    # inside one app's source scope → that app
+    assert infer_current_app(cfg, cwd=tmp_path / "apps" / "alpha") == "alpha"
+    # the collection root — every app ties → None (never silently the first app in the gallery)
+    assert infer_current_app(cfg, cwd=tmp_path) is None
+
+
+def test_app_spec_is_the_shared_schema_home(cfg, collection):
+    from curiator.config import app_spec
+    spec = app_spec(cfg, "sample")
+    assert spec["source"] == str((collection / "apps" / "sample.py").resolve())
+    assert spec["root"] == str(collection.resolve())
+    assert app_spec(cfg, "nope") is None
+
+
+def test_app_spec_carries_mount_smoke_timeout(collection, monkeypatch):
+    from curiator.config import app_spec
+
+    (collection / "gallery.yaml").write_text(textwrap.dedent('''\
+        apps:
+          - name: suite
+            root: apps/suite
+            smoke_timeout: 5
+            mounts:
+              - name: api
+                source: .
+                smoke: python -m compileall -q .
+                smoke_timeout: 1.5
+                mount: { kind: proxy, cmd: "python server.py --port {port}", port: 8811 }
+    '''))
+    monkeypatch.setenv("CURIATOR_GALLERY", str(collection / "gallery.yaml"))
+    cfg = load_config()
+    spec = app_spec(cfg, "api")
+    assert spec["smoke"] == "python -m compileall -q ."
+    assert spec["smoke_timeout"] == 1.5
+
+
 def test_agent_label_names_the_provider():
     from curiator.config import agent_label
     assert agent_label({"agent": {"adapter": "headless-cc"}}) == "Claude"

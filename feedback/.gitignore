@@ -1,3 +1,8 @@
-# screenshots are gitignored; the ledger (app_feedback.json) is tracked
+# feedback artifacts are runtime state — the ledger (SQLite), shots, and generated task/trace files
+# all stay local. A legacy app_feedback.json is a one-time import source only (see curiator/ledger.py).
 shots/
+tasks/
+replies/
 task_*.md
+app_feedback.sqlite*
+app_feedback.json

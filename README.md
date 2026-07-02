@@ -114,7 +114,23 @@ Open the gallery, star/comment/screenshot an app, and watch the curator reply. T
 container (one sandbox per collection), see [`docs/USING_CURIATOR.md`](docs/USING_CURIATOR.md).
 While an agent is working, curIAtor writes the prompt bundle to `feedback/tasks/<feedback_id>.md`
 and streams stdout/stderr to `feedback/replies/<feedback_id>.md`; click a `working`/`done` status
-badge to inspect the trace.
+badge to inspect the trace. When you want the receipts, `curiator stats` summarizes the ledger and
+git-as-memory commits as human-readable text, JSON, Markdown tables, or CSV rows. Before publishing or
+moving a collection, `curiator doctor` flags machine-absolute paths, missing app roots/sources, weak
+smoke coverage, and suspicious proxy commands, then `curiator smoke` runs each app's configured smoke
+command.
+
+Already inside an app repo with Claude Code or Codex? Link it once and use the same loop interactively:
+
+```bash
+curiator link --gallery ../my-collection/gallery.yaml --app orange_picker --commands
+curiator work <feedback_id>        # prints the exact task bundle for this item
+curiator done <feedback_id> "Changed the picker and smoke-tested it"
+```
+
+The Claude `/curiator` command and Codex `$curiator` skill installed by `--commands` are thin:
+they call the CLI, which writes the same ledger, task bundle, reply trace, reload, and
+git-as-memory commit as the headless watcher.
 
 ## The agent, and where it runs
 
@@ -138,6 +154,10 @@ coding agent you already have. Pick the adapter that fits your setup:
   for anything substantive. Great on your own box.
 - **`propose-only`** — never edits unprompted; every change is a plan you approve (and, on the `api`
   adapter, a PR you review). The right default for a shared team.
+
+Security note: feedback is prompt input to an agent with whatever edit/run permissions you grant it.
+For shared or public deployments, use authentication, `propose-only`, least-privilege credentials, and
+one container/VM per collection. See [SECURITY.md](SECURITY.md).
 
 > **Teams:** pair the `api` adapter with a project knowledge store (e.g. [Graphify](https://github.com/shamsi/graphify))
 > so the cold agent fixes with *fresh* repo context instead of a stale snapshot. curIAtor collects the

@@ -18,6 +18,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from ... import ledger
+from ...config import app_spec as _app_spec   # the gallery.yaml schema logic lives in config.py
 from .. import runlog
 from . import headless_cc, codex, api as api_adapter, command as command_adapter
 
@@ -86,47 +87,26 @@ def _source_for(cfg: dict, key: str) -> str | None:
     return None
 
 
-def _resolve(base: Path, value: str | None) -> Path | None:
-    if not value:
+
+
+def _repo_display(cfg: dict, path: str | Path | None) -> str | None:
+    """Prompt-facing path. Prefer repo-relative paths so task bundles survive fresh clones."""
+    if not path:
         return None
-    p = Path(value)
-    return p if p.is_absolute() else (base / p).resolve()
+    p = Path(path)
+    if not p.is_absolute():
+        return p.as_posix()
+    root = Path(cfg["repo_root"]).resolve()
+    try:
+        rel = p.resolve().relative_to(root)
+    except ValueError:
+        return str(p.resolve())
+    return "." if str(rel) == "." else rel.as_posix()
 
 
-def _app_spec(cfg: dict, key: str) -> dict | None:
-    """Return normalized endpoint metadata for a configured app or mount entry."""
-    repo = Path(cfg["repo_root"]).resolve()
-    for a in (cfg.get("apps") or []):
-        root = _resolve(repo, a.get("root")) or repo
-        mounts = a.get("mounts")
-        if mounts:
-            candidates = []
-            for m in mounts:
-                mount = dict(m.get("mount") or m)
-                if m.get("mount"):
-                    for k in ("source", "title", "tags", "color", "smoke", "cwd", "port", "cmd"):
-                        if k in m and k not in mount:
-                            mount[k] = m[k]
-                name = m.get("name") or mount.get("name") or a.get("name")
-                candidates.append((name, mount))
-        else:
-            candidates = [(a.get("name"), dict(a.get("mount") or {}))]
-        for name, mount in candidates:
-            aliases = {name, a.get("name"), mount.get("module")}
-            if key not in aliases:
-                continue
-            source = mount.get("source", a.get("source", "." if a.get("root") else None))
-            source_base = root if a.get("root") else repo
-            source_path = _resolve(source_base, source) or root
-            smoke = mount.get("smoke", a.get("smoke"))
-            return {
-                "name": name,
-                "root": str(root),
-                "source": str(source_path),
-                "smoke": smoke,
-                "mount": mount,
-            }
-    return None
+def _feedback_rel(cfg: dict, *parts: str) -> str:
+    fb_dir = (cfg.get("feedback", {}) or {}).get("dir", "feedback")
+    return str(Path(fb_dir, *parts)).replace("\\", "/")
 
 
 def _lessons_for(cfg: dict, app: str) -> str:
@@ -140,13 +120,16 @@ def _lessons_for(cfg: dict, app: str) -> str:
 
 
 def _shot_path(cfg: dict, entry: dict) -> str | None:
-    """Absolute path to the feedback screenshot, or None. `entry['screenshot']` already carries its dir
-    relative to the feedback dir (e.g. 'shots/aviato_ab12.png'), so join it ONCE."""
+    """Prompt-facing screenshot path, or None.
+
+    `entry['screenshot']` already carries its dir relative to the feedback dir (e.g.
+    'shots/aviato_ab12.png'), so join it ONCE. Keep it repo-relative in task bundles for portability.
+    """
     shot = entry.get("screenshot")
     if not shot:
         return None
     fb_dir = cfg.get("feedback", {}).get("dir", "feedback")
-    return str(Path(cfg["repo_root"]) / fb_dir / shot)
+    return str(Path(fb_dir) / shot).replace("\\", "/")
 
 
 def _entry_label(entry: dict) -> str:
@@ -216,12 +199,11 @@ def _thread_context(cfg: dict, key: str, entry: dict, limit: int = 10) -> str:
 
 
 def _feedback_tooling(cfg: dict, key: str) -> str:
-    db = ledger.db_path(cfg)
     fb_key = key or GENERAL_KEY
     return "\n".join([
         "## Feedback ledger and tooling",
         "",
-        f"- SQLite source of truth: `{db}`",
+        f"- SQLite source of truth: `{_feedback_rel(cfg, 'app_feedback.sqlite')}`",
         f"- inspect recent history: `{_curiator_cmd(cfg, 'feedback', 'show', fb_key, '--limit', '20')}`",
         f"- dump history as JSON to stdout: `{_curiator_cmd(cfg, 'feedback', 'dump', fb_key)}`",
         "- Do not edit the SQLite file directly. Use `curiator reply` to add notes/status updates.",
@@ -230,9 +212,8 @@ def _feedback_tooling(cfg: dict, key: str) -> str:
 
 
 def _curiator_cmd(cfg: dict, *parts: str) -> str:
-    gallery = shlex.quote(str(Path(cfg["gallery_path"]).resolve()))
     args = " ".join(shlex.quote(str(part)) for part in parts)
-    return f"CURIATOR_GALLERY={gallery} curiator {args}"
+    return f"curiator {args}"
 
 
 def _reply_cmd(cfg: dict, key: str, eid: str, message: str, status: str) -> str:
@@ -265,6 +246,7 @@ def general_targets_collection(entry: dict, cfg: dict | None = None) -> bool:
 def _collection_bundle(cfg: dict, entry: dict, eid: str, shot_path: str | None, agent: dict) -> tuple[str, str]:
     """Bundle for ◆ General feedback that asks for collection-level work, such as adding a new app."""
     root = str(Path(cfg["repo_root"]).resolve())
+    root_display = _repo_display(cfg, root)
     autonomy = agent.get("autonomy", "auto-small")
     elevated = agent.get("elevated")
     approval_followup = bool(_GENERAL_APPROVAL_REPLY_RE.search(entry.get("comment") or "")
@@ -275,7 +257,7 @@ def _collection_bundle(cfg: dict, entry: dict, eid: str, shot_path: str | None, 
         "This feedback came through **◆ General**, but it asks for gallery/app work in this collection,",
         "not a patch to the curIAtor runner package. You are non-interactive, in the collection repo.",
         "",
-        f"- collection root: `{root}`",
+        f"- collection root: `{root_display}`",
         f"- autonomy mode: **{autonomy}**" + ("  ·  ELEVATED run (trusted group)" if elevated else ""),
         f"- comment: {entry.get('comment')!r}",
         f"- stars: {entry.get('stars')}",
@@ -341,9 +323,10 @@ def _runner_bundle(cfg: dict, entry: dict, eid: str, shot_path: str | None) -> t
     ]
     if mode == "checkout":
         root = _runner_root(cfg)
+        root_display = _repo_display(cfg, root)
         body = head + [
             "## Mode: checkout — patch the runner locally (tracked, PR-able)",
-            f"The runner is an editable git checkout at `{root}`. Make the change there:",
+            f"The runner is an editable git checkout at `{root_display}`. Make the change there:",
             "1. Locate the relevant source (shell = `curiator/shell/app_shell.py`, loop = `curiator/loop/`,",
             "   CLI = `curiator/cli.py`, config = `curiator/config.py`).",
             "2. Edit it, then smoke-test what you touched (import it / run a quick check).",
@@ -384,13 +367,15 @@ def _app_bundle(cfg: dict, key: str, entry: dict, eid: str, shot_path: str | Non
     root = spec.get("root") or cfg["repo_root"]
     smoke = spec.get("smoke")
     source_is_dir = bool(source and Path(source).is_dir())
+    root_display = _repo_display(cfg, root)
+    source_display = _repo_display(cfg, source)
     autonomy = agent.get("autonomy", "auto-small")
     elevated = agent.get("elevated")
     body = [
         template, "\n\n---\n\n# This wake — the new feedback to act on\n",
         f"- app: **{key}**",
-        f"- app root: `{root}`",
-        f"- source scope to edit: `{source}`" if source else "- source: (none registered — propose only)",
+        f"- app root: `{root_display}`",
+        f"- source scope to edit: `{source_display}`" if source else "- source: (none registered — propose only)",
         f"- autonomy mode: **{autonomy}**" + ("  ·  ELEVATED run (trusted group)" if elevated else ""),
         f"- stars: {entry.get('stars')}",
         f"- comment: {entry.get('comment')!r}",
@@ -406,11 +391,11 @@ def _app_bundle(cfg: dict, key: str, entry: dict, eid: str, shot_path: str | Non
     body.append("\n" + _feedback_tooling(cfg, key))
     body.append("\n## Ready-to-run (fill in the message text)")
     if smoke:
-        body.append(f"- smoke-test the edit: `{smoke}`  (run from `{root}`)")
+        body.append(f"- smoke-test the edit: `{smoke}`  (run from `{root_display}`)")
     elif source and not source_is_dir:
         body.append(
             "- smoke-test the edit: "
-            f"`python -c \"import importlib.util as u; s=u.spec_from_file_location('m', r'{source}'); "
+            f"`python -c \"import importlib.util as u; s=u.spec_from_file_location('m', r'{source_display}'); "
             "m=u.module_from_spec(s); s.loader.exec_module(m); "
             "(m.build_app() if hasattr(m,'build_app') else m.app); print('SMOKE OK')\"`"
         )

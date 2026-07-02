@@ -1,0 +1,43 @@
+name: Feature request
+description: Propose a new curIAtor workflow, mount/template, adapter, or release/demo improvement.
+title: "[Feature]: "
+labels: ["enhancement", "needs-triage"]
+body:
+  - type: textarea
+    id: user-workflow
+    attributes:
+      label: Workflow or user need
+      description: What should a user be able to do that they cannot do today?
+      placeholder: "As a collection maintainer, I want ..."
+    validations:
+      required: true
+  - type: textarea
+    id: current-friction
+    attributes:
+      label: Current workaround or friction
+      description: What are you doing today, and where does it break down?
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - App template / scaffold
+        - App mount / proxy / base path
+        - Feedback capture / screenshot fidelity
+        - Agent adapter / autonomy
+        - Git-as-memory / stats / release evidence
+        - Auth / deployment / security
+        - Documentation / examples
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: proposed-shape
+    attributes:
+      label: Proposed shape
+      description: Sketch the API, CLI command, config, or UI you expect.
+  - type: textarea
+    id: safety
+    attributes:
+      label: Safety or portability considerations
+      description: Note anything involving secrets, untrusted feedback, network access, containers, or machine-local paths.

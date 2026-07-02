@@ -20,6 +20,13 @@ try:
 except ImportError as e:  # pragma: no cover
     raise SystemExit("curIAtor needs PyYAML — `pip install pyyaml` (or `pip install curiator`).") from e
 
+# the gallery.yaml schema logic lives in config.py; the shell loads this file as a TOP-LEVEL module
+# (the old `import registry` seam), so fall back to the absolute import when there's no parent package
+try:
+    from ..config import mount_entries as _mount_entries
+except ImportError:  # pragma: no cover — top-level `import registry`
+    from curiator.config import mount_entries as _mount_entries
+
 PACKAGE_ROOT = Path(__file__).resolve().parents[2]   # the curiator package/checkout root (NOT the collection)
 GALLERY_YAML = Path(os.environ.get("CURIATOR_GALLERY", PACKAGE_ROOT / "gallery.yaml"))
 # The collection root = the directory holding gallery.yaml. App `source:` paths and the feedback/ ledger
@@ -57,20 +64,6 @@ def _resolve_path(base: Path, value: str | None) -> Path | None:
     return p if p.is_absolute() else (base / p).resolve()
 
 
-def _mount_entries(app_cfg: dict) -> list[tuple[str, dict]]:
-    """A config item can be one endpoint (`mount:`) or several endpoints (`mounts:`) sharing a root."""
-    if app_cfg.get("mounts"):
-        out = []
-        for m in app_cfg.get("mounts") or []:
-            mount = dict(m.get("mount") or m)
-            if m.get("mount"):
-                for k in ("source", "title", "tags", "color", "smoke", "cwd", "port", "cmd"):
-                    if k in m and k not in mount:
-                        mount[k] = m[k]
-            name = m.get("name") or mount.get("name") or app_cfg["name"]
-            out.append((name, mount))
-        return out
-    return [(app_cfg["name"], dict(app_cfg.get("mount") or {}))]
 
 
 def _build_all_apps() -> list[dict]:

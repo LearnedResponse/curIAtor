@@ -1,0 +1,325 @@
+"""Collection statistics from the feedback ledger and git-as-memory log."""
+from __future__ import annotations
+
+from collections import Counter
+from datetime import datetime, timezone
+from pathlib import Path
+import csv
+import io
+import subprocess
+from typing import Any
+
+from . import ledger
+
+OPEN_STATUSES = {"new", "working", "awaiting_approval"}
+
+
+def _parse_ts(value: Any) -> datetime | None:
+    if not value:
+        return None
+    try:
+        text = str(value).replace("Z", "+00:00")
+        dt = datetime.fromisoformat(text)
+    except ValueError:
+        return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(timezone.utc)
+
+
+def _percent(n: int, denom: int) -> float:
+    return round((100.0 * n / denom), 1) if denom else 0.0
+
+
+def _fmt_seconds(seconds) -> str:
+    if seconds is None:
+        return "n/a"
+    seconds = int(round(float(seconds)))
+    if seconds < 60:
+        return f"{seconds}s"
+    minutes, sec = divmod(seconds, 60)
+    if minutes < 60:
+        return f"{minutes}m {sec}s" if sec else f"{minutes}m"
+    hours, minute = divmod(minutes, 60)
+    if hours < 48:
+        return f"{hours}h {minute}m" if minute else f"{hours}h"
+    days, hour = divmod(hours, 24)
+    return f"{days}d {hour}h" if hour else f"{days}d"
+
+
+def _fmt_counts(counts: dict) -> str:
+    return ", ".join(f"{k}={v}" for k, v in sorted(counts.items())) or "none"
+
+
+def _md(value) -> str:
+    text = str(value)
+    return text.replace("|", "\\|").replace("\n", " ")
+
+
+def _latency_summary(values: list[float]) -> dict[str, Any]:
+    if not values:
+        return {"count": 0, "avg_seconds": None, "median_seconds": None}
+    vals = sorted(values)
+    mid = len(vals) // 2
+    median = vals[mid] if len(vals) % 2 else (vals[mid - 1] + vals[mid]) / 2
+    return {
+        "count": len(vals),
+        "avg_seconds": round(sum(vals) / len(vals), 3),
+        "median_seconds": round(median, 3),
+    }
+
+
+def _entry_key(entry: dict) -> str:
+    return str(entry.get("id") or "")
+
+
+def summarize_ledger(cfg: dict, app: str | None = None) -> dict[str, Any]:
+    """Summarize feedback cycles, status distribution, and first-reply latency."""
+    raw = ledger.load(cfg)
+    if app:
+        raw = {app: raw.get(app, [])}
+
+    app_rows = []
+    status_total: Counter[str] = Counter()
+    kind_total: Counter[str] = Counter()
+    author_total: Counter[str] = Counter()
+    all_latencies: list[float] = []
+    totals = {
+        "entries": 0,
+        "cycles": 0,
+        "open_cycles": 0,
+        "agent_notes": 0,
+        "replied_cycles": 0,
+        "screenshots": 0,
+        "rated_cycles": 0,
+    }
+
+    for app_key in sorted(raw):
+        entries = list(raw.get(app_key) or [])
+        feedback = [e for e in entries if e.get("kind") != "system"]
+        notes = [e for e in entries if e.get("kind") == "system"]
+        by_id = {_entry_key(e): e for e in feedback if _entry_key(e)}
+        first_reply: dict[str, datetime] = {}
+        for note in notes:
+            note_ts = _parse_ts(note.get("ts"))
+            if not note_ts:
+                continue
+            for fid in note.get("reply_to") or []:
+                if fid not in by_id:
+                    continue
+                if fid not in first_reply or note_ts < first_reply[fid]:
+                    first_reply[fid] = note_ts
+
+        latencies = []
+        for fid, reply_ts in first_reply.items():
+            fb_ts = _parse_ts(by_id[fid].get("ts"))
+            if not fb_ts:
+                continue
+            delta = (reply_ts - fb_ts).total_seconds()
+            if delta >= 0:
+                latencies.append(delta)
+
+        statuses = Counter(str(e.get("status") or "unknown") for e in feedback)
+        kinds = Counter(str(e.get("kind") or "unknown") for e in entries)
+        authors = Counter(str(e.get("author") or "unknown") for e in entries)
+        cycles = len(feedback)
+        open_cycles = sum(n for s, n in statuses.items() if s in OPEN_STATUSES)
+        screenshots = sum(1 for e in feedback if e.get("screenshot"))
+        rated = sum(1 for e in feedback if e.get("stars") is not None)
+
+        row = {
+            "app": app_key,
+            "entries": len(entries),
+            "cycles": cycles,
+            "open_cycles": open_cycles,
+            "agent_notes": len(notes),
+            "replied_cycles": len(first_reply),
+            "reply_rate_percent": _percent(len(first_reply), cycles),
+            "screenshots": screenshots,
+            "rated_cycles": rated,
+            "status_counts": dict(sorted(statuses.items())),
+            "kind_counts": dict(sorted(kinds.items())),
+            "author_counts": dict(sorted(authors.items())),
+            "reply_latency": _latency_summary(latencies),
+        }
+        app_rows.append(row)
+
+        totals["entries"] += len(entries)
+        totals["cycles"] += cycles
+        totals["open_cycles"] += open_cycles
+        totals["agent_notes"] += len(notes)
+        totals["replied_cycles"] += len(first_reply)
+        totals["screenshots"] += screenshots
+        totals["rated_cycles"] += rated
+        status_total.update(statuses)
+        kind_total.update(kinds)
+        author_total.update(authors)
+        all_latencies.extend(latencies)
+
+    totals["reply_rate_percent"] = _percent(totals["replied_cycles"], totals["cycles"])
+    return {
+        "ledger": str(ledger.path(cfg)),
+        "apps_with_feedback": len([row for row in app_rows if row["entries"]]),
+        "totals": totals,
+        "status_counts": dict(sorted(status_total.items())),
+        "kind_counts": dict(sorted(kind_total.items())),
+        "author_counts": dict(sorted(author_total.items())),
+        "reply_latency": _latency_summary(all_latencies),
+        "apps": app_rows,
+    }
+
+
+def _git(cwd: Path, *args: str) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(["git", *args], cwd=cwd, capture_output=True, text=True)
+
+
+def summarize_git(cfg: dict) -> dict[str, Any]:
+    """Summarize git-as-memory commits. Returns unavailable when cfg repo is not git."""
+    root = Path(cfg.get("repo_root", "."))
+    if _git(root, "rev-parse", "--git-dir").returncode != 0:
+        return {"available": False, "reason": "not a git repo"}
+
+    fmt = "%H%x1f%s%x1f%b%x1e"
+    raw = _git(root, "log", "--all", "--grep=Curiator-App:", f"--format={fmt}").stdout
+    apps: Counter[str] = Counter()
+    feedback_ids = set()
+    commits = 0
+    reverts = 0
+    latest = None
+    for chunk in (c for c in raw.split("\x1e") if c.strip()):
+        parts = (chunk.strip().split("\x1f") + ["", ""])[:3]
+        sha, subject, body = parts
+        trailers = {}
+        for line in body.splitlines():
+            if ":" not in line:
+                continue
+            key, value = line.split(":", 1)
+            trailers[key.strip()] = value.strip()
+        app = trailers.get("Curiator-App")
+        fid = trailers.get("Curiator-Feedback")
+        if not app:
+            continue
+        commits += 1
+        apps[app] += 1
+        if fid and fid != "-":
+            feedback_ids.add(fid)
+        if subject.lower().startswith(f"curator({app}): revert"):
+            reverts += 1
+        if latest is None:
+            latest = {"sha": sha[:7], "subject": subject}
+    return {
+        "available": True,
+        "curator_commits": commits,
+        "revert_commits": reverts,
+        "feedback_ids": len(feedback_ids),
+        "apps": dict(sorted(apps.items())),
+        "latest": latest,
+    }
+
+
+def summarize(cfg: dict, app: str | None = None, include_git: bool = True) -> dict[str, Any]:
+    out = {
+        "gallery": cfg.get("gallery_path"),
+        "repo_root": cfg.get("repo_root"),
+        **summarize_ledger(cfg, app=app),
+    }
+    if include_git:
+        out["git"] = summarize_git(cfg)
+    return out
+
+
+def format_markdown(summary: dict[str, Any]) -> str:
+    """Render a stable Markdown table for release notes and papers."""
+    totals = summary["totals"]
+    latency = summary["reply_latency"]
+    lines = [
+        "# curIAtor Stats",
+        "",
+        "| Metric | Value |",
+        "|---|---:|",
+        f"| Apps with feedback | {summary['apps_with_feedback']} |",
+        f"| Feedback cycles | {totals['cycles']} |",
+        f"| Open cycles | {totals['open_cycles']} |",
+        f"| Replied cycles | {totals['replied_cycles']} ({totals['reply_rate_percent']}%) |",
+        f"| Agent notes | {totals['agent_notes']} |",
+        f"| Screenshots | {totals['screenshots']} |",
+        f"| Rated cycles | {totals['rated_cycles']} |",
+        f"| Median first reply | {_fmt_seconds(latency['median_seconds'])} |",
+        f"| Average first reply | {_fmt_seconds(latency['avg_seconds'])} |",
+        f"| Status counts | {_md(_fmt_counts(summary['status_counts']))} |",
+        "",
+        "## Per App",
+        "",
+        "| App | Cycles | Open | Replied | Reply rate | Median reply | Status |",
+        "|---|---:|---:|---:|---:|---:|---|",
+    ]
+    rows = [row for row in summary["apps"] if row["entries"]]
+    if rows:
+        for row in rows:
+            lat = row["reply_latency"]
+            lines.append(
+                f"| {_md(row['app'])} | {row['cycles']} | {row['open_cycles']} | "
+                f"{row['replied_cycles']} | {row['reply_rate_percent']}% | "
+                f"{_fmt_seconds(lat['median_seconds'])} | {_md(_fmt_counts(row['status_counts']))} |"
+            )
+    else:
+        lines.append("| n/a | 0 | 0 | 0 | 0.0% | n/a | none |")
+
+    if "git" in summary:
+        git = summary["git"]
+        lines.extend(["", "## Git", "", "| Metric | Value |", "|---|---:|"])
+        if git.get("available"):
+            lines.extend([
+                f"| Curator commits | {git['curator_commits']} |",
+                f"| Revert commits | {git['revert_commits']} |",
+                f"| Feedback ids | {git['feedback_ids']} |",
+                f"| Apps | {_md(_fmt_counts(git.get('apps') or {}))} |",
+            ])
+            latest = git.get("latest") or {}
+            if latest:
+                lines.append(f"| Latest | {_md(latest.get('sha'))} {_md(latest.get('subject'))} |")
+        else:
+            lines.append(f"| Available | no ({_md(git.get('reason'))}) |")
+    return "\n".join(lines) + "\n"
+
+
+def format_csv(summary: dict[str, Any]) -> str:
+    """Render app-level metrics as CSV for spreadsheets and plotting scripts."""
+    buf = io.StringIO()
+    fieldnames = [
+        "app",
+        "entries",
+        "cycles",
+        "open_cycles",
+        "replied_cycles",
+        "reply_rate_percent",
+        "agent_notes",
+        "screenshots",
+        "rated_cycles",
+        "median_reply_seconds",
+        "avg_reply_seconds",
+        "status_counts",
+        "curator_commits",
+    ]
+    writer = csv.DictWriter(buf, fieldnames=fieldnames)
+    writer.writeheader()
+    git_apps = ((summary.get("git") or {}).get("apps") or {}) if (summary.get("git") or {}).get("available") else {}
+    rows = [row for row in summary["apps"] if row["entries"]]
+    for row in rows:
+        latency = row["reply_latency"]
+        writer.writerow({
+            "app": row["app"],
+            "entries": row["entries"],
+            "cycles": row["cycles"],
+            "open_cycles": row["open_cycles"],
+            "replied_cycles": row["replied_cycles"],
+            "reply_rate_percent": row["reply_rate_percent"],
+            "agent_notes": row["agent_notes"],
+            "screenshots": row["screenshots"],
+            "rated_cycles": row["rated_cycles"],
+            "median_reply_seconds": latency["median_seconds"] if latency["median_seconds"] is not None else "",
+            "avg_reply_seconds": latency["avg_seconds"] if latency["avg_seconds"] is not None else "",
+            "status_counts": _fmt_counts(row["status_counts"]),
+            "curator_commits": git_apps.get(row["app"], 0),
+        })
+    return buf.getvalue()

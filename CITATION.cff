@@ -1,0 +1,22 @@
+cff-version: 1.2.0
+message: "If you use curIAtor, please cite it using the metadata below."
+title: "curIAtor: an AI-maintained web app feedback overlay"
+authors:
+  - family-names: "Guetz"
+    given-names: "Adam"
+version: "0.1.0"
+date-released: "2026-06-29"
+license: "Apache-2.0"
+repository-code: "https://github.com/LearnedResponse/curiator"
+url: "https://github.com/LearnedResponse/curiator"
+abstract: >-
+  curIAtor is a self-hosted overlay for web app collections: users rate, comment on, and screenshot
+  live apps in the browser, and a coding agent turns that contextual feedback into reviewed source
+  changes and ledger-linked replies.
+keywords:
+  - "software maintenance"
+  - "coding agents"
+  - "web applications"
+  - "human feedback"
+  - "research software"
+# Add the Zenodo concept DOI under `identifiers:` after GitHub-Zenodo archiving is enabled.

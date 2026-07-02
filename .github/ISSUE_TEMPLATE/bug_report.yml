@@ -1,0 +1,54 @@
+name: Bug report
+description: Report a reproducible problem in the runner, shell, CLI, ledger, or agent loop.
+title: "[Bug]: "
+labels: ["bug", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report. Please avoid posting secrets, private screenshots, or raw ledgers from
+        non-public collections.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: Describe the visible failure and what you expected instead.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Reproduction steps
+      description: Include commands and the smallest gallery/app config that reproduces it.
+      placeholder: |
+        1. Run `curiator ...`
+        2. Open `http://127.0.0.1:...`
+        3. Leave feedback / mount app / run command
+        4. See ...
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Shell / overlay UI
+        - App mounting / proxy
+        - Feedback ledger / screenshots
+        - Agent loop / adapters
+        - CLI / app scaffolding
+        - Docs / packaging
+        - Unsure
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: curIAtor version or commit
+      placeholder: "0.2.0, main@abc1234, pip editable checkout, etc."
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs or trace excerpts
+      description: Paste the smallest useful excerpt from terminal output or feedback/replies/<id>.md.
+      render: text

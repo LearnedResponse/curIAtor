@@ -7,9 +7,14 @@
     curiator reload     # drop a running shell's cached build of an app (make an edit live)
     curiator revert     # (git-as-memory) undo a curator commit; the record + thread stay intact
     curiator reflect    # (git-as-memory) summarize curator git history into LESSONS.md
+    curiator link       # link an app repo/directory to a gallery app
+    curiator work       # open a feedback item for interactive CLI work
+    curiator done       # finish interactive work via the same reply/reload/git path
+    curiator smoke      # run configured app smoke checks across the collection
     curiator reset-demo # rewind the demo: re-break aviato, clear the ledger
     curiator demo-up    # reset-demo, then serve — one command, record-ready
     curiator demo       # print the demo walkthrough
+    curiator stats      # summarize ledger + git-as-memory case-study numbers
     curiator init <dir> # scaffold a fresh collection repo
 
 `up` and `watch` are two processes — run them in two terminals, or use `curiator serve` / `make demo`.
@@ -20,12 +25,13 @@ import argparse
 import json
 import os
 import re
+import shlex
 import subprocess
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
-from .config import agent_label, load_config
+from .config import LINK_REL, agent_label, app_spec, app_specs, load_config
 from . import ledger
 
 
@@ -127,36 +133,546 @@ def _parse_actions_arg(s):
     return out or None
 
 
-def cmd_reply(args) -> int:
-    """Agent reply path: `curiator reply <app> <feedback_id> "<text>" --status done`.
-    When offering options, pass `--actions "A,B,C"` so the approval buttons match the text exactly."""
-    cfg = load_config()
+def _post_reply(cfg: dict, app: str, feedback_id: str, text: str, status: str | None, actions: str | None = None) -> int:
     ts = datetime.now(timezone.utc).isoformat()
-    nid = ledger.add_system_note(cfg, args.app, args.text, reply_to=[args.feedback_id],
-                                 status="update", ts=ts, actions=_parse_actions_arg(args.actions),
-                                 agent=agent_label(cfg))   # WHICH provider answered (Codex / Claude / …)
-    if args.status:
-        ledger.set_status(cfg, args.app, [args.feedback_id], args.status)
-    print(f"curiator: replied on {args.app}/{args.feedback_id} (status={args.status or 'unchanged'})")
-    # Git as the memory: when enabled, this run becomes ONE atomic commit (source edit + ledger). The
-    # SHA is stamped back onto this ⚙ note so the conversation points at the history.
+    ledger.add_system_note(cfg, app, text, reply_to=[feedback_id],
+                           status="update", ts=ts, actions=_parse_actions_arg(actions),
+                           agent=agent_label(cfg))   # WHICH provider answered (Codex / Claude / …)
+    if status:
+        ledger.set_status(cfg, app, [feedback_id], status)
+    print(f"curiator: replied on {app}/{feedback_id} (status={status or 'unchanged'})")
+    # Git as the memory: when enabled, this run becomes ONE atomic commit (source edit + ledger).
+    # The commit SHA is printed and queryable from git; do not mutate the ledger after commit, or
+    # the collection is immediately dirty again.
     if (cfg.get("git", {}) or {}).get("commit"):
         from . import gitmem
         try:
-            res = gitmem.commit_run(cfg, args.app, args.feedback_id,
-                                    status=args.status or "update", note_text=args.text)
+            res = gitmem.commit_run(cfg, app, feedback_id,
+                                    status=status or "update", note_text=text)
         except Exception as exc:  # noqa: BLE001 — a git hiccup must never break the reply / loop
             res = {"committed": False, "reason": str(exc)}
         if res.get("committed"):
-            ledger.amend_note(cfg, args.app, nid, f"\n\ncommitted `{res['sha']}` on `{res.get('branch','')}`")
             print(f"curiator: committed {res['sha']} on {res.get('branch','')}")
         else:
             print(f"curiator: not committed ({res.get('reason')})")
     # On `done`, the agent has just edited the app — make the fix live in a running shell.
-    if args.status == "done":
-        msg = _reload_in_shell(cfg, args.app)
+    if status == "done":
+        msg = _reload_in_shell(cfg, app)
         print(f"curiator: {msg}" if msg else "curiator: shell not reachable — reload skipped "
               "(the fix shows once `curiator up` reloads the app).")
+    return 0
+
+
+def cmd_reply(args) -> int:
+    """Agent reply path: `curiator reply <app> <feedback_id> "<text>" --status done`.
+    When offering options, pass `--actions "A,B,C"` so the approval buttons match the text exactly."""
+    return _post_reply(load_config(), args.app, args.feedback_id, args.text, args.status, args.actions)
+
+
+def _git_output(cwd: Path, *args: str) -> str | None:
+    r = subprocess.run(["git", *args], cwd=cwd, capture_output=True, text=True)
+    return r.stdout.strip() if r.returncode == 0 else None
+
+
+def _project_root(cwd: Path | None = None) -> Path:
+    here = (cwd or Path.cwd()).resolve()
+    out = _git_output(here, "rev-parse", "--show-toplevel")
+    return Path(out).resolve() if out else here
+
+
+def _resolve_app(cfg: dict, app: str | None = None) -> str:
+    """The app an app-scoped command targets: the explicit --app, else the linked/inferred current
+    app, else the only app. Explicit/linked names are validated against the gallery so a typo (or a
+    comment swallowed by a positional) can't create ledger entries under a nonexistent key."""
+    from .loop.adapters import GENERAL_KEY
+    names = _app_names(cfg)
+    chosen = app or cfg.get("current_app")
+    if chosen:
+        chosen = str(chosen)
+        if chosen not in names and chosen != GENERAL_KEY:
+            raise SystemExit(f"curIAtor: unknown app {chosen!r} (apps: {', '.join(sorted(names))}).")
+        return chosen
+    if len(names) == 1:
+        return next(iter(names))
+    raise SystemExit("curIAtor: no app selected. Pass --app <key> or run `curiator link --app <key>`.")
+
+
+def _lookup_feedback(cfg: dict, feedback_id: str, app: str | None = None) -> tuple[str, dict] | None:
+    """Find a feedback id — the given/linked app first, then every other app (incl. ◆ General)."""
+    data = ledger.load(cfg)
+    keys = [app, *(k for k in data if k != app)] if app else list(data)
+    for key in keys:
+        for entry in data.get(key, []):
+            if entry.get("id") == feedback_id:
+                return key, entry
+    return None
+
+
+def _find_feedback(cfg: dict, feedback_id: str, app: str | None = None) -> tuple[str, dict]:
+    found = _lookup_feedback(cfg, feedback_id, app)
+    if not found:
+        raise SystemExit(f"curIAtor: feedback id {feedback_id!r} not found.")
+    return found
+
+
+def _choose_feedback(cfg: dict, app: str, statuses: tuple[str, ...] = ("new", "awaiting_approval", "working")) -> dict | None:
+    items = ledger.load(cfg).get(app, [])
+    for entry in reversed(items):
+        if entry.get("kind") != "system" and entry.get("status") in statuses:
+            return entry
+    return None
+
+
+def _feedback_counts(cfg: dict, app: str) -> tuple[int, int]:
+    items = ledger.load(cfg).get(app, [])
+    open_statuses = {"new", "working", "awaiting_approval"}
+    return len(items), sum(1 for e in items if e.get("kind") != "system" and e.get("status") in open_statuses)
+
+
+def _shell_url(cfg: dict, app: str | None = None) -> str:
+    port = (cfg.get("shell", {}) or {}).get("port", 8200)
+    base = f"http://127.0.0.1:{port}"
+    return f"{base}/?app={app}" if app else base
+
+
+def _curiator_env_cmd(cfg: dict, *parts: str) -> str:
+    gallery = shlex.quote(str(Path(cfg["gallery_path"]).resolve()))
+    args = " ".join(shlex.quote(str(part)) for part in parts)
+    return f"CURIATOR_GALLERY={gallery} curiator {args}"
+
+
+def _cli_user(cfg: dict) -> dict | None:
+    from . import auth
+    user = auth.current_user(cfg.get("auth") or {})
+    if not user:
+        # header/oidc/local modes have no request context on the CLI — record the local git identity
+        # (or $USER) instead of dropping provenance. No groups ⇒ never grants an elevated agent run.
+        root = Path(cfg["repo_root"])
+        email = _git_output(root, "config", "user.email") or f"{os.environ.get('USER') or 'anonymous'}@local"
+        name = _git_output(root, "config", "user.name")
+        user = {"id": email, "email": email, "name": name or email.split("@")[0], "groups": []}
+    return auth.stamp(user)
+
+
+def _portable_gallery_link(gallery: Path, root: Path) -> str:
+    """Path written to .curiator/app.yaml. Prefer relative links for clone portability."""
+    try:
+        return os.path.relpath(gallery.resolve(), root.resolve())
+    except ValueError:  # pragma: no cover - different Windows drives
+        return str(gallery.resolve())
+
+
+def cmd_link(args) -> int:
+    """Link the current app repo/directory to a collection gallery + app key."""
+    import yaml
+
+    gallery = Path(args.gallery).expanduser().resolve() if args.gallery else Path(load_config()["gallery_path"]).resolve()
+    if not gallery.exists():
+        raise SystemExit(f"curIAtor: gallery not found: {gallery}")
+    old_gallery = os.environ.get("CURIATOR_GALLERY")
+    os.environ["CURIATOR_GALLERY"] = str(gallery)
+    try:
+        cfg = load_config()
+    finally:
+        if old_gallery is None:
+            os.environ.pop("CURIATOR_GALLERY", None)
+        else:
+            os.environ["CURIATOR_GALLERY"] = old_gallery
+    app = args.app or cfg.get("current_app")
+    if not app:
+        raise SystemExit("curIAtor: pass --app <key> for this link.")
+    if app not in _app_names(cfg):
+        raise SystemExit(f"curIAtor: app {app!r} is not in {gallery}")
+    root = Path(args.root).expanduser().resolve() if args.root else _project_root()
+    link_path = root / LINK_REL
+    link_path.parent.mkdir(parents=True, exist_ok=True)
+    link_path.write_text(yaml.safe_dump({"gallery": _portable_gallery_link(gallery, root), "app": app}, sort_keys=False))
+    print(f"curiator: linked {root} → {gallery} app={app}")
+    print(f"  wrote {link_path}")
+    if args.commands:
+        _install_command_files(root)
+    return 0
+
+
+def cmd_status(args) -> int:
+    cfg = load_config()
+    app = args.app or cfg.get("current_app")
+    root = Path(cfg["repo_root"])
+    branch = _git_output(root, "branch", "--show-current") or "not a git repo"
+    dirty = _git_output(root, "status", "--porcelain")
+    git = cfg.get("git", {}) or {}
+    print("curIAtor status")
+    print(f"  gallery: {cfg['gallery_path']}")
+    if cfg.get("link_path"):
+        print(f"  link:    {cfg['link_path']}")
+    print(f"  shell:   {_shell_url(cfg, app)}")
+    print(f"  git:     commit={git.get('commit')} branch={git.get('branch') or branch} include_ledger={git.get('include_ledger')}")
+    print(f"  repo:    {root} [{branch}{', dirty' if dirty else ', clean'}]")
+    if app:
+        spec = app_spec(cfg, app) or {}
+        total, open_n = _feedback_counts(cfg, app)
+        print(f"  app:     {app}")
+        print(f"  root:    {spec.get('root') or 'unknown'}")
+        print(f"  source:  {spec.get('source') or 'unknown'}")
+        if spec.get("smoke"):
+            print(f"  smoke:   {spec['smoke']}")
+        print(f"  feedback:{open_n} open / {total} total")
+        print(f"  next:    curiator work --app {app}")
+    else:
+        print("  app:     none selected (pass --app or run curiator link)")
+    return 0
+
+
+_PORTABLE_PATH_KEYS = {"path", "root", "source", "cwd", "dir", "users_file", "gallery", "gallery_path"}
+_USER_ABS_PATH_RE = re.compile(r"(?<![\w.-])(?:/[A-Za-z0-9_.-]+)?/(?:home|Users)/[^\s'\"`]+|[A-Za-z]:[\\/]+Users[\\/]+[^\s'\"`]+")
+
+
+def _looks_absolute_path(value: str) -> bool:
+    return value.startswith("/") or bool(re.match(r"^[A-Za-z]:[\\/]", value))
+
+
+def _repo_path(cfg: dict, path: str | None) -> str | None:
+    if not path:
+        return None
+    p = Path(path)
+    try:
+        return str(p.resolve().relative_to(Path(cfg["repo_root"]).resolve())) or "."
+    except ValueError:
+        return str(p)
+
+
+def _doctor_scan_portability(node, where: str, issues: list[dict], needles: tuple[str, ...]) -> None:
+    if isinstance(node, dict):
+        for key, value in node.items():
+            loc = f"{where}.{key}" if where else str(key)
+            if isinstance(value, str):
+                if str(key) in _PORTABLE_PATH_KEYS and _looks_absolute_path(value):
+                    issues.append({
+                        "severity": "error",
+                        "where": loc,
+                        "message": f"absolute path breaks clone portability: {value}",
+                    })
+                for needle in needles:
+                    if needle and needle in value:
+                        issues.append({
+                            "severity": "error",
+                            "where": loc,
+                            "message": f"contains machine-local path {needle}",
+                        })
+                if _USER_ABS_PATH_RE.search(value):
+                    issues.append({
+                        "severity": "error",
+                        "where": loc,
+                        "message": "contains a user-home absolute path",
+                    })
+            else:
+                _doctor_scan_portability(value, loc, issues, needles)
+    elif isinstance(node, list):
+        for i, value in enumerate(node):
+            _doctor_scan_portability(value, f"{where}[{i}]", issues, needles)
+
+
+def _doctor_issues(cfg: dict) -> list[dict]:
+    import yaml
+
+    issues: list[dict] = []
+    gallery = Path(cfg["gallery_path"])
+    repo = Path(cfg["repo_root"]).resolve()
+    raw = yaml.safe_load(gallery.read_text()) or {}
+    needles = tuple({str(repo), str(Path.home())} - {"", "/"})
+    _doctor_scan_portability(raw, "gallery.yaml", issues, needles)
+
+    link = cfg.get("link") or {}
+    if link:
+        gallery_link = str(link.get("gallery") or link.get("gallery_path") or "")
+        if gallery_link and _looks_absolute_path(gallery_link):
+            issues.append({
+                "severity": "error",
+                "where": cfg.get("link_path") or ".curiator/app.yaml",
+                "message": f"linked gallery is absolute; rerun `curiator link` to write a relative link: {gallery_link}",
+            })
+
+    seen_specs: set[tuple[str, str, str]] = set()
+    for spec in app_specs(cfg):
+        name = str(spec.get("name") or spec.get("app_name") or "<unknown>")
+        mount = spec.get("mount") or {}
+        source_path = Path(spec.get("source") or "")
+        for label in ("root", "source"):
+            raw_path = spec.get(label)
+            if not raw_path:
+                continue
+            path = Path(raw_path)
+            key = (name, label, str(path))
+            if key in seen_specs:
+                continue
+            seen_specs.add(key)
+            if not path.exists():
+                issues.append({
+                    "severity": "error",
+                    "where": f"app {name} {label}",
+                    "message": f"configured path does not exist: {path}",
+                })
+        if not spec.get("smoke") and (mount.get("kind") == "proxy" or source_path.is_dir()):
+            issues.append({
+                "severity": "warning",
+                "where": f"app {name} smoke",
+                "message": "no smoke command configured; release preflight will use only a weak fallback",
+            })
+        if mount.get("kind") == "proxy":
+            cmd = str(mount.get("cmd") or "")
+            port = mount.get("port")
+            if port is not None and "{port}" not in cmd and str(port) not in cmd:
+                issues.append({
+                    "severity": "warning",
+                    "where": f"app {name} proxy",
+                    "message": f"proxy command does not mention configured port {port}",
+                })
+    return issues
+
+
+def cmd_doctor(args) -> int:
+    cfg = load_config()
+    issues = _doctor_issues(cfg)
+    errors = [i for i in issues if i.get("severity") == "error"]
+    warnings = [i for i in issues if i.get("severity") == "warning"]
+    if args.json:
+        print(json.dumps({"ok": not errors, "errors": len(errors), "warnings": len(warnings), "issues": issues}, indent=2))
+        return 1 if errors else 0
+    if not issues:
+        print("curiator: doctor OK — no portability/config issues found.")
+        return 0
+    print(f"curiator: doctor found {len(errors)} error(s), {len(warnings)} warning(s):")
+    for issue in issues:
+        print(f"  {issue['severity'].upper()} {issue['where']}: {issue['message']}")
+    return 1 if errors else 0
+
+
+def _smoke_specs(cfg: dict, app: str | None = None) -> list[dict]:
+    specs = app_specs(cfg)
+    if app:
+        matches = [s for s in specs if app in {s.get("name"), s.get("app_name"), s.get("module")}]
+        if not matches:
+            raise SystemExit(f"curIAtor: unknown app {app!r}.")
+        return matches
+    return specs
+
+
+def _smoke_results(cfg: dict, app: str | None = None) -> list[dict]:
+    from . import gitmem
+
+    results = []
+    seen: set[str] = set()
+    for spec in _smoke_specs(cfg, app):
+        name = str(spec.get("name") or spec.get("app_name") or spec.get("module"))
+        if not name or name in seen:
+            continue
+        seen.add(name)
+        ok, message = gitmem.smoke_app(cfg, name, spec.get("source"))
+        results.append({
+            "app": name,
+            "ok": ok,
+            "message": message,
+            "smoke": spec.get("smoke"),
+            "smoke_timeout": spec.get("smoke_timeout") or ((cfg.get("smoke") or {}).get("timeout")
+                                                           if isinstance(cfg.get("smoke"), dict) else None),
+            "root": _repo_path(cfg, spec.get("root")),
+            "source": _repo_path(cfg, spec.get("source")),
+        })
+    return results
+
+
+def cmd_smoke(args) -> int:
+    cfg = load_config()
+    results = _smoke_results(cfg, args.app)
+    ok = all(r["ok"] for r in results)
+    if args.json:
+        print(json.dumps({"ok": ok, "results": results}, indent=2))
+        return 0 if ok else 1
+    for r in results:
+        status = "OK" if r["ok"] else "FAIL"
+        detail = f" — {r['message']}" if r.get("message") else ""
+        command = f" [{r['smoke']}]" if r.get("smoke") else ""
+        print(f"curiator: smoke {status} {r['app']}{command}{detail}")
+    print(f"curiator: smoke {'OK' if ok else 'FAILED'} ({sum(1 for r in results if r['ok'])}/{len(results)} passed)")
+    return 0 if ok else 1
+
+
+def cmd_context(args) -> int:
+    cfg = load_config()
+    app = _resolve_app(cfg, args.app)
+    spec = app_spec(cfg, app) or {}
+    total, open_n = _feedback_counts(cfg, app)
+    print(f"# curIAtor Context: {app}")
+    print("")
+    print(f"- gallery: `{cfg['gallery_path']}`")
+    print(f"- shell: `{_shell_url(cfg, app)}`")
+    print(f"- app root: `{spec.get('root') or ''}`")
+    print(f"- source scope: `{spec.get('source') or ''}`")
+    print(f"- smoke: `{spec.get('smoke') or 'none configured'}`")
+    print(f"- feedback: {open_n} open / {total} total")
+    print("")
+    print("## Ready Commands")
+    print("")
+    print(f"- work next item: `{_curiator_env_cmd(cfg, 'work', '--app', app)}`")
+    print(f"- show history: `{_curiator_env_cmd(cfg, 'feedback', 'show', app, '--limit', str(args.limit))}`")
+    print(f"- add feedback: `{_curiator_env_cmd(cfg, 'feedback', 'add', app, '<comment>')}`")
+    print(f"- open URL: `{_shell_url(cfg, app)}`")
+    print("")
+    print("## Recent Feedback")
+    print("")
+    _print_feedback_items(cfg, app, limit=args.limit)
+    return 0
+
+
+def cmd_work(args) -> int:
+    cfg = load_config()
+    app = args.app or cfg.get("current_app")
+    if args.feedback_id:
+        app, entry = _find_feedback(cfg, args.feedback_id, app)
+        if entry.get("kind") == "system":
+            raise SystemExit(f"curIAtor: {args.feedback_id} is a ⚙ agent note — "
+                             "work the user feedback item it replies to instead.")
+    else:
+        app = _resolve_app(cfg, app)
+        entry = _choose_feedback(cfg, app)
+        if not entry:
+            raise SystemExit(f"curIAtor: no open feedback for {app}.")
+    if not args.no_claim:
+        ledger.set_status(cfg, app, [entry["id"]], "working")
+        entry = {**entry, "status": "working"}
+    from .loop import adapters, runlog
+    task = adapters.build_task(cfg, app, entry)
+    reply_file = Path(task.reply_file)
+    if reply_file.exists() and reply_file.stat().st_size:
+        runlog.note(task, "opened for interactive CLI work")
+    else:
+        runlog.init_trace(task, "interactive")
+        runlog.note(task, "opened for interactive CLI work")
+    print(f"curiator: working {app}/{entry['id']}")
+    print(f"task: {task.task_file}")
+    print(f"trace: {task.reply_file}")
+    if args.print:
+        print("")
+        print(Path(task.task_file).read_text())
+    return 0
+
+
+def cmd_done(args) -> int:
+    cfg = load_config()
+    app = args.app or cfg.get("current_app")
+    words = list(args.text or [])
+    feedback_id = args.feedback_id
+    found = _lookup_feedback(cfg, feedback_id, app) if feedback_id else None
+    if feedback_id and not found:
+        # `curiator done "fixed the axis labels"` — a first word that isn't a known id (and doesn't
+        # look like one) is message text, not a typo'd id; fall through to the latest-open-item path.
+        if re.fullmatch(r"[0-9a-f]{8}", feedback_id):
+            raise SystemExit(f"curIAtor: feedback id {feedback_id!r} not found.")
+        words.insert(0, feedback_id)
+        feedback_id = None
+    if found:
+        app = found[0]
+    else:
+        app = _resolve_app(cfg, app)
+        entry = (_choose_feedback(cfg, app, statuses=("working",))              # prefer the claimed item
+                 or _choose_feedback(cfg, app, statuses=("new", "awaiting_approval")))
+        if not entry:
+            raise SystemExit(f"curIAtor: no open feedback for {app}.")
+        feedback_id = entry["id"]
+    text = " ".join(words).strip() or "Done."
+    return _post_reply(cfg, app, feedback_id, text, "done", None)
+
+
+def cmd_open(args) -> int:
+    cfg = load_config()
+    app = args.app or cfg.get("current_app")
+    print(_shell_url(cfg, app))
+    return 0
+
+
+def _command_markdown() -> str:
+    return """---
+name: curiator
+description: Use when working in a repo linked to a curIAtor gallery, handling curIAtor feedback IDs, opening task bundles, posting replies, or finishing app changes through curIAtor's ledger, reload, and git-as-memory workflow.
+---
+
+# curIAtor
+
+You are working inside a repo or directory linked to a curIAtor gallery.
+
+Use the `curiator` CLI as the source of truth:
+- `curiator status` shows the linked gallery/app and git-as-memory state.
+- `curiator context` prints source scope, smoke test, recent feedback, and ready commands.
+- `curiator work [feedback_id]` prints the exact task bundle a headless curator would receive and marks the item `working`.
+- After edits and smoke tests, use `curiator done <feedback_id> "<summary>"`.
+- For proposals, use `curiator reply <app> <feedback_id> "<plan>" --status awaiting_approval`.
+- Do not edit `feedback/app_feedback.sqlite` directly.
+- Do not run git commit/push/rewrite commands for curator work; `curiator done`/`reply --status done` handles git-as-memory.
+
+When the user invokes this shim:
+1. If they provide no arguments, run `curiator status` and `curiator context`.
+2. If they provide `work` or a feedback id, run `curiator work ...`, read the printed task bundle, and follow it.
+3. If they provide `done`, help formulate and run the appropriate `curiator done ...` command after verifying the change.
+"""
+
+
+def _legacy_command_markdown() -> str:
+    return _command_markdown().replace(
+        "When the user invokes this shim:",
+        "When the user invokes this command:",
+    )
+
+
+def _prune_empty_dirs(path: Path, stop: Path) -> None:
+    while path != stop and path.exists():
+        try:
+            path.rmdir()
+        except OSError:
+            return
+        path = path.parent
+
+
+def _install_command_files(root: Path) -> list[Path]:
+    paths = [
+        root / ".claude" / "commands" / "curiator.md",
+        root / ".agents" / "skills" / "curiator" / "SKILL.md",
+    ]
+    for path in paths:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(_command_markdown())
+    return paths
+
+
+def _cleanup_legacy_codex_skill(root: Path) -> tuple[Path, str] | None:
+    legacy = root / ".codex" / "skills" / "curiator" / "SKILL.md"
+    if not legacy.exists():
+        return None
+    generated = {_command_markdown(), _legacy_command_markdown()}
+    try:
+        text = legacy.read_text()
+    except OSError:
+        return legacy, "kept"
+    if text not in generated:
+        return legacy, "kept"
+    legacy.unlink()
+    _prune_empty_dirs(legacy.parent, root / ".codex")
+    _prune_empty_dirs(root / ".codex", root)
+    return legacy, "removed"
+
+
+def cmd_commands(args) -> int:
+    root = Path(args.root).expanduser().resolve() if args.root else _project_root()
+    paths = _install_command_files(root)
+    legacy = _cleanup_legacy_codex_skill(root)
+    print(f"curiator: installed interactive command shims in {root}")
+    for path in paths:
+        print(f"  + {path.relative_to(root)}")
+    if legacy:
+        legacy_path, action = legacy
+        if action == "removed":
+            print(f"  - {legacy_path.relative_to(root)} (legacy Codex skill path)")
+        else:
+            print(f"  ! kept customized legacy file: {legacy_path.relative_to(root)}")
     return 0
 
 
@@ -251,12 +767,44 @@ def cmd_seed(args) -> int:
     return 0
 
 
+def _print_feedback_items(cfg: dict, app: str, limit: int = 20) -> None:
+    from .loop import runlog
+    items = ledger.load(cfg).get(app, [])
+    shown = items[-limit:] if limit else items
+    if not shown:
+        print(f"{app}: no feedback")
+        return
+    print(f"{app}:")
+    for e in shown:
+        who = e.get("agent") if e.get("author") == "claude" else ((e.get("user") or {}).get("name") or "user")
+        flags = []
+        if e.get("reply_to"):
+            flags.append("reply_to=" + ",".join(e.get("reply_to") or []))
+        if e.get("screenshot"):
+            flags.append("screenshot=" + e.get("screenshot"))
+        trace = runlog.reply_path(cfg, e.get("id"))
+        if trace.exists():
+            flags.append("trace=" + str(trace.relative_to(Path(cfg["repo_root"]))))
+        extra = f" [{' · '.join(flags)}]" if flags else ""
+        comment = " ".join((e.get("comment") or "").split())
+        print(f"  {e.get('id')} {e.get('status')} {e.get('kind')} {who}: {comment[:160]}{extra}")
+
+
 def cmd_feedback(args) -> int:
     """Inspect the SQLite feedback ledger. This is intentionally CLI-level tooling so headless agents can
     inspect history without treating the SQLite file format as a private API."""
     import json
-    from .loop import runlog
     cfg = load_config()
+    if args.action == "add":
+        app = _resolve_app(cfg, args.app)
+        comment = (args.comment_text or " ".join(args.comment or [])).strip()
+        if not comment and not args.stars:
+            raise SystemExit("curIAtor: feedback add needs a comment and/or --stars.")
+        reply_to = [args.reply_to] if args.reply_to else []
+        eid = ledger.save_entry(cfg, app, stars=args.stars, comment=comment, user=_cli_user(cfg),
+                                extra={"reply_to": reply_to} if reply_to else None)
+        print(f"curiator: added feedback {app}/{eid}")
+        return 0
     data = ledger.load(cfg)
     if args.app:
         data = {args.app: data.get(args.app, [])}
@@ -264,23 +812,90 @@ def cmd_feedback(args) -> int:
         print(json.dumps(data if args.app is None else data.get(args.app, []), indent=2))
         return 0
     for app, items in data.items():
-        shown = items[-args.limit:] if args.limit else items
-        if not shown:
+        if items:
+            _print_feedback_items(cfg, app, args.limit)
+    return 0
+
+
+def _fmt_seconds(seconds) -> str:
+    if seconds is None:
+        return "n/a"
+    seconds = int(round(float(seconds)))
+    if seconds < 60:
+        return f"{seconds}s"
+    minutes, sec = divmod(seconds, 60)
+    if minutes < 60:
+        return f"{minutes}m {sec}s" if sec else f"{minutes}m"
+    hours, minute = divmod(minutes, 60)
+    if hours < 48:
+        return f"{hours}h {minute}m" if minute else f"{hours}h"
+    days, hour = divmod(hours, 24)
+    return f"{days}d {hour}h" if hour else f"{days}d"
+
+
+def _fmt_counts(counts: dict) -> str:
+    return ", ".join(f"{k}={v}" for k, v in sorted(counts.items())) or "none"
+
+
+def cmd_stats(args) -> int:
+    """Emit reproducible collection metrics for release notes and case studies."""
+    from . import stats as stats_mod
+
+    cfg = load_config()
+    summary = stats_mod.summarize(cfg, app=args.app, include_git=not args.no_git)
+    if args.json:
+        print(json.dumps(summary, indent=2, sort_keys=True))
+        return 0
+    if args.markdown:
+        print(stats_mod.format_markdown(summary), end="")
+        return 0
+    if args.csv:
+        print(stats_mod.format_csv(summary), end="")
+        return 0
+
+    totals = summary["totals"]
+    latency = summary["reply_latency"]
+    print("curIAtor stats")
+    print(f"  gallery: {summary['gallery']}")
+    print(f"  ledger:  {summary['ledger']}")
+    print(f"  apps:    {summary['apps_with_feedback']} with feedback")
+    print(
+        "  cycles:  "
+        f"{totals['cycles']} feedback items, {totals['open_cycles']} open, "
+        f"{totals['replied_cycles']} replied ({totals['reply_rate_percent']}%)"
+    )
+    print(f"  notes:   {totals['agent_notes']} agent notes")
+    print(f"  media:   {totals['screenshots']} screenshots, {totals['rated_cycles']} rated")
+    print(
+        "  latency: "
+        f"median={_fmt_seconds(latency['median_seconds'])}, "
+        f"avg={_fmt_seconds(latency['avg_seconds'])}, n={latency['count']}"
+    )
+    print(f"  status:  {_fmt_counts(summary['status_counts'])}")
+    if "git" in summary:
+        git = summary["git"]
+        if git.get("available"):
+            latest = git.get("latest") or {}
+            suffix = f", latest={latest.get('sha')} {latest.get('subject')}" if latest else ""
+            print(
+                "  git:     "
+                f"{git['curator_commits']} curator commits, {git['revert_commits']} reverts, "
+                f"{git['feedback_ids']} feedback ids{suffix}"
+            )
+        else:
+            print(f"  git:     unavailable ({git.get('reason')})")
+    print("")
+    print("per app:")
+    for row in summary["apps"]:
+        if not row["entries"]:
             continue
-        print(f"{app}:")
-        for e in shown:
-            who = e.get("agent") if e.get("author") == "claude" else ((e.get("user") or {}).get("name") or "user")
-            flags = []
-            if e.get("reply_to"):
-                flags.append("reply_to=" + ",".join(e.get("reply_to") or []))
-            if e.get("screenshot"):
-                flags.append("screenshot=" + e.get("screenshot"))
-            trace = runlog.reply_path(cfg, e.get("id"))
-            if trace.exists():
-                flags.append("trace=" + str(trace.relative_to(Path(cfg["repo_root"]))))
-            extra = f" [{' · '.join(flags)}]" if flags else ""
-            comment = " ".join((e.get("comment") or "").split())
-            print(f"  {e.get('id')} {e.get('status')} {e.get('kind')} {who}: {comment[:160]}{extra}")
+        lat = row["reply_latency"]
+        print(
+            f"  {row['app']}: {row['cycles']} cycles, {row['open_cycles']} open, "
+            f"{row['agent_notes']} notes, {row['replied_cycles']} replied, "
+            f"median reply {_fmt_seconds(lat['median_seconds'])}, "
+            f"status [{_fmt_counts(row['status_counts'])}]"
+        )
     return 0
 
 
@@ -478,6 +1093,16 @@ def _gallery_entry(name: str, template: str, title: str, tags: list[str], port: 
             f"    mount: {{ kind: proxy, cmd: \"python -m http.server {port} --bind 127.0.0.1\", port: {port} }}\n"
             f"    tags: {_yaml_list(tags)}\n"
         )
+    if template in {"react", "svelte"}:
+        return (
+            f"  - name: {name}\n"
+            f"    title: {json.dumps(title)}\n"
+            f"    root: {root}\n"
+            f"    source: .\n"
+            f"    smoke: npm run build\n"
+            f"    mount: {{ kind: proxy, cmd: \"npm run dev -- --host 127.0.0.1 --port {port}\", port: {port} }}\n"
+            f"    tags: {_yaml_list(tags)}\n"
+        )
     return (
         f"  - name: {name}\n"
         f"    title: {json.dumps(title)}\n"
@@ -494,6 +1119,12 @@ def _app_template_files(name: str, template: str, title: str) -> dict[str, str]:
         return {f"{name}.py": _APP_DASH_TEMPLATE.format(name=name, title=title)}
     if template == "static":
         return {"index.html": _APP_STATIC_TEMPLATE.format(name=name, title=title)}
+    if template == "react":
+        return {rel: content.format(name=name, title=title, title_json=json.dumps(title))
+                for rel, content in _APP_REACT_TEMPLATE.items()}
+    if template == "svelte":
+        return {rel: content.format(name=name, title=title, title_json=json.dumps(title))
+                for rel, content in _APP_SVELTE_TEMPLATE.items()}
     return {"server.py": _APP_PYTHON_TEMPLATE.format(name=name, title=title)}
 
 
@@ -515,7 +1146,8 @@ def cmd_app_create(args) -> int:
         return 1
     title = args.title or _title_from_name(name)
     tags = _tags_arg(args.tags, template)
-    port = args.port if args.port is not None else (_next_proxy_port(cfg) if template in {"static", "python"} else None)
+    proxy_templates = {"static", "python", "react", "svelte"}
+    port = args.port if args.port is not None else (_next_proxy_port(cfg) if template in proxy_templates else None)
 
     created, skipped = [], []
     root.mkdir(parents=True, exist_ok=True)
@@ -524,6 +1156,7 @@ def cmd_app_create(args) -> int:
         if p.exists():
             skipped.append(str(p.relative_to(repo)))
             continue
+        p.parent.mkdir(parents=True, exist_ok=True)
         p.write_text(content)
         created.append(str(p.relative_to(repo)))
 
@@ -571,24 +1204,65 @@ def main(argv=None) -> int:
     demo_up.set_defaults(func=cmd_demo_up)
     ip = sub.add_parser("init", help="scaffold a new collection repo in <dir>")
     ip.add_argument("dir"); ip.set_defaults(func=cmd_init)
+    lk = sub.add_parser("link", help="link this app repo/directory to a gallery app")
+    lk.add_argument("--gallery", help="path to gallery.yaml")
+    lk.add_argument("--app", help="app key in the gallery")
+    lk.add_argument("--root", help="where to write .curiator/app.yaml (default: git root or cwd)")
+    lk.add_argument("--commands", action="store_true", help="also install local Claude/Codex command shims")
+    lk.set_defaults(func=cmd_link)
+    st = sub.add_parser("status", help="show linked gallery/app and git-as-memory state")
+    st.add_argument("--app", help="override linked/current app")
+    st.set_defaults(func=cmd_status)
+    dr = sub.add_parser("doctor", help="check collection config portability and app paths")
+    dr.add_argument("--json", action="store_true", help="emit machine-readable diagnostics")
+    dr.set_defaults(func=cmd_doctor)
+    sm = sub.add_parser("smoke", help="run configured app smoke commands for this collection")
+    sm.add_argument("--app", help="limit smoke checks to one app")
+    sm.add_argument("--json", action="store_true", help="emit machine-readable results")
+    sm.set_defaults(func=cmd_smoke)
+    cx = sub.add_parser("context", help="print app context and recent feedback for interactive agents")
+    cx.add_argument("--app", help="override linked/current app")
+    cx.add_argument("--limit", type=int, default=8)
+    cx.set_defaults(func=cmd_context)
+    wk = sub.add_parser("work", help="claim/open a feedback item and print its task bundle")
+    wk.add_argument("feedback_id", nargs="?", help="feedback id; defaults to latest open item for the app")
+    wk.add_argument("--app", help="override linked/current app")
+    wk.add_argument("--no-claim", action="store_true", help="do not set the feedback status to working")
+    wk.add_argument("--no-print", dest="print", action="store_false", default=True,
+                    help="write the task file but do not print it")
+    wk.set_defaults(func=cmd_work)
+    dn = sub.add_parser("done", help="reply done for interactive work (reload + git-as-memory)")
+    dn.add_argument("feedback_id", nargs="?",
+                    help="feedback id (defaults to the latest working item); a non-id word here is "
+                         "treated as the start of the summary text")
+    dn.add_argument("text", nargs="*", help="summary text")
+    dn.add_argument("--app", help="override linked/current app")
+    dn.set_defaults(func=cmd_done)
+    op = sub.add_parser("open", help="print the gallery/app URL")
+    op.add_argument("--app", help="override linked/current app")
+    op.set_defaults(func=cmd_open)
+    cmds = sub.add_parser("commands", help="install local slash-command shims")
+    cmds.add_argument("action", choices=["install"], nargs="?", default="install")
+    cmds.add_argument("--root", help="where to install shims (default: git root or cwd)")
+    cmds.set_defaults(func=cmd_commands)
     app = sub.add_parser("app", help="manage apps in this collection")
     app_sub = app.add_subparsers(dest="action", required=True)
     ac = app_sub.add_parser("create", help="scaffold an app directory and add it to gallery.yaml")
     ac.add_argument("name", help="app key, e.g. orange_picker")
-    ac.add_argument("--template", choices=["dash", "static", "python"], default="dash",
+    ac.add_argument("--template", choices=["dash", "static", "python", "react", "svelte"], default="dash",
                     help="scaffold template (default: dash)")
     ac.add_argument("--title", help="display title")
     ac.add_argument("--tags", help="comma-separated tags; default is the template name")
-    ac.add_argument("--port", type=int, help="proxy port for static/python templates")
+    ac.add_argument("--port", type=int, help="proxy port for static/python/react/svelte templates")
     ac.add_argument("--force", action="store_true", help="allow an existing apps/<name> directory")
     ac.set_defaults(func=cmd_app_create)
     ia = sub.add_parser("init-app", help="alias for `curiator app create`")
     ia.add_argument("name", help="app key, e.g. orange_picker")
-    ia.add_argument("--template", choices=["dash", "static", "python"], default="dash",
+    ia.add_argument("--template", choices=["dash", "static", "python", "react", "svelte"], default="dash",
                     help="scaffold template (default: dash)")
     ia.add_argument("--title", help="display title")
     ia.add_argument("--tags", help="comma-separated tags; default is the template name")
-    ia.add_argument("--port", type=int, help="proxy port for static/python templates")
+    ia.add_argument("--port", type=int, help="proxy port for static/python/react/svelte templates")
     ia.add_argument("--force", action="store_true", help="allow an existing apps/<name> directory")
     ia.set_defaults(func=cmd_app_create)
     r = sub.add_parser("reply", help="(agent) post a ⚙ note + set status")
@@ -600,9 +1274,21 @@ def main(argv=None) -> int:
     rl.add_argument("app"); rl.set_defaults(func=cmd_reload)
     sd = sub.add_parser("seed", help="load canned feedback (YAML) into the ledger — a self-building demo queue")
     sd.add_argument("file"); sd.set_defaults(func=cmd_seed)
-    fb = sub.add_parser("feedback", help="inspect the SQLite feedback ledger")
-    fb.add_argument("action", choices=["show", "dump"], nargs="?", default="show")
+    stt = sub.add_parser("stats", help="summarize ledger + git-as-memory metrics")
+    stt.add_argument("--app", help="limit metrics to one app")
+    stats_out = stt.add_mutually_exclusive_group()
+    stats_out.add_argument("--json", action="store_true", help="emit machine-readable JSON")
+    stats_out.add_argument("--markdown", action="store_true", help="emit Markdown tables for release notes or papers")
+    stats_out.add_argument("--csv", action="store_true", help="emit app-level CSV rows")
+    stt.add_argument("--no-git", action="store_true", help="skip git log metrics")
+    stt.set_defaults(func=cmd_stats)
+    fb = sub.add_parser("feedback", help="inspect or add SQLite feedback")
+    fb.add_argument("action", choices=["show", "dump", "add"], nargs="?", default="show")
     fb.add_argument("app", nargs="?")
+    fb.add_argument("comment", nargs="*")
+    fb.add_argument("--comment", dest="comment_text")
+    fb.add_argument("--stars", type=int, choices=range(1, 6))
+    fb.add_argument("--reply-to")
     fb.add_argument("--limit", type=int, default=20)
     fb.set_defaults(func=cmd_feedback)
     us = sub.add_parser("user", help="manage local-login users (auth.mode: local)")
@@ -728,7 +1414,8 @@ Use the scaffold command; it creates `apps/<name>/` and updates `gallery.yaml`:
 
     curiator app create revenue --template dash --title "Revenue dashboard"
 
-Templates: `dash`, `static`, `python`. You can still edit `gallery.yaml` manually for existing apps.
+Templates: `dash`, `static`, `python`, `react`, `svelte`. React/Svelte use Vite behind a same-origin
+proxy mount. You can still edit `gallery.yaml` manually for existing apps.
 
 See the consumer guide: https://github.com/LearnedResponse/curiator/blob/main/docs/USING_CURIATOR.md
 """
@@ -830,6 +1517,289 @@ _APP_STATIC_TEMPLATE = """\
   </body>
 </html>
 """
+
+_APP_REACT_TEMPLATE = {
+    "package.json": """\
+{{
+  "name": "{name}",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {{
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  }},
+  "dependencies": {{
+    "@vitejs/plugin-react": "^4.3.0",
+    "vite": "^5.4.0",
+    "typescript": "^5.5.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  }},
+  "devDependencies": {{}}
+}}
+""",
+    "index.html": """\
+<!doctype html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>{title}</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
+</html>
+""",
+    "vite.config.js": """\
+import {{ defineConfig }} from "vite";
+import react from "@vitejs/plugin-react";
+
+const app = process.env.CURIATOR_APP || "";
+const base = app ? `/app/${{app}}/` : "/";
+
+export default defineConfig({{
+  base,
+  plugins: [react()],
+  server: {{
+    host: "127.0.0.1",
+  }},
+}});
+""",
+    "src/main.jsx": """\
+import React from "react";
+import {{ createRoot }} from "react-dom/client";
+import App from "./App.jsx";
+import "./style.css";
+
+createRoot(document.getElementById("root")).render(
+  <React.StrictMode>
+    <App />
+  </React.StrictMode>,
+);
+""",
+    "src/App.jsx": """\
+export default function App() {{
+  const title = {title_json};
+  return (
+    <main className="surface">
+      <p className="eyebrow">curIAtor React scaffold</p>
+      <h1>{{title}}</h1>
+      <p>
+        This React app is served through a same-origin proxy mount. Use the feedback rail to shape the
+        interface; the curator edits files in this directory and smoke-tests with <code>npm run build</code>.
+      </p>
+      <section className="metricGrid" aria-label="demo metrics">
+        <div><b>4</b><span>signals</span></div>
+        <div><b>12m</b><span>review window</span></div>
+        <div><b>98%</b><span>uptime</span></div>
+      </section>
+    </main>
+  );
+}}
+""",
+    "src/style.css": """\
+:root {{
+  color: #22272e;
+  background: #f6f7f8;
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}}
+
+body {{
+  margin: 0;
+}}
+
+.surface {{
+  max-width: 880px;
+  padding: 32px;
+}}
+
+.eyebrow {{
+  margin: 0 0 8px;
+  color: #8e44ad;
+  font-size: 13px;
+  font-weight: 700;
+}}
+
+h1 {{
+  margin: 0 0 12px;
+  font-size: 32px;
+}}
+
+p {{
+  color: #5e6670;
+  line-height: 1.55;
+}}
+
+.metricGrid {{
+  display: grid;
+  grid-template-columns: repeat(3, minmax(120px, 1fr));
+  gap: 12px;
+  margin-top: 24px;
+  max-width: 620px;
+}}
+
+.metricGrid div {{
+  border: 1px solid #d9dde2;
+  border-radius: 8px;
+  background: white;
+  padding: 14px;
+}}
+
+.metricGrid b {{
+  display: block;
+  font-size: 24px;
+}}
+
+.metricGrid span {{
+  color: #6c747d;
+  font-size: 13px;
+}}
+""",
+}
+
+_APP_SVELTE_TEMPLATE = {
+    "package.json": """\
+{{
+  "name": "{name}",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {{
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  }},
+  "dependencies": {{
+    "@sveltejs/vite-plugin-svelte": "^3.1.0",
+    "vite": "^5.4.0",
+    "svelte": "^4.2.0"
+  }},
+  "devDependencies": {{}}
+}}
+""",
+    "index.html": """\
+<!doctype html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>{title}</title>
+  </head>
+  <body>
+    <div id="app"></div>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
+""",
+    "vite.config.js": """\
+import {{ defineConfig }} from "vite";
+import {{ svelte }} from "@sveltejs/vite-plugin-svelte";
+
+const app = process.env.CURIATOR_APP || "";
+const base = app ? `/app/${{app}}/` : "/";
+
+export default defineConfig({{
+  base,
+  plugins: [svelte()],
+  server: {{
+    host: "127.0.0.1",
+  }},
+}});
+""",
+    "src/main.js": """\
+import App from "./App.svelte";
+
+const app = new App({{
+  target: document.getElementById("app"),
+}});
+
+export default app;
+""",
+    "src/App.svelte": """\
+<script>
+  const title = {title_json};
+  const metrics = [
+    ["3", "states"],
+    ["18m", "iteration"],
+    ["7", "notes"],
+  ];
+</script>
+
+<main class="surface">
+  <p class="eyebrow">curIAtor Svelte scaffold</p>
+  <h1>{{title}}</h1>
+  <p>
+    This Svelte app is served through a same-origin proxy mount. Use the feedback rail to shape the
+    interface; the curator edits files in this directory and smoke-tests with <code>npm run build</code>.
+  </p>
+  <section class="metricGrid" aria-label="demo metrics">
+    {{#each metrics as metric}}
+      <div><b>{{metric[0]}}</b><span>{{metric[1]}}</span></div>
+    {{/each}}
+  </section>
+</main>
+
+<style>
+  :global(body) {{
+    margin: 0;
+    color: #22272e;
+    background: #f6f7f8;
+    font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  }}
+
+  .surface {{
+    max-width: 880px;
+    padding: 32px;
+  }}
+
+  .eyebrow {{
+    margin: 0 0 8px;
+    color: #8e44ad;
+    font-size: 13px;
+    font-weight: 700;
+  }}
+
+  h1 {{
+    margin: 0 0 12px;
+    font-size: 32px;
+  }}
+
+  p {{
+    color: #5e6670;
+    line-height: 1.55;
+  }}
+
+  .metricGrid {{
+    display: grid;
+    grid-template-columns: repeat(3, minmax(120px, 1fr));
+    gap: 12px;
+    margin-top: 24px;
+    max-width: 620px;
+  }}
+
+  .metricGrid div {{
+    border: 1px solid #d9dde2;
+    border-radius: 8px;
+    background: white;
+    padding: 14px;
+  }}
+
+  .metricGrid b {{
+    display: block;
+    font-size: 24px;
+  }}
+
+  .metricGrid span {{
+    color: #6c747d;
+    font-size: 13px;
+  }}
+</style>
+""",
+}
 
 _APP_PYTHON_TEMPLATE = '''\
 """Tiny Python web server scaffold generated by `curiator app create {name} --template python`."""

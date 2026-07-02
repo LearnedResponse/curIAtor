@@ -48,6 +48,32 @@ def test_init_app_alias_static_and_python_proxy_ports(collection):
     assert status["smoke"] == "python -m py_compile server.py"
 
 
+def test_app_create_react_and_svelte_proxy_templates(collection):
+    from curiator import cli
+
+    assert cli.main(["app", "create", "react_board", "--template", "react"]) == 0
+    assert cli.main(["app", "create", "svelte_panel", "--template", "svelte"]) == 0
+
+    react_root = collection / "apps" / "react_board"
+    svelte_root = collection / "apps" / "svelte_panel"
+    assert (react_root / "package.json").exists()
+    assert (react_root / "src" / "App.jsx").exists()
+    assert (svelte_root / "package.json").exists()
+    assert (svelte_root / "src" / "App.svelte").exists()
+    assert "base = app ? `/app/${app}/` : \"/\"" in (react_root / "vite.config.js").read_text()
+    assert "base = app ? `/app/${app}/` : \"/\"" in (svelte_root / "vite.config.js").read_text()
+
+    data = _gallery(collection)
+    react = next(a for a in data["apps"] if a["name"] == "react_board")
+    svelte = next(a for a in data["apps"] if a["name"] == "svelte_panel")
+    assert react["mount"]["kind"] == "proxy"
+    assert react["mount"]["port"] == 8700
+    assert react["mount"]["cmd"] == "npm run dev -- --host 127.0.0.1 --port 8700"
+    assert react["smoke"] == "npm run build"
+    assert svelte["mount"]["port"] == 8701
+    assert svelte["smoke"] == "npm run build"
+
+
 def test_app_create_rejects_duplicate_or_invalid_name(collection):
     from curiator import cli
 

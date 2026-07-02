@@ -1,11 +1,15 @@
 # Backlog — general app hosting (any framework, multi-file apps)
 
-> **Status:** partially landed. App directories, multi-endpoint `mounts:`, and the lightweight same-origin
-> `proxy` mount are in the runner; initial `curiator app create` scaffolds landed for Dash/static/Python;
-> richer framework templates, build/HMR ergonomics, and heavier
-> Docker/Compose orchestration remain backlog. **Reframed 2026-06-29 — this is *not* an expansion past Dash; it *realizes*
-> what the overlay already is.** Near-term: build the **one non-Dash proof** (it's what shows what
-> curiator actually is). v1: full generality + scaffold templates.
+> **Status: core landed & proven in the wild (2026-07-01) — what's left is ergonomics + visibility.**
+> App directories, multi-endpoint `mounts:`, the same-origin `proxy` mount, and `curiator app create`
+> scaffolds (dash/static/python/react/svelte) are in the runner, and the **non-Dash proof now exists**:
+> `curiator-aviato` runs a React/Node SSR app and a Rust HTTP server through `proxy` mounts next to
+> Dash, with per-root smoke commands — the loop closed on all of them. Remaining backlog: framework
+> template hardening beyond the first React/Svelte Vite scaffolds, heavier Docker/Compose
+> orchestration — and **surfacing the proof**, which is now the cheapest highest-leverage step: the
+> proof is private/local until [public-release](public-release.md) publishes `curiator-aviato` and links
+> it from the README. **Reframed 2026-06-29 — this is *not* an expansion past Dash; it *realizes* what
+> the overlay already is.**
 
 ## The reframe: the overlay *is* the product
 
@@ -73,8 +77,8 @@ actually worth building is **scaffolding templates**, not plugins. The initial c
 curiator app create pnl-board --template dash     # scaffolds apps/pnl-board/ + the gallery.yaml entry
 ```
 
-i.e. a thin `create-vite`-style scaffolder per framework (currently dash / static / python; later
-react / svelte / gradio / streamlit), each emitting a directory + the right `mount` block. Plugins = lock-in + maintenance; templates
+i.e. a thin `create-vite`-style scaffolder per framework (currently dash / static / python / react /
+svelte; later gradio / streamlit), each emitting a directory + the right `mount` block. Plugins = lock-in + maintenance; templates
 + the generic proxy = leverage. Stay generic at the mount, opinionated only at scaffold time.
 
 ## Honest scoping & sequencing
@@ -98,6 +102,11 @@ react / svelte / gradio / streamlit), each emitting a directory + the right `mou
 - **Same-origin under proxy** with framework dev servers (HMR websockets, base-path handling) — Vite/Next
   need the public base path set so assets resolve under `/app/<name>/`. Solvable, but per-framework
   fiddly; the scaffold templates should bake in the right base-path config.
+- **Screenshot fidelity beyond Dash** — the ★/📷 moat rides on html2canvas, which struggles with
+  canvas/WebGL and some modern CSS that JS frameworks reach for. The existing upload button is the
+  fallback; expect fidelity complaints to scale with framework diversity, and treat a native capture
+  path (`getDisplayMedia`, or a headless-browser shot server-side) as the eventual fix — not per-framework
+  patches to html2canvas.
 - **Smoke-test for a build step** — `auto-small` "smoke-test before commit" means *the build passes + the
   app renders*; needs a per-mount-kind smoke hook (Python import vs `npm run build`).
 - **Static-export synergy** — JS apps are *already* static-buildable, so this direction and the deferred
@@ -111,9 +120,12 @@ react / svelte / gradio / streamlit), each emitting a directory + the right `mou
 1. **Directories-per-app first** (landed).
 2. **The `proxy` mount + same-origin reverse-proxy** (landed as a lightweight localhost proxy; still needs
    framework-specific templates/build ergonomics).
-3. **Scaffold templates** (`curiator init-app --framework …`) — the ergonomic layer, generic not plugin.
-4. JS-specific niceties (HMR base-path, build smoke-test) per framework as demand warrants.
+3. **Scaffold templates** (`curiator init-app --template …`) — first pass landed for React/Svelte via
+   Vite proxy mounts, including `npm run build` smoke hooks and `CURIATOR_APP` base-path config.
+4. JS-specific niceties beyond the first scaffold pass (preview command, package-manager detection,
+   richer HMR/proxy diagnostics) per framework as demand warrants.
 
-Dash-first is the *launch wedge* (ship fast, own the data/HMI audience), **not the identity** — keep the
-overlay framework-agnostic from day one and treat the non-Dash proof (steps 1–2) as a near-term
-fast-follow once v0 ships, since it's what shows curiator is an *app* gallery, not a Dash gallery.
+Dash-first is the *launch wedge* (ship fast, own the data/HMI audience), **not the identity** — the
+overlay stayed framework-agnostic and the non-Dash proof now runs (`curiator-aviato`: React SSR + Rust +
+multi-mount Dash behind one shell). The fast-follow is no longer building the proof but **publishing**
+it ([public-release](public-release.md)) — a private proof shows nothing.

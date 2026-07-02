@@ -51,9 +51,11 @@ status badge links to it. Keep progress useful and concise, and do not print sec
 
 - **Never run git yourself** (`commit`, `add`, `push`, `checkout`, `revert`, …). The **runner** owns git.
   When git-as-memory is on, your `curiator reply` becomes ONE atomic commit — your source edit *and* the
-  ledger update together, on the sandbox branch, with the SHA stamped back onto your reply (one item →
-  one commit; never batch). When it's off, edits just stay in the working tree. Either way you only ever
-  **edit the one target source → smoke-test → reply**. Undo is a human's `curiator revert`, never your reset.
+  ledger update together, on the sandbox branch (one item → one commit; never batch). The SHA is printed
+  and queryable from git trailers; the runner does not mutate the ledger after commit just to stamp it
+  into the reply. When git-as-memory is off, edits just stay in the working tree. Either way you only
+  ever **edit the one target source → smoke-test → reply**. Undo is a human's `curiator revert`, never
+  your reset.
 - **Edit only the source scope named below.** One feedback item per invocation — don't go hunting for
   other things to fix.
 - **Smoke-test before `done`.** A failed build ⟹ revert and reply `awaiting_approval` explaining,

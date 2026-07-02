@@ -1,0 +1,30 @@
+- name: bug
+  color: d73a4a
+  description: Something is broken or regressed.
+- name: enhancement
+  color: a2eeef
+  description: A new capability or workflow improvement.
+- name: documentation
+  color: 0075ca
+  description: Docs, examples, release notes, or contributor guidance.
+- name: good first issue
+  color: 7057ff
+  description: Small, well-scoped work suitable for a first contribution.
+- name: needs-triage
+  color: fbca04
+  description: Needs maintainer review before work starts.
+- name: example-collection
+  color: 8e44ad
+  description: Public example collections and their quickstart loops.
+- name: portability
+  color: cfd3d7
+  description: Clone, path, environment, or cross-machine behavior.
+- name: security
+  color: ee0701
+  description: Trust boundaries, credentials, prompt injection, or containment.
+- name: release
+  color: 0e8a16
+  description: Packaging, publishing, DOI, badges, or launch gates.
+- name: adapter
+  color: bfd4f2
+  description: Agent adapters, command shims, or CLI integration.

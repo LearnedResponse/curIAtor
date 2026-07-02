@@ -15,6 +15,9 @@ Run `make test` and `ruff check` **before opening a PR** — CI runs both on Pyt
 on a DCO sign-off (below). Try the loop locally with `make demo` (resets the broken `aviato`, starts
 the gallery + the fix loop at http://127.0.0.1:8300).
 
+Looking for a small first contribution? See [`docs/GOOD_FIRST_ISSUES.md`](docs/GOOD_FIRST_ISSUES.md)
+for ready-to-file issue seeds with labels, scope, and done criteria.
+
 ## Add an app / start a collection
 
 - **Add an app to a gallery:** drop `apps/<name>.py` exposing `build_app() -> dash.Dash` (plus a

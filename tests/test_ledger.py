@@ -1,4 +1,4 @@
-"""ledger: feedback save, agent notes, status transitions, and SHA amend."""
+"""ledger: feedback save, agent notes, status transitions, and SQLite read behavior."""
 from __future__ import annotations
 
 from curiator import ledger
@@ -83,6 +83,23 @@ def test_sqlite_is_primary_and_json_snapshot_is_not_exported(cfg):
     assert ledger.db_path(cfg).exists()
     assert not ledger.json_path(cfg).exists()
     assert ledger.load(cfg)["sample"][0]["id"] == fid
+
+
+def test_load_does_not_dirty_committed_sqlite_ledger(cfg, collection):
+    import subprocess
+
+    ledger.save_entry(cfg, "sample", comment="read-only load", ts="t0")
+    ledger.checkpoint(cfg)
+    subprocess.run(["git", "add", "-f", "feedback/app_feedback.sqlite"], cwd=collection, check=True)
+    subprocess.run(["git", "commit", "-q", "-m", "ledger"], cwd=collection, check=True)
+
+    assert ledger.load(cfg)["sample"][0]["comment"] == "read-only load"
+    r = subprocess.run(
+        ["git", "diff", "--quiet", "HEAD", "--", "feedback/app_feedback.sqlite"],
+        cwd=collection,
+        check=False,
+    )
+    assert r.returncode == 0
 
 
 def test_legacy_json_ledger_migrates_into_sqlite(cfg):
