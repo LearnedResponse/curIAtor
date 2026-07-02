@@ -210,13 +210,55 @@ def _smoke_timeout(cfg: dict, spec: dict) -> tuple[float | None, str | None]:
     return seconds, None
 
 
+def _python_smoke_target(root: Path, command: str | None = None) -> str | None:
+    if command:
+        try:
+            parts = shlex.split(command)
+        except ValueError:
+            parts = str(command).split()
+        for token in parts:
+            if token.endswith(".py") and (root / token).is_file():
+                return token
+    for name in ("server.py", "app.py", "main.py"):
+        if (root / name).is_file():
+            return name
+    return None
+
+
+def inferred_smoke_command(cfg: dict, spec: dict) -> str | None:
+    """Return a conservative fallback smoke command for directory/proxy apps without `smoke:`."""
+    if spec.get("smoke"):
+        return None
+    root = Path(spec.get("root") or cfg["repo_root"])
+    if not root.exists() or not root.is_dir():
+        return None
+    mount = spec.get("mount") or {}
+    command = str(mount.get("cmd") or "")
+    py_target = _python_smoke_target(root, command)
+    if py_target:
+        return f"python -m py_compile {py_target}"
+    for name in ("server.js", "app.js", "main.js"):
+        if (root / name).is_file():
+            return f"node --check {name}"
+    if (root / "Cargo.toml").is_file():
+        return "cargo check --quiet"
+    return None
+
+
+def smoke_command(cfg: dict, spec: dict, app: str, src: str | None) -> str | None:
+    cmd = spec.get("smoke") or inferred_smoke_command(cfg, spec)
+    if not cmd:
+        return None
+    root = spec.get("root") or Path(cfg["repo_root"])
+    source = spec.get("source") or (Path(cfg["repo_root"]) / src if src else root)
+    return str(cmd).format(root=str(root), source=str(source), app=app)
+
+
 def smoke_app(cfg: dict, app: str, src: str | None) -> tuple[bool, str]:
     spec = _app_spec(cfg, app) or {}
-    cmd = spec.get("smoke")
-    if cmd:
+    rendered = smoke_command(cfg, spec, app, src)
+    if rendered:
         root = spec.get("root") or Path(cfg["repo_root"])
-        source = spec.get("source") or (Path(cfg["repo_root"]) / src if src else root)
-        rendered = str(cmd).format(root=str(root), source=str(source), app=app)
         timeout, err = _smoke_timeout(cfg, spec)
         if err:
             return False, err
@@ -228,6 +270,7 @@ def smoke_app(cfg: dict, app: str, src: str | None) -> tuple[bool, str]:
         if r.returncode == 0:
             return True, "passed"
         return False, (r.stderr or r.stdout or f"exit {r.returncode}").strip()[:500]
+
     if src:
         p = Path(cfg["repo_root"]) / src
         if p.is_file() and p.suffix == ".py":

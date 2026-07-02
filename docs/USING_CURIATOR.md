@@ -267,7 +267,7 @@ Before moving or publishing a collection, run the portability preflight:
 ```bash
 curiator doctor                # errors on absolute/missing paths; warns on weak smoke/proxy/HMR/deps
 curiator doctor --json
-curiator smoke                 # runs each app's configured smoke command/fallback import
+curiator smoke                 # runs each app's configured smoke command or cheap inferred fallback
 curiator smoke --app revenue --json
 curiator smoke --jobs 4 --json # run independent app checks concurrently, preserving report order
 curiator release-preflight     # nested public galleries + publish-unsafe artifacts/local deps

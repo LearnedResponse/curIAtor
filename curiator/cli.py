@@ -1096,9 +1096,12 @@ def _smoke_work_specs(cfg: dict, app: str | None = None) -> list[dict]:
 
 
 def _smoke_result_metadata(cfg: dict, spec: dict) -> dict:
+    from . import gitmem
+
+    name = str(spec.get("name") or spec.get("app_name") or spec.get("module"))
     return {
-        "app": str(spec.get("name") or spec.get("app_name") or spec.get("module")),
-        "smoke": spec.get("smoke"),
+        "app": name,
+        "smoke": gitmem.smoke_command(cfg, spec, name, spec.get("source")),
         "smoke_timeout": spec.get("smoke_timeout") or ((cfg.get("smoke") or {}).get("timeout")
                                                        if isinstance(cfg.get("smoke"), dict) else None),
         "root": _repo_path(cfg, spec.get("root")),

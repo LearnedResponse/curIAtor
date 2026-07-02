@@ -29,6 +29,27 @@ def test_smoke_can_limit_to_one_app(collection, capsys):
     assert payload["results"][0]["smoke"] == "python -m py_compile server.py"
 
 
+def test_smoke_infers_python_proxy_directory_check(collection, capsys):
+    from curiator import cli
+
+    root = collection / "apps" / "proxy_server"
+    root.mkdir()
+    (root / "server.py").write_text("def broken(:\n")
+    (collection / "gallery.yaml").write_text(textwrap.dedent("""\
+        apps:
+          - name: proxy_server
+            title: Proxy Server
+            root: apps/proxy_server
+            source: .
+            mount: { kind: proxy, cmd: "python server.py --port 8800", port: 8800 }
+    """))
+
+    assert cli.main(["smoke", "--json"]) == 1
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["results"][0]["smoke"] == "python -m py_compile server.py"
+    assert "SyntaxError" in payload["results"][0]["message"]
+
+
 def test_smoke_reports_failing_configured_smoke(collection, capsys):
     from curiator import cli
 

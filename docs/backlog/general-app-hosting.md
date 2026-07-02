@@ -113,8 +113,10 @@ only at scaffold/import time.
   fallback now exists for signed-in reviewers, and upload remains the manual fallback; server-side
   Playwright/Chromium capture is still the heavier deployment-specific option. Do not patch fidelity
   per framework.
-- **Smoke-test for a build step** — `auto-small` "smoke-test before commit" means *the build passes + the
-  app renders*; needs a per-mount-kind smoke hook (Python import vs `npm run build`).
+- **Smoke-test for a build step** — `auto-small` "smoke-test before commit" means more than "this
+  Python module imports." Scaffolded apps carry explicit per-template smoke commands, and no-smoke
+  proxy directories now get conservative inferred checks for obvious Python/Node/Rust servers. Full
+  browser-level "the app renders" smoke remains a heavier, demand-paced check.
 - **Static-export synergy** — JS apps are *already* static-buildable, so this direction and the deferred
   static-publish target reinforce each other (a built React app **is** the static export).
 - **Where does it stop?** Hosting arbitrary processes is powerful but widens the security/sandbox surface
@@ -145,7 +147,9 @@ only at scaffold/import time.
    servers or when Vite/Next/FastAPI/Gradio/Streamlit mounts are missing the base-path/root-path config
    needed under `/app/<name>/`. Doctor also warns when optional Python framework apps such as FastAPI,
    Gradio, or Streamlit lack a dependency manifest, which keeps proxy scaffolds portable before
-   publication. `curiator app import` now surfaces the same visible warnings immediately after
+   publication. `curiator smoke` now reports and runs cheap inferred fallback checks for no-smoke
+   proxy directories when an obvious `server.py`/`app.py`/`main.py`, Node server file, or `Cargo.toml`
+   is present. `curiator app import` now surfaces the same visible warnings immediately after
    registering an existing repo, before the user first loads a broken mount. Full live-HMR reverse
    proxying remains demand-paced per framework.
 
