@@ -14,13 +14,14 @@ Current state:
 - `figures/render_shell_feedback_panel.py` regenerates the shell and feedback-panel figure.
 - `figures/ot-rainbow-before-after.png` is the generated OT rainbow-to-HP-HMI before/after figure.
 - `figures/render_ot_before_after.py` regenerates the OT rainbow-to-HP-HMI before/after figure.
-- Public-collection numbers are a dated local release-candidate snapshot until the example
-  repositories are published and verified from fresh clones.
+- Public-collection numbers are a dated release-candidate snapshot backed by public-head
+  fresh-clone preflight; they are not DOI/publication evidence until the tagged release is archived.
 
 Release-time checklist:
 
-1. Publish the three example collections.
-2. Run the commands in `reproducibility.md` from fresh clones of those public repositories.
+1. Keep the three example collection heads and runner branch published.
+2. Run the commands in `reproducibility.md` from the release-candidate checkout and verify public-head
+   fresh-clone preflight.
 3. Run `make paper-stats` to refresh the marked case-study table in `curiator-paper.md` with
    command-backed evidence from the public release repositories.
 4. Render or embed `figures/feedback-loop.mmd` without hand-redrawing a divergent copy.

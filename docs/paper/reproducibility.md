@@ -5,9 +5,10 @@ git history. Do not hand-enter case-study counts without recording the command t
 
 ## Release-time commands
 
-Run these from a fresh clone of the runner repository after the public example collections are published
-or checked out under `galleries/`. The runner tree should be clean before `make paper-stats`; it refuses
-to write a paper snapshot marked `dirty` unless explicitly overridden for draft work:
+Run these from the release-candidate runner checkout after the public example collection heads are
+published and checked out under `galleries/`. The runner tree should be clean before
+`make paper-stats`; it refuses to write a paper snapshot marked `dirty` unless explicitly overridden
+for draft work:
 
 ```bash
 curiator release-preflight --fresh-clone
@@ -74,18 +75,22 @@ Regenerate the OT/HMI rainbow-to-HP-HMI before/after figure with:
 python docs/paper/figures/render_ot_before_after.py
 ```
 
-## Local pre-publication snapshot
+## Current release-candidate snapshot
 
-The current local nested galleries are useful for draft shaping, but they are not publication evidence
-until the repositories are public and verified from fresh clones.
+The current tracked paper table is a release-candidate evidence snapshot: the required collection
+heads are public, and the release preflight verifies their published heads from fresh temporary clones.
+It is still not DOI evidence until the tagged GitHub release is archived by Zenodo.
 
-As of this draft scaffold, the local command shape is:
+Refresh the tracked Markdown table with:
 
 ```bash
-curiator stats compare galleries/curiator-aviato galleries/curiator-ot galleries/curiator-geometry --markdown
-curiator stats compare galleries/curiator-aviato galleries/curiator-ot galleries/curiator-geometry \
-  --markdown --output /tmp/curiator-local-case-study-stats.md
+make paper-stats
 ```
 
-Copy final numbers into the paper only after rerunning the command at release time and recording the
-runner commit plus each collection commit.
+Before publishing, rerun the public-head gate and confirm the collection heads in the paper table still
+match the release repositories:
+
+```bash
+curiator release-preflight --include-optional --fresh-clone --strict --require-public-remotes \
+  --require-published-head --require-runner-public-remote --require-runner-published-head --no-smoke
+```

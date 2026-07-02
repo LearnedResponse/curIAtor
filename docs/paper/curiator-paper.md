@@ -73,20 +73,18 @@ the collection's seed and improved commits with the script in
 The current case-study table was generated on 2026-07-02 with:
 
 ```bash
-python -m curiator.cli stats compare \
-  galleries/curiator-aviato galleries/curiator-ot galleries/curiator-geometry --markdown
+curiator stats compare galleries/curiator-aviato galleries/curiator-ot galleries/curiator-geometry --markdown
 ```
 
-_Runner at stats snapshot: curIAtor 0.2.0, `main@55c4ee6`, clean._
+_Runner: curIAtor 0.2.0, main@92427ea, clean._
 
 | Collection | Git head | Cycles | Direct fixes | Proposals | No dispatch | Human intervention | Replied | Reply rate | Median reply | Agent notes | Curator commits |
 |---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| `curiator-aviato` | `curiator/auto@3719ac9` | 9 | 6 (66.7%) | 3 (33.3%) | 0 (0.0%) | 3 (33.3%) | 9 | 100.0% | 2m 14s | 9 | 0 |
-| `curiator-ot` | `curiator/auto@36e21cf` | 10 | 10 (100.0%) | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) | 10 | 100.0% | 1h 13m | 10 | 10 |
-| `curiator-geometry` | `curiator/auto@30bb155` | 1 | 1 (100.0%) | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) | 1 | 100.0% | 1m 29s | 1 | 1 |
+| curiator-aviato | main@3719ac9 | 9 | 6 (66.7%) | 3 (33.3%) | 0 (0.0%) | 3 (33.3%) | 9 | 100.0% | 2m 14s | 9 | 0 |
+| curiator-ot | main@36e21cf | 10 | 10 (100.0%) | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) | 10 | 100.0% | 1h 13m | 10 | 10 |
+| curiator-geometry | main@30bb155 | 1 | 1 (100.0%) | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) | 1 | 100.0% | 1m 29s | 1 | 1 |
 
-Totals: 3 collections, 20 cycles, 20 replies (100.0%), 17 direct fixes (85.0%), 3 proposals/human
-intervention cycles (15.0%), and 11 curator commits.
+_Totals: 3 collections, 20 cycles, 20 replied (100.0%), 17 direct fixes (85.0%), 3 proposals (15.0%), 3 human intervention (15.0%), 11 curator commits._
 <!-- curiator:case-study-stats:end -->
 
 `curiator-aviato` is the mixed-framework collection
