@@ -2,7 +2,8 @@
 
 > **Status:** release infrastructure started 2026-07-01. The decision: release curIAtor externally on
 > GitHub as v0.2.x with **three public example collections** — `curiator-aviato` (mixed frameworks,
-> local portability preflight now passes; fresh-clone gate remains), `curiator-ot`
+> local and same-machine temp-clone portability preflights now pass; off-machine fresh-clone gate
+> remains), `curiator-ot`
 > ([the OT/HMI flagship](ot-hmi-demo.md), scaffolded in `../curiator-ot`), and a
 > [math/geometry explainer collection](math-geometry-collection.md) (scaffolded in `../curiator-geometry`) — plus a Zenodo-archived,
 > DOI-citable release and a companion paper ([zenodo-paper](zenodo-paper.md)).
@@ -34,8 +35,10 @@ leave feedback → watch the fix land and the ⚙ reply arrive. Every item below
    `curiator-geometry` `e6d9141`). `curiator doctor` now gives a local preflight for machine-absolute paths,
    missing app roots/sources, weak smoke coverage, and suspicious proxy port wiring; `curiator smoke`
    runs the same per-app smoke hooks used by git-as-memory commits. Local `doctor` and `smoke` now pass
-   on all three public collections after removing the sibling-checkout `runner.path`; remaining release
-   work is the fresh-clone check on a machine that isn't this one, and the loop must close there.
+   on all three public collections after removing the sibling-checkout `runner.path`; same-machine
+   tracked-file clones under `/tmp/curiator-release-preflight` also pass `doctor`, path scans, and
+   `smoke` for all three. Remaining release work is the fresh-clone check on a machine that isn't this
+   one, and the loop must close there.
 4. **Publish the three example collections** as public sibling repos, each linked from the README's
    Examples section. README links are prepared for `LearnedResponse/curiator-aviato`,
    `LearnedResponse/curiator-ot`, and `LearnedResponse/curiator-geometry`; publication and
