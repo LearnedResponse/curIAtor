@@ -2089,6 +2089,19 @@ def _gallery_entry(
             f"    mount: {{ kind: proxy, cmd: \"python app.py --port {port}\", port: {port} }}\n"
             f"    tags: {_yaml_list(tags)}\n"
         )
+    if template == "fastapi":
+        return (
+            f"  - name: {name}\n"
+            f"    title: {json.dumps(title)}\n"
+            f"    root: {root}\n"
+            f"    source: .\n"
+            f"    smoke: python -m py_compile main.py\n"
+            f"    commands:\n"
+            f"      preview: {json.dumps(f'python main.py --port {port} --root-path /app/{name}')}\n"
+            f"    mount: {{ kind: proxy, cmd: \"python main.py --port {port} --root-path /app/{{app}}\", "
+            f"port: {port} }}\n"
+            f"    tags: {_yaml_list(tags)}\n"
+        )
     if template == "rust":
         return (
             f"  - name: {name}\n"
@@ -2156,6 +2169,9 @@ def _app_template_files(name: str, template: str, title: str, package_manager: s
     if template == "flask":
         return {rel: content.format(name=name, title=title, title_json=json.dumps(title))
                 for rel, content in _APP_FLASK_TEMPLATE.items()}
+    if template == "fastapi":
+        return {rel: content.format(name=name, title=title, title_json=json.dumps(title))
+                for rel, content in _APP_FASTAPI_TEMPLATE.items()}
     if template == "rust":
         return _app_rust_template_files(name, title)
     if template == "streamlit":
@@ -2185,7 +2201,7 @@ def cmd_app_create(args) -> int:
         return 1
     title = args.title or _title_from_name(name)
     tags = _tags_arg(args.tags, template)
-    proxy_templates = {"static", "python", "node", "flask", "rust", "react", "svelte", "vue", "streamlit", "gradio"}
+    proxy_templates = {"static", "python", "node", "flask", "fastapi", "rust", "react", "svelte", "vue", "streamlit", "gradio"}
     port = args.port if args.port is not None else (_next_proxy_port(cfg) if template in proxy_templates else None)
     package_manager = _resolve_package_manager(repo, args.package_manager) if template in {"react", "svelte", "vue"} else "npm"
 
@@ -2347,22 +2363,22 @@ def main(argv=None) -> int:
     app_sub = app.add_subparsers(dest="action", required=True)
     ac = app_sub.add_parser("create", help="scaffold an app directory and add it to gallery.yaml")
     ac.add_argument("name", help="app key, e.g. orange_picker")
-    ac.add_argument("--template", choices=["dash", "static", "python", "node", "flask", "rust", "react", "svelte", "vue", "streamlit", "gradio"], default="dash",
+    ac.add_argument("--template", choices=["dash", "static", "python", "node", "flask", "fastapi", "rust", "react", "svelte", "vue", "streamlit", "gradio"], default="dash",
                     help="scaffold template (default: dash)")
     ac.add_argument("--title", help="display title")
     ac.add_argument("--tags", help="comma-separated tags; default is the template name")
-    ac.add_argument("--port", type=int, help="proxy port for static/python/node/flask/rust/react/svelte/vue/streamlit/gradio templates")
+    ac.add_argument("--port", type=int, help="proxy port for static/python/node/flask/fastapi/rust/react/svelte/vue/streamlit/gradio templates")
     ac.add_argument("--package-manager", choices=["auto", *_JS_PACKAGE_MANAGERS], default="auto",
                     help="JS package manager for react/svelte/vue templates (default: auto)")
     ac.add_argument("--force", action="store_true", help="allow an existing apps/<name> directory")
     ac.set_defaults(func=cmd_app_create)
     ia = sub.add_parser("init-app", help="alias for `curiator app create`")
     ia.add_argument("name", help="app key, e.g. orange_picker")
-    ia.add_argument("--template", choices=["dash", "static", "python", "node", "flask", "rust", "react", "svelte", "vue", "streamlit", "gradio"], default="dash",
+    ia.add_argument("--template", choices=["dash", "static", "python", "node", "flask", "fastapi", "rust", "react", "svelte", "vue", "streamlit", "gradio"], default="dash",
                     help="scaffold template (default: dash)")
     ia.add_argument("--title", help="display title")
     ia.add_argument("--tags", help="comma-separated tags; default is the template name")
-    ia.add_argument("--port", type=int, help="proxy port for static/python/node/flask/rust/react/svelte/vue/streamlit/gradio templates")
+    ia.add_argument("--port", type=int, help="proxy port for static/python/node/flask/fastapi/rust/react/svelte/vue/streamlit/gradio templates")
     ia.add_argument("--package-manager", choices=["auto", *_JS_PACKAGE_MANAGERS], default="auto",
                     help="JS package manager for react/svelte/vue templates (default: auto)")
     ia.add_argument("--force", action="store_true", help="allow an existing apps/<name> directory")
@@ -2520,9 +2536,9 @@ Use the scaffold command; it creates `apps/<name>/` and updates `gallery.yaml`:
 
     curiator app create revenue --template dash --title "Revenue dashboard"
 
-Templates: `dash`, `static`, `python`, `node`, `flask`, `rust`, `react`, `svelte`, `vue`, `streamlit`, `gradio`.
-Node, Flask, and Rust use lightweight server scaffolds behind same-origin proxy mounts. React/Svelte/Vue
-use Vite and can auto-detect npm/pnpm/yarn/bun; Streamlit and Gradio use prefix-preserving proxy mounts.
+Templates: `dash`, `static`, `python`, `node`, `flask`, `fastapi`, `rust`, `react`, `svelte`, `vue`, `streamlit`, `gradio`.
+Node, Flask, FastAPI, and Rust use lightweight server scaffolds behind same-origin proxy mounts.
+React/Svelte/Vue use Vite and can auto-detect npm/pnpm/yarn/bun; Streamlit and Gradio use prefix-preserving proxy mounts.
 You can still edit `gallery.yaml` manually for existing apps.
 
 See the consumer guide: https://github.com/LearnedResponse/curiator/blob/main/docs/USING_CURIATOR.md
@@ -3470,6 +3486,153 @@ python -m py_compile app.py
 
 Use this template for lightweight server-rendered views, tiny API-backed panels, or prototypes that
 should stay Python-native without becoming Dash apps.
+""",
+}
+
+_APP_FASTAPI_TEMPLATE = {
+    "main.py": '''\
+"""FastAPI app scaffold generated by `curiator app create {name} --template fastapi`."""
+from __future__ import annotations
+
+import argparse
+
+from fastapi import FastAPI
+from fastapi.responses import HTMLResponse
+import uvicorn
+
+TITLE = {title_json}
+
+HTML = """<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{title}</title>
+    <style>
+      body {{
+        margin: 0;
+        font-family: system-ui, sans-serif;
+        color: #22272e;
+        background: #f6f7f8;
+      }}
+      main {{
+        max-width: 900px;
+        padding: 32px;
+      }}
+      .eyebrow {{
+        margin: 0 0 8px;
+        color: #8e44ad;
+        font-size: 13px;
+        font-weight: 700;
+      }}
+      h1 {{
+        margin: 0 0 12px;
+        font-size: 32px;
+      }}
+      p {{
+        color: #5e6670;
+        line-height: 1.55;
+      }}
+      .metricGrid {{
+        display: grid;
+        grid-template-columns: repeat(3, minmax(120px, 1fr));
+        gap: 12px;
+        margin-top: 24px;
+        max-width: 620px;
+      }}
+      .metricGrid div {{
+        border: 1px solid #d9dde2;
+        border-radius: 8px;
+        background: white;
+        padding: 14px;
+      }}
+      .metricGrid b {{
+        display: block;
+        font-size: 24px;
+      }}
+      .metricGrid span {{
+        color: #6c747d;
+        font-size: 13px;
+      }}
+    </style>
+  </head>
+  <body>
+    <main>
+      <p class="eyebrow">curIAtor FastAPI scaffold</p>
+      <h1>{title}</h1>
+      <p>
+        This FastAPI app is served through a same-origin proxy mount. Use the feedback rail to shape
+        the API-backed view; the curator edits files in this directory and smoke-tests with
+        <code>python -m py_compile main.py</code>.
+      </p>
+      <section class="metricGrid" aria-label="demo metrics">
+        <div><b>3</b><span>routes</span></div>
+        <div><b>1</b><span>ASGI app</span></div>
+        <div><b>JSON</b><span>status API</span></div>
+      </section>
+    </main>
+  </body>
+</html>
+"""
+
+app = FastAPI(title=TITLE)
+
+
+@app.get("/", response_class=HTMLResponse)
+def index() -> str:
+    return HTML
+
+
+@app.get("/api/status")
+def status() -> dict[str, object]:
+    return {{"ok": True, "app": "{name}", "routes": ["/", "/api/status", "/docs"]}}
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--port", type=int, default=8700)
+    parser.add_argument("--root-path", default="")
+    args = parser.parse_args()
+    uvicorn.run(app, host="127.0.0.1", port=args.port, root_path=args.root_path)
+
+
+if __name__ == "__main__":
+    main()
+''',
+    "requirements.txt": """\
+fastapi>=0.115
+uvicorn[standard]>=0.30
+""",
+    "README.md": """\
+# {title}
+
+This FastAPI app was scaffolded by curIAtor. It serves a small HTML view plus a JSON status endpoint
+through the same-origin proxy mount.
+
+Run it through the gallery:
+
+```bash
+pip install -r requirements.txt
+curiator up
+```
+
+The generated `gallery.yaml` entry runs:
+
+```bash
+python main.py --port <port> --root-path /app/{name}
+```
+
+curIAtor strips `/app/{name}/` before proxying to the app. The generated `--root-path` keeps FastAPI's
+OpenAPI/docs URLs anchored under the gallery path, so `/app/{name}/docs` can find its schema and assets.
+
+The scaffold smoke test is:
+
+```bash
+python -m py_compile main.py
+```
+
+Use this template for lightweight JSON APIs, API-backed HTML views, or prototypes that may later grow
+into a larger ASGI service.
 """,
 }
 

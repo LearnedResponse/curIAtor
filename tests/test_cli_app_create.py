@@ -115,6 +115,47 @@ def test_app_create_flask_proxy_template(collection, capsys):
     assert "- preview: `python app.py --port 8700`" in out
 
 
+def test_app_create_fastapi_proxy_template(collection, capsys):
+    import py_compile
+
+    from curiator import cli
+    from curiator.config import app_spec, load_config
+
+    assert cli.main(["app", "create", "api_panel", "--template", "fastapi"]) == 0
+
+    root = collection / "apps" / "api_panel"
+    assert (root / "main.py").exists()
+    assert (root / "README.md").exists()
+    assert (root / "requirements.txt").read_text() == "fastapi>=0.115\nuvicorn[standard]>=0.30\n"
+    main_py = (root / "main.py").read_text()
+    assert "from fastapi import FastAPI" in main_py
+    assert "@app.get(\"/api/status\")" in main_py
+    assert "uvicorn.run(app, host=\"127.0.0.1\", port=args.port, root_path=args.root_path)" in main_py
+    assert "python -m py_compile main.py" in main_py
+    py_compile.compile(str(root / "main.py"), doraise=True)
+
+    readme = (root / "README.md").read_text()
+    assert "--root-path /app/api_panel" in readme
+    assert "OpenAPI/docs URLs" in readme
+
+    data = _gallery(collection)
+    app = next(a for a in data["apps"] if a["name"] == "api_panel")
+    assert app["mount"] == {
+        "kind": "proxy",
+        "cmd": "python main.py --port 8700 --root-path /app/{app}",
+        "port": 8700,
+    }
+    assert app["smoke"] == "python -m py_compile main.py"
+    assert app["commands"]["preview"] == "python main.py --port 8700 --root-path /app/api_panel"
+    assert app["tags"] == ["fastapi"]
+    assert app_spec(load_config(), "api_panel")["commands"]["preview"] == "python main.py --port 8700 --root-path /app/api_panel"
+
+    assert cli.main(["context", "--app", "api_panel", "--limit", "1"]) == 0
+    out = capsys.readouterr().out
+    assert "- smoke: `python -m py_compile main.py`" in out
+    assert "- preview: `python main.py --port 8700 --root-path /app/api_panel`" in out
+
+
 def test_app_create_rust_proxy_template(collection, capsys):
     import shutil
     import subprocess
