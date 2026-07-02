@@ -3,8 +3,8 @@
 > **Status:** v1 burn-in landed 2026-07-01; core v2 structured annotation metadata/replay/editing
 > landed 2026-07-02. Headless marked-feedback seeding via `curiator feedback add
 > --annotations-json|--annotations-file` and YAML `curiator seed` is available. Shell API→ledger→agent
-> task-bundle validation is covered by regression tests; broader real browser drag/capture dogfood
-> validation is still open.
+> task-bundle validation is covered by regression tests, and `make annotation-dogfood` now runs a
+> real Brave-rendered shell check for capture → draw → note → save → SQLite ledger → task bundle.
 > A core feedback-overlay upgrade: draw on the captured screenshot so feedback points at exactly the
 > element it means.
 > Captured 2026-06-30.
@@ -51,12 +51,13 @@ Two tiers, and the second is the one only curiator can do:
    `_shot_path`, task bundles, and loop code stay unchanged.
 5. **Element-relative coordinates** — landed for v1. Draw coordinates are normalized against the
    captured image/canvas, not the viewport.
-6. **Verify by running** — partially covered by asset/parser tests, a repeatable headless seeding
-   path (`curiator feedback add ... --annotations-json`, or `curiator seed` with `annotations:`), and a
-   shell API→ledger→task-bundle regression proving annotated feedback carries the burned screenshot
-   path plus sanitized structured marks into the exact prompt the agent reads. Still dogfood with a
-   real browser-marked feedback item such as "fix the ①-marked legend" before calling the broader v2
-   item complete.
+6. **Verify by running** — landed. Asset/parser tests, a repeatable headless seeding path (`curiator
+   feedback add ... --annotations-json`, or `curiator seed` with `annotations:`), and a shell
+   API→ledger→task-bundle regression prove annotated feedback carries the burned screenshot path plus
+   sanitized structured marks into the exact prompt the agent reads. `make annotation-dogfood` adds the
+   real browser check: it starts a temporary same-origin Dash collection, drives Brave headless through
+   the React shell, captures the app, draws a box around a DOM target, adds a per-mark note, saves the
+   feedback, then verifies the SQLite ledger and task bundle.
 
 ## v2 — DOM-mapped annotations (follow-on)
 
@@ -108,6 +109,7 @@ fix: the agent stops guessing which element you meant.
 
 This is a **core overlay feature, not a per-collection one** — every collection
 (`curiator-finance`, `curiator-ot`, `curiator-phylogenetics`, the demos) benefits the
-moment it lands. First test: use it on the finance apps ("① this axis label, ② move the
-legend here") and watch whether the agent's fix lands on the right element on the first
-try. Expect it to sharply cut the "fixed the wrong thing" rate — the metric to watch.
+moment it lands. The first reproducible dogfood target is now `make annotation-dogfood`; the next
+product dogfood is to use it on the finance apps ("① this axis label, ② move the legend here") and
+watch whether the agent's fix lands on the right element on the first try. Expect it to sharply cut the
+"fixed the wrong thing" rate — the metric to watch.

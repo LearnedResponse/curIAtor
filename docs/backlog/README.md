@@ -43,5 +43,5 @@ deliberate (ship, let the example demos surface what to prioritize).
 - [**annotated-feedback**](annotated-feedback.md) — **core landed**: captured screenshots can be marked
   up with boxes, arrows, pins, redactions, and per-mark notes; marks burn into the PNG, structured
   annotation metadata rides through the ledger/task bundle, and the React shell records same-origin DOM
-  targets when available. Remaining work is real browser drag/capture dogfood and the native-capture
-  fidelity follow-on.
+  targets when available. A reproducible Brave dogfood check now covers capture/draw/save/task-bundle;
+  remaining work is the native-capture fidelity follow-on.
