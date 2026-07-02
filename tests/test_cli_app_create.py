@@ -77,6 +77,44 @@ def test_app_create_node_proxy_template(collection, capsys):
     assert "- preview: `node server.js --port 8700`" in out
 
 
+def test_app_create_flask_proxy_template(collection, capsys):
+    import importlib.util
+    import py_compile
+
+    from curiator import cli
+    from curiator.config import app_spec, load_config
+
+    assert cli.main(["app", "create", "flask_panel", "--template", "flask"]) == 0
+
+    root = collection / "apps" / "flask_panel"
+    assert (root / "app.py").exists()
+    assert (root / "README.md").exists()
+    app_py = (root / "app.py").read_text()
+    assert "from flask import Flask, jsonify, render_template_string" in app_py
+    assert "def create_app() -> Flask:" in app_py
+    assert "@app.get(\"/healthz\")" in app_py
+    assert "python -m py_compile app.py" in app_py
+    py_compile.compile(str(root / "app.py"), doraise=True)
+    spec = importlib.util.spec_from_file_location("generated_flask_panel", root / "app.py")
+    module = importlib.util.module_from_spec(spec)
+    assert spec and spec.loader
+    spec.loader.exec_module(module)
+    assert module.create_app().test_client().get("/healthz").get_json() == {"ok": True, "app": "flask_panel"}
+
+    data = _gallery(collection)
+    app = next(a for a in data["apps"] if a["name"] == "flask_panel")
+    assert app["mount"] == {"kind": "proxy", "cmd": "python app.py --port 8700", "port": 8700}
+    assert app["smoke"] == "python -m py_compile app.py"
+    assert app["commands"]["preview"] == "python app.py --port 8700"
+    assert app["tags"] == ["flask"]
+    assert app_spec(load_config(), "flask_panel")["commands"]["preview"] == "python app.py --port 8700"
+
+    assert cli.main(["context", "--app", "flask_panel", "--limit", "1"]) == 0
+    out = capsys.readouterr().out
+    assert "- smoke: `python -m py_compile app.py`" in out
+    assert "- preview: `python app.py --port 8700`" in out
+
+
 def test_app_create_react_svelte_and_vue_proxy_templates(collection, capsys):
     from curiator import cli
     from curiator.config import app_spec, load_config
