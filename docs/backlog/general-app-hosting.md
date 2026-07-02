@@ -142,7 +142,9 @@ only at scaffold/import time.
    the scaffold/import menu with mount kind, toolchain, and intended use so users and agents do not
    need to scrape parser help or docs. `commands.preview` now lands in every generated proxy scaffold,
    including static/Python, Node, Flask, FastAPI, Rust, JS, Streamlit, and Gradio entries, and appears
-   in `curiator status` / `curiator context`; proxy failures now render a diagnostic page with
+   in `curiator status` / `curiator context`; the shell proxy launcher now renders the same `{port}`,
+   `{app}`, `{root}`, and `{source}` placeholders as smoke commands before starting app processes;
+   proxy failures now render a diagnostic page with
    command/cwd/port/target/process state plus recent stdout/stderr. WebSocket/HMR
    upgrade requests now get an explicit lightweight-proxy diagnostic instead of falling through the
    HTTP proxy path, and `curiator doctor` warns when proxy commands look like HMR-oriented framework dev

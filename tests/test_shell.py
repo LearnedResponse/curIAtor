@@ -89,6 +89,53 @@ def test_proxy_diagnostics_include_command_cwd_port_and_recent_logs(shell_mod, t
     assert "dev server booting" in body
 
 
+def test_proxy_start_interpolates_command_templates(shell_mod, monkeypatch, tmp_path):
+    captured = {}
+
+    class FakeProc:
+        pid = 456
+
+        def poll(self):
+            return None
+
+        def terminate(self):
+            return None
+
+    def fake_popen(args, *popen_args, **popen_kwargs):
+        captured["args"] = args
+        captured["cwd"] = popen_kwargs.get("cwd")
+        captured["env"] = popen_kwargs.get("env")
+        return FakeProc()
+
+    monkeypatch.setattr(shell_mod.subprocess, "Popen", fake_popen)
+    rec = {
+        "root": str(tmp_path),
+        "source": "apps/proxy_app",
+        "mount": {
+            "kind": "proxy",
+            "cmd": "python server.py --port {port} --root-path /app/{app} --source {source}",
+            "cwd": "{root}",
+            "port": 8799,
+        },
+    }
+    try:
+        ok, err = shell_mod._ensure_proxy("proxy_app", rec)
+        assert ok is True and err is None
+        assert captured["args"] == [
+            "python", "server.py", "--port", "8799",
+            "--root-path", "/app/proxy_app", "--source", "apps/proxy_app",
+        ]
+        assert captured["cwd"] == str(tmp_path)
+        assert captured["env"]["PORT"] == "8799"
+        assert captured["env"]["CURIATOR_APP"] == "proxy_app"
+        assert shell_mod._PROXY_LOGS["proxy_app"]["cmd"] == (
+            "python server.py --port 8799 --root-path /app/proxy_app --source apps/proxy_app"
+        )
+    finally:
+        shell_mod._PROXY_PROCS.pop("proxy_app", None)
+        shell_mod._discard_proxy_logs("proxy_app")
+
+
 def test_proxy_websocket_upgrade_reports_hmr_limit(shell_mod, monkeypatch, tmp_path):
     from io import BytesIO
 

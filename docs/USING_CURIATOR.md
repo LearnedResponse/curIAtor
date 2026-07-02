@@ -172,6 +172,8 @@ smoke: { timeout: 60 }
 `proxy` mounts are still same-origin: the iframe opens `/app/<name>/...`, and curIAtor forwards that
 path to the local app process. For heavier deployments you can still put nginx/Kong/Compose in front;
 the curIAtor contract stays the same.
+`mount.cmd` and `mount.cwd` may use `{port}`, `{app}`, `{root}`, and `{source}` placeholders; the shell
+renders them before launching the proxy process and still exports `PORT` and `CURIATOR_APP`.
 
 ## 2. Run it
 

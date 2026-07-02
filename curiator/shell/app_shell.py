@@ -1208,17 +1208,31 @@ def resolve_server(key):
         os.environ.pop("DASH_REQUESTS_PATHNAME_PREFIX", None)
 
 
+def _render_proxy_template(key: str, rec: dict, value) -> str:
+    mount_cfg = rec.get("mount") or {}
+    port = mount_cfg.get("port") or rec.get("port") or ""
+    root = rec.get("root") or str(REG.COLLECTION_ROOT)
+    source = rec.get("source") or root
+    values = {"app": key, "port": port, "root": root, "source": source}
+    try:
+        return str(value).format(**values)
+    except (KeyError, IndexError, ValueError):
+        return str(value)
+
+
 def _ensure_proxy(key: str, rec: dict) -> tuple[bool, str | None]:
     """Start a proxy app process if needed. Returns (ok, error_message)."""
     mount_cfg = rec.get("mount") or {}
     port = mount_cfg.get("port") or rec.get("port")
-    cmd = mount_cfg.get("cmd")
-    if not (port and cmd):
+    raw_cmd = mount_cfg.get("cmd")
+    if not (port and raw_cmd):
         return False, "proxy mount needs `cmd` and `port`"
+    cmd = _render_proxy_template(key, rec, raw_cmd)
     proc = _PROXY_PROCS.get(key)
     if proc and proc.poll() is None:
         return True, None
-    cwd = mount_cfg.get("cwd") or rec.get("root") or str(REG.COLLECTION_ROOT)
+    raw_cwd = mount_cfg.get("cwd") or rec.get("root") or str(REG.COLLECTION_ROOT)
+    cwd = _render_proxy_template(key, rec, raw_cwd)
     env = {**os.environ, "PORT": str(port), "CURIATOR_APP": key}
     _discard_proxy_logs(key)
     safe_key = re.sub(r"[^A-Za-z0-9_.-]+", "_", key)
@@ -1252,8 +1266,8 @@ def _proxy_log_tail(path: str | None, limit: int = 4000) -> str:
 def _proxy_diagnostics_html(key: str, rec: dict, *, message: str, url: str | None = None) -> str:
     mount_cfg = rec.get("mount") or {}
     port = mount_cfg.get("port") or rec.get("port")
-    cmd = mount_cfg.get("cmd") or ""
-    cwd = mount_cfg.get("cwd") or rec.get("root") or str(REG.COLLECTION_ROOT)
+    cmd = _render_proxy_template(key, rec, mount_cfg.get("cmd") or "")
+    cwd = _render_proxy_template(key, rec, mount_cfg.get("cwd") or rec.get("root") or str(REG.COLLECTION_ROOT))
     proc = _PROXY_PROCS.get(key)
     if proc is None:
         state = "not started"
