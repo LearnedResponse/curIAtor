@@ -21,9 +21,11 @@ leave feedback → watch the fix land and the ⚙ reply arrive. Every item below
    release. The release workflow builds/attaches artifacts and has a PyPI trusted-publishing job with
    a tag-vs-`pyproject.toml` version guard; remaining external setup is configuring the PyPI Trusted
    Publisher, then bumping `pyproject.toml` / `CITATION.cff` and pushing the matching `v0.2.0` tag.
-2. **The hero `docs/demo.gif`** (absorbs the old M3) — per `docs/DEMO_SCRIPT.md`: feedback on the
-   broken `aviato` → the fix lands live → the ⚙ reply. The image at the top of the README; nothing
-   sells the loop faster than watching it close once.
+2. **The hero `docs/demo.gif`** (absorbs the old M3) — the README now has a committed generated
+   storyboard at this path (`make demo-gif`), so the launch page no longer has a broken image.
+   Before release, replace it with the real take per `docs/DEMO_SCRIPT.md`: feedback on the broken
+   `aviato` → the fix lands live → the ⚙ reply. Nothing sells the loop faster than watching it close
+   once.
 3. **Portability pass — collections must survive leaving this machine.** The `.curiator/app.yaml` part
    is fixed: `curiator link` now writes relative paths when the gallery is reachable relatively. The
    generated task-bundle prompt surface is also fixed for self-contained collections: app roots,

@@ -18,6 +18,7 @@ feedback/replies/
 feedback/app_feedback.sqlite*
 feedback/app_feedback.json
 docs/demo.gif
+!docs/demo.gif
 
 # local-login user store (password hashes) — never commit
 .curiator-users.json

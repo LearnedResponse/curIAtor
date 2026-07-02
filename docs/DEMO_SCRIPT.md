@@ -2,8 +2,15 @@
 
 # 30-second demo — recording script (internal; not part of the public README)
 
-**Goal:** the GIF at the top of the README. One unbroken take, no terminal on screen (or a tiny
-corner overlay). The arc is *broken → point at it → curator fixes → fixed.* Keep it under 30s.
+**Goal:** replace the generated storyboard at `docs/demo.gif` with a real browser recording. One
+unbroken take, no terminal on screen (or a tiny corner overlay). The arc is *broken → point at it →
+curator fixes → fixed.* Keep it under 30s.
+
+Until the live take is recorded, regenerate the committed storyboard with:
+
+```bash
+make demo-gif
+```
 
 **Setup before recording — one command:**
 
