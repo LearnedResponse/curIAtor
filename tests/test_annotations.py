@@ -34,6 +34,20 @@ def test_clean_annotations_drops_empty_target_metadata():
     assert marks == [{"tool": "arrow", "x1": 0.1, "y1": 0.2}]
 
 
+def test_clean_annotations_can_strip_dom_targets_for_non_capture_sources():
+    marks = clean_annotations([
+        {
+            "tool": "box",
+            "x1": 0.1,
+            "y1": 0.2,
+            "note": "keep this",
+            "target": {"selector": "#chart", "tag": "div"},
+        }
+    ], allow_targets=False)
+
+    assert marks == [{"tool": "box", "x1": 0.1, "y1": 0.2, "note": "keep this"}]
+
+
 def test_clean_annotations_preserves_shared_clock_offsets():
     marks = clean_annotations([
         {"tool": "box", "x1": 0.1, "y1": 0.2, "start_ms": 42.4, "end_ms": 12.0},

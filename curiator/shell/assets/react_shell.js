@@ -1049,6 +1049,7 @@
     }
 
     function annotate(mark) {
+      if (shotSource !== "capture") return mark;
       return withDomTarget(mark, annotationDoc());
     }
 

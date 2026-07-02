@@ -5,6 +5,9 @@
 > --annotations-json|--annotations-file` and YAML `curiator seed` is available. Shell API→ledger→agent
 > task-bundle validation is covered by regression tests, and `make annotation-dogfood` now runs a
 > real Brave-rendered shell check for capture → draw → note → save → SQLite ledger → task bundle.
+> DOM-target hints are preserved only for same-origin **Capture view** screenshots; upload/native/replay
+> screenshots keep marks but drop DOM targets. Signed-in reviewers have a browser-native capture
+> fallback for canvas/WebGL fidelity cases.
 > A core feedback-overlay upgrade: draw on the captured screenshot so feedback points at exactly the
 > element it means.
 > Captured 2026-06-30.

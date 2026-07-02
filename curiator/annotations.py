@@ -25,7 +25,7 @@ def _short_text(value, limit: int = 240) -> str | None:
     return text[:limit] if text else None
 
 
-def clean_annotations(raw) -> list[dict]:
+def clean_annotations(raw, *, allow_targets: bool = True) -> list[dict]:
     """Sanitize optional screenshot annotation metadata before it enters the durable ledger."""
     if not isinstance(raw, list):
         return []
@@ -57,7 +57,7 @@ def clean_annotations(raw) -> list[dict]:
         note = _short_text(item.get("note"), 500)
         if note:
             mark["note"] = " ".join(note.split())
-        if tool != "redact" and isinstance(item.get("target"), dict):
+        if allow_targets and tool != "redact" and isinstance(item.get("target"), dict):
             target = item["target"]
             clean_target: dict = {}
             for field in ("selector", "tag", "id", "data_testid", "role"):

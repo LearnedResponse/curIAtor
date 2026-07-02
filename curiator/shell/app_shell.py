@@ -720,6 +720,7 @@ def save_entry(
     reply_to=None,
     status: str = "new",
     annotations=None,
+    annotation_targets: bool = True,
     transcript_segments=None,
     audio_ref=None,
 ):
@@ -732,7 +733,7 @@ def save_entry(
     extra = {"proposed_plan": None, "reply_to": reply_to or []}
     if status != "new":
         extra["status"] = status
-    cleaned_annotations = clean_annotations(annotations)
+    cleaned_annotations = clean_annotations(annotations, allow_targets=annotation_targets)
     if cleaned_annotations:
         extra["annotations"] = cleaned_annotations
     cleaned_segments = clean_transcript_segments(transcript_segments)

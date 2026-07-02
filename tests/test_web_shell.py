@@ -106,6 +106,7 @@ def test_react_shell_has_burned_screenshot_annotations(web_client):
     assert "function annotationTarget" in js
     assert 'mark.tool === "redact" || !doc || !doc.elementFromPoint' in js
     assert "return withDomTarget(mark, annotationDoc())" in js
+    assert 'if (shotSource !== "capture") return mark;' in js
     assert "return null;" in js
     assert "rshell-annotation-preview-btn" in js
     assert "rshell-annotation-modal" in js
@@ -568,6 +569,35 @@ def test_react_shell_feedback_api_stores_sanitized_annotations(web_client):
     ) in body
     assert "mark 2: `redact` at x1=0.100, y1=0.100, x2=0.200, y2=0.200 (target omitted for redaction)" in body
     assert "#secret" not in body
+
+
+def test_react_shell_feedback_api_strips_dom_targets_for_non_capture_screenshots(web_client):
+    r = web_client.post("/api/feedback/sample", json={
+        "comment": "uploaded marked image",
+        "screenshot": "data:image/png;base64,aGVsbG8=",
+        "screenshot_source": "upload",
+        "annotations": [
+            {
+                "tool": "box",
+                "x1": 0.1,
+                "y1": 0.2,
+                "x2": 0.8,
+                "y2": 0.9,
+                "note": "keep mark",
+                "target": {"selector": "#chart .legend", "tag": "div"},
+            },
+        ],
+    })
+
+    assert r.status_code == 200
+    assert r.get_json()["entry"]["annotations"] == [{
+        "tool": "box",
+        "x1": 0.1,
+        "y1": 0.2,
+        "x2": 0.8,
+        "y2": 0.9,
+        "note": "keep mark",
+    }]
 
 
 def test_react_shell_trace_and_app_mount(collection, web_mod):

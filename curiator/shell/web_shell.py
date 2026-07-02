@@ -453,6 +453,7 @@ def build_flask_app() -> Flask:
                 reply_to=reply_to,
                 status=status,
                 annotations=body.get("annotations"),
+                annotation_targets=body.get("screenshot_source") == "capture",
                 transcript_segments=body.get("transcript_segments"),
                 audio_ref=body.get("audio_ref"),
             )

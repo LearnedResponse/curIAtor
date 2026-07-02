@@ -43,8 +43,9 @@ deliberate (ship, let the example demos surface what to prioritize).
 - [**annotated-feedback**](annotated-feedback.md) — **core landed**: captured screenshots can be marked
   up with boxes, arrows, pins, redactions, and per-mark notes; marks burn into the PNG, structured
   annotation metadata rides through the ledger/task bundle, and the React shell records same-origin DOM
-  targets when available. A reproducible Brave dogfood check now covers capture/draw/save/task-bundle;
-  remaining work is the native-capture fidelity follow-on.
+  targets only for same-origin captures. A reproducible Brave dogfood check now covers
+  capture/draw/save/task-bundle; signed-in reviewers also have a browser-native capture fallback for
+  canvas/WebGL fidelity cases.
 - [**voice-feedback**](voice-feedback.md) — talk through the fix instead of typing it. Three tiers
   (OS dictation / Web Speech / local Whisper), where the **privacy moat** picks **local Whisper as the
   default** (on-device, works on Linux, zero egress). North star: **"narrated feedback"** — voice +
