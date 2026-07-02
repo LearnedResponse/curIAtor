@@ -51,7 +51,8 @@ JSON payload, including runner checks, gallery heads, doctor issues, smoke resul
 publish-artifact hits. Keep raw JSON evidence under the gitignored `release-evidence/` directory
 because it records local clone/source paths. `make release-evidence` refreshes the standard local
 bundle: required-gallery preflight JSON, optional-gallery preflight JSON, and the three-collection
-case-study stats in Markdown and JSON.
+case-study stats in `release-evidence/case-study-stats.md` and
+`release-evidence/case-study-stats.json`.
 
 Clean local build artifacts after inspection if needed:
 

@@ -2,12 +2,16 @@
 from __future__ import annotations
 
 import argparse
+import re
 import sys
 from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
 PLACEHOLDER_DEMO_MARKER = b"curiator-demo-gif: generated storyboard placeholder"
+TRACKED_RAW_EVIDENCE_RE = re.compile(
+    r"(?:--output|>)\s+(docs/paper/figures/[^\s`]+?\.(?:json|csv))\b"
+)
 
 SECURITY_REQUIRED_PHRASES = [
     "feedback is prompt input",
@@ -39,6 +43,7 @@ def check_release_docs(root: Path = ROOT, *, strict_launch: bool = False) -> lis
     security = root / "SECURITY.md"
     release = root / "docs" / "RELEASE.md"
     public_release = root / "docs" / "backlog" / "public-release.md"
+    reproducibility = root / "docs" / "paper" / "reproducibility.md"
     paper = root / "docs" / "paper" / "curiator-paper.md"
     demo_gif = root / "docs" / "demo.gif"
 
@@ -50,11 +55,14 @@ def check_release_docs(root: Path = ROOT, *, strict_launch: bool = False) -> lis
         failures.append("missing docs/backlog/public-release.md")
     if not release.exists():
         failures.append("missing docs/RELEASE.md")
+    if not reproducibility.exists():
+        failures.append("missing docs/paper/reproducibility.md")
 
     readme_text = readme.read_text(encoding="utf-8") if readme.exists() else ""
     security_text = security.read_text(encoding="utf-8") if security.exists() else ""
     release_text = release.read_text(encoding="utf-8") if release.exists() else ""
     public_release_text = public_release.read_text(encoding="utf-8") if public_release.exists() else ""
+    reproducibility_text = reproducibility.read_text(encoding="utf-8") if reproducibility.exists() else ""
     paper_text = paper.read_text(encoding="utf-8") if paper.exists() else ""
 
     if "[SECURITY.md](SECURITY.md)" not in readme_text:
@@ -76,9 +84,23 @@ def check_release_docs(root: Path = ROOT, *, strict_launch: bool = False) -> lis
         "GitHub to Zenodo integration",
         "git tag v",
         "docs/DEMO_SCRIPT.md",
+        "release-evidence/release-preflight.json",
+        "release-evidence/case-study-stats.json",
     ]:
         if phrase not in release_text:
             failures.append(f"docs/RELEASE.md missing required phrase: {phrase}")
+
+    for phrase in [
+        "make release-evidence",
+        "--output release-evidence/release-preflight.json",
+        "--output release-evidence/case-study-stats.json",
+    ]:
+        if phrase not in reproducibility_text:
+            failures.append(f"docs/paper/reproducibility.md missing required phrase: {phrase}")
+    for path in TRACKED_RAW_EVIDENCE_RE.findall(reproducibility_text):
+        failures.append(
+            f"docs/paper/reproducibility.md writes raw evidence to tracked paper assets: {path}"
+        )
 
     if "TODO(draft)" in paper_text:
         failures.append("docs/paper/curiator-paper.md still has TODO(draft) placeholders")

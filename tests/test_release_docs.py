@@ -26,6 +26,8 @@ def _copy_release_doc_fixture(tmp_path: Path) -> None:
     shutil.copyfile(ROOT / "docs" / "RELEASE.md", tmp_path / "docs" / "RELEASE.md")
     shutil.copyfile(ROOT / "docs" / "backlog" / "public-release.md",
                     tmp_path / "docs" / "backlog" / "public-release.md")
+    shutil.copyfile(ROOT / "docs" / "paper" / "reproducibility.md",
+                    tmp_path / "docs" / "paper" / "reproducibility.md")
     shutil.copyfile(ROOT / "docs" / "demo.gif", tmp_path / "docs" / "demo.gif")
 
 
@@ -64,6 +66,49 @@ def test_release_docs_detect_draft_paper_placeholders(tmp_path):
     failures = module.check_release_docs(tmp_path)
 
     assert "docs/paper/curiator-paper.md still has TODO(draft) placeholders" in failures
+
+
+def test_release_docs_requires_standard_release_evidence_commands(tmp_path):
+    module = _load_script()
+    _copy_release_doc_fixture(tmp_path)
+    (tmp_path / "docs" / "paper" / "reproducibility.md").write_text(
+        "# Reproducibility\n\ncuriator release-preflight --fresh-clone\n"
+    )
+
+    failures = module.check_release_docs(tmp_path)
+
+    assert (
+        "docs/paper/reproducibility.md missing required phrase: "
+        "--output release-evidence/release-preflight.json"
+    ) in failures
+    assert (
+        "docs/paper/reproducibility.md missing required phrase: "
+        "--output release-evidence/case-study-stats.json"
+    ) in failures
+
+
+def test_release_docs_rejects_tracked_raw_paper_evidence(tmp_path):
+    module = _load_script()
+    _copy_release_doc_fixture(tmp_path)
+    (tmp_path / "docs" / "paper" / "reproducibility.md").write_text(
+        "# Reproducibility\n\n"
+        "make release-evidence\n"
+        "curiator release-preflight --fresh-clone --json "
+        "--output release-evidence/release-preflight.json\n"
+        "curiator stats compare galleries/curiator-aviato galleries/curiator-ot "
+        "galleries/curiator-geometry --json "
+        "--output release-evidence/case-study-stats.json\n"
+        "curiator stats compare galleries/curiator-aviato galleries/curiator-ot "
+        "galleries/curiator-geometry --json "
+        "--output docs/paper/figures/case-study-stats.json\n"
+    )
+
+    failures = module.check_release_docs(tmp_path)
+
+    assert (
+        "docs/paper/reproducibility.md writes raw evidence to tracked paper assets: "
+        "docs/paper/figures/case-study-stats.json"
+    ) in failures
 
 
 def test_release_docs_rejects_stale_never_commits_claim(tmp_path):
