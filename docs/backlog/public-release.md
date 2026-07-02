@@ -104,6 +104,12 @@ leave feedback → watch the fix land and the ⚙ reply arrive. Every item below
    DOI, then adding the Zenodo concept DOI to `CITATION.cff`. The [paper](zenodo-paper.md) builds on
    this.
 
+Local publication-prep gate: `curiator release-preflight --fresh-clone --strict
+--require-public-remotes` now checks the required galleries have `origin` remotes matching
+`github.com/LearnedResponse/<gallery-name>` before the release tag is pushed. This is intentionally
+offline; it proves the local repos are wired to the intended public destinations but does not create or
+push the GitHub repositories.
+
 ## Guardrails
 
 - **The examples are the pitch.** A broken quickstart in any published collection is a release

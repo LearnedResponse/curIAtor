@@ -118,6 +118,91 @@ def test_release_preflight_can_include_optional_public_galleries(tmp_path, monke
     assert payload["checks"]["include_optional"] is True
 
 
+def test_release_preflight_can_require_public_remotes(tmp_path, monkeypatch, capsys):
+    from curiator import cli
+
+    repo = _make_gallery(tmp_path)
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("CURIATOR_GALLERY", raising=False)
+
+    assert cli.main([
+        "release-preflight",
+        "--gallery", "curiator-demo",
+        "--no-smoke",
+        "--require-public-remotes",
+        "--json",
+    ]) == 1
+    payload = json.loads(capsys.readouterr().out)
+    gallery = payload["galleries"][0]
+    assert payload["checks"]["require_public_remotes"] is True
+    assert payload["checks"]["public_remote_owner"] == "LearnedResponse"
+    assert payload["ok"] is False
+    assert gallery["public_remote"]["ok"] is False
+    assert gallery["public_remote"]["expected"] == "github.com/LearnedResponse/curiator-demo"
+    assert "missing origin remote" in gallery["public_remote"]["message"]
+
+    _git(repo, "remote", "add", "origin", "git@github.com:LearnedResponse/curiator-demo.git")
+
+    assert cli.main([
+        "release-preflight",
+        "--gallery", "curiator-demo",
+        "--no-smoke",
+        "--require-public-remotes",
+        "--json",
+    ]) == 0
+    payload = json.loads(capsys.readouterr().out)
+    gallery = payload["galleries"][0]
+    assert payload["ok"] is True
+    assert gallery["public_remote"]["ok"] is True
+    assert gallery["public_remote"]["origin"] == ["git@github.com:LearnedResponse/curiator-demo.git"]
+
+
+def test_release_preflight_public_remote_owner_is_configurable(tmp_path, monkeypatch, capsys):
+    from curiator import cli
+
+    repo = _make_gallery(tmp_path)
+    _git(repo, "remote", "add", "origin", "https://github.com/ExampleOrg/curiator-demo.git")
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("CURIATOR_GALLERY", raising=False)
+
+    assert cli.main([
+        "release-preflight",
+        "--gallery", "curiator-demo",
+        "--no-smoke",
+        "--require-public-remotes",
+        "--public-remote-owner", "ExampleOrg",
+        "--json",
+    ]) == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["checks"]["public_remote_owner"] == "ExampleOrg"
+    assert payload["galleries"][0]["public_remote"]["expected"] == "github.com/ExampleOrg/curiator-demo"
+
+
+def test_release_preflight_public_remote_gate_checks_fresh_clone_source(tmp_path, monkeypatch, capsys):
+    from curiator import cli
+
+    repo = _make_gallery(tmp_path)
+    _git(repo, "remote", "add", "origin", "git@github.com:LearnedResponse/curiator-demo.git")
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("CURIATOR_GALLERY", raising=False)
+
+    assert cli.main([
+        "release-preflight",
+        "--gallery", "curiator-demo",
+        "--fresh-clone",
+        "--clone-root", "clones",
+        "--keep-clones",
+        "--no-smoke",
+        "--require-public-remotes",
+        "--json",
+    ]) == 0
+    payload = json.loads(capsys.readouterr().out)
+    gallery = payload["galleries"][0]
+    assert gallery["mode"] == "fresh-clone"
+    assert gallery["public_remote"]["ok"] is True
+    assert gallery["cloned_from"].endswith("galleries/curiator-demo")
+
+
 def test_release_preflight_can_run_http_smoke(tmp_path, monkeypatch, capsys):
     from curiator import cli
 

@@ -1176,6 +1176,46 @@ def cmd_smoke(args) -> int:
 
 _PUBLIC_RELEASE_GALLERIES = ("curiator-aviato", "curiator-ot", "curiator-geometry")
 _OPTIONAL_RELEASE_GALLERIES = ("curiator-finance", "curiator-phylogenetics")
+_PUBLIC_RELEASE_OWNER = "LearnedResponse"
+
+
+def _normalize_github_remote(url: str) -> str:
+    raw = (url or "").strip()
+    if raw.endswith(".git"):
+        raw = raw[:-4]
+    if raw.startswith("git@github.com:"):
+        raw = "github.com/" + raw.split(":", 1)[1]
+    elif raw.startswith("ssh://git@github.com/"):
+        raw = "github.com/" + raw.split("ssh://git@github.com/", 1)[1]
+    elif raw.startswith("https://github.com/"):
+        raw = "github.com/" + raw.split("https://github.com/", 1)[1]
+    elif raw.startswith("http://github.com/"):
+        raw = "github.com/" + raw.split("http://github.com/", 1)[1]
+    return raw.rstrip("/").lower()
+
+
+def _origin_urls(repo: Path) -> list[str]:
+    out = _git_text(repo, "remote", "get-url", "--all", "origin")
+    return [line.strip() for line in out.splitlines() if line.strip()]
+
+
+def _public_remote_result(repo: Path, name: str, owner: str) -> dict:
+    expected = f"github.com/{owner}/{name}".lower()
+    urls = _origin_urls(repo)
+    normalized = [_normalize_github_remote(url) for url in urls]
+    ok = expected in normalized
+    if ok:
+        message = "origin points at expected public repository"
+    elif not urls:
+        message = f"missing origin remote; expected github.com/{owner}/{name}"
+    else:
+        message = f"origin remote does not match expected github.com/{owner}/{name}"
+    return {
+        "ok": ok,
+        "expected": f"github.com/{owner}/{name}",
+        "origin": urls,
+        "message": message,
+    }
 
 
 def _load_config_for_gallery(gallery: Path) -> dict:
@@ -1345,6 +1385,7 @@ def _empty_preflight_result(name: str, gallery: Path) -> dict:
         "dirty": [],
         "path_hits": [],
         "publish_artifact_hits": [],
+        "public_remote": None,
         "doctor": {"ok": False, "errors": 0, "warnings": 0, "issues": []},
         "smoke": {"ok": None, "results": []},
     }
@@ -1358,6 +1399,8 @@ def _release_preflight_one(
     allow_dirty: bool,
     needles: tuple[str, ...],
     strict: bool,
+    require_public_remotes: bool = False,
+    public_remote_owner: str = _PUBLIC_RELEASE_OWNER,
 ) -> dict:
     repo = gallery.parent
     result = _empty_preflight_result(repo.name, gallery)
@@ -1373,6 +1416,8 @@ def _release_preflight_one(
     result["dirty"] = dirty
     result["path_hits"] = _machine_path_hits(repo, needles)
     result["publish_artifact_hits"] = _publish_artifact_hits(repo)
+    if require_public_remotes:
+        result["public_remote"] = _public_remote_result(repo, repo.name, public_remote_owner)
 
     try:
         cfg = _load_config_for_gallery(gallery)
@@ -1397,6 +1442,7 @@ def _release_preflight_one(
         and (not strict or result["doctor"]["warnings"] == 0)
         and not result["path_hits"]
         and not result["publish_artifact_hits"]
+        and (not require_public_remotes or (result.get("public_remote") or {}).get("ok"))
         and (allow_dirty or not dirty)
         and (not run_smoke or result["smoke"]["ok"] is True)
     )
@@ -1415,7 +1461,13 @@ def _clone_gallery(source: Path, clone_parent: Path) -> tuple[Path | None, str |
     return dest / "gallery.yaml", None
 
 
-def _release_preflight_source_result(source_gallery: Path, *, allow_dirty: bool) -> dict | None:
+def _release_preflight_source_result(
+    source_gallery: Path,
+    *,
+    allow_dirty: bool,
+    require_public_remotes: bool = False,
+    public_remote_owner: str = _PUBLIC_RELEASE_OWNER,
+) -> dict | None:
     source_repo = source_gallery.parent
     result = _empty_preflight_result(source_repo.name, source_gallery)
     if not source_gallery.exists():
@@ -1427,6 +1479,11 @@ def _release_preflight_source_result(source_gallery: Path, *, allow_dirty: bool)
     result["head"] = _git_output(source_repo, "rev-parse", "--short", "HEAD")
     dirty = _git_text(source_repo, "status", "--porcelain", "--untracked-files=all").splitlines()
     result["dirty"] = dirty
+    if require_public_remotes:
+        result["public_remote"] = _public_remote_result(source_repo, source_repo.name, public_remote_owner)
+        if not result["public_remote"]["ok"]:
+            result["error"] = result["public_remote"]["message"]
+            return result
     if dirty and not allow_dirty:
         result["error"] = "source repo is dirty; commit, stash, or pass --allow-dirty before fresh-clone preflight"
         return result
@@ -1457,6 +1514,8 @@ def _release_preflight_payload_for_root(args) -> dict:
             allow_dirty=args.allow_dirty,
             needles=needles,
             strict=args.strict,
+            require_public_remotes=args.require_public_remotes,
+            public_remote_owner=args.public_remote_owner,
         )
         for name in names
     ]
@@ -1471,6 +1530,8 @@ def _release_preflight_payload_for_root(args) -> dict:
             "strict": args.strict,
             "path_needles": list(needles),
             "include_optional": bool(args.include_optional),
+            "require_public_remotes": bool(args.require_public_remotes),
+            "public_remote_owner": args.public_remote_owner,
         },
     }
 
@@ -1482,7 +1543,12 @@ def _release_preflight_payload_for_clones(args, clone_base: Path) -> dict:
     for name in names:
         source_gallery = (root / name / "gallery.yaml").resolve()
         source_repo = source_gallery.parent
-        source_error = _release_preflight_source_result(source_gallery, allow_dirty=args.allow_dirty)
+        source_error = _release_preflight_source_result(
+            source_gallery,
+            allow_dirty=args.allow_dirty,
+            require_public_remotes=args.require_public_remotes,
+            public_remote_owner=args.public_remote_owner,
+        )
         if source_error:
             source_error["mode"] = "fresh-clone"
             source_error["source_path"] = str(source_repo)
@@ -1507,6 +1573,8 @@ def _release_preflight_payload_for_clones(args, clone_base: Path) -> dict:
             needles=needles,
             strict=args.strict,
         )
+        if args.require_public_remotes:
+            result["public_remote"] = _public_remote_result(source_repo, source_repo.name, args.public_remote_owner)
         result.update({
             "mode": "fresh-clone",
             "source_path": str(source_repo),
@@ -1527,6 +1595,8 @@ def _release_preflight_payload_for_clones(args, clone_base: Path) -> dict:
             "fresh_clone": True,
             "path_needles": list(needles),
             "include_optional": bool(args.include_optional),
+            "require_public_remotes": bool(args.require_public_remotes),
+            "public_remote_owner": args.public_remote_owner,
         },
     }
 
@@ -1587,8 +1657,11 @@ def cmd_release_preflight(args) -> int:
             f"doctor={g['doctor']['errors']}e/{g['doctor']['warnings']}w "
             f"smoke={smoke_label} dirty={len(g['dirty'])} paths={len(g['path_hits'])} "
             f"artifacts={len(g.get('publish_artifact_hits') or [])}"
+            + (f" remote={'OK' if (g.get('public_remote') or {}).get('ok') else 'FAIL'}"
+               if payload.get("checks", {}).get("require_public_remotes") else "")
         )
-        if g.get("error"):
+        remote = g.get("public_remote") or {}
+        if g.get("error") and g.get("error") != remote.get("message"):
             print(f"    error: {g['error']}")
         for issue in g["doctor"]["issues"]:
             print(f"    doctor {issue['severity'].upper()} {issue['where']}: {issue['message']}")
@@ -1599,6 +1672,10 @@ def cmd_release_preflight(args) -> int:
         for hit in g.get("publish_artifact_hits") or []:
             loc = f"{hit['file']}:{hit['line']}" if hit.get("line") else hit["file"]
             print(f"    artifact {loc}: {hit['message']}")
+        if payload.get("checks", {}).get("require_public_remotes") and not remote.get("ok"):
+            print(f"    remote: {remote.get('message')}")
+            for url in remote.get("origin") or []:
+                print(f"    remote origin {url}")
         for line in g["dirty"][:8]:
             print(f"    dirty {line}")
         if len(g["dirty"]) > 8:
@@ -3469,6 +3546,10 @@ def main(argv=None) -> int:
     rp.add_argument("--http-smoke", "--http", action="store_true", dest="http_smoke",
                     help="also start proxy apps briefly and verify configured HTTP smoke paths")
     rp.add_argument("--strict", action="store_true", help="fail when doctor warnings are present")
+    rp.add_argument("--require-public-remotes", action="store_true",
+                    help="also require each gallery's origin remote to match its expected public GitHub repo")
+    rp.add_argument("--public-remote-owner", default=_PUBLIC_RELEASE_OWNER,
+                    help=f"GitHub owner/org for --require-public-remotes (default: {_PUBLIC_RELEASE_OWNER})")
     rp.add_argument("--output", help="write the JSON preflight payload to a file")
     rp.add_argument("--json", action="store_true", help="emit machine-readable diagnostics")
     rp.set_defaults(func=cmd_release_preflight)

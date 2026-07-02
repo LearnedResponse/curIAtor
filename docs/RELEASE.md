@@ -103,6 +103,15 @@ curiator release-preflight --gallery curiator-ot --fresh-clone --strict
 curiator release-preflight --gallery curiator-geometry --fresh-clone --strict
 ```
 
+After creating/setting the public GitHub remotes, add the offline remote gate:
+
+```bash
+curiator release-preflight --fresh-clone --strict --require-public-remotes
+```
+
+This checks each required gallery has an `origin` remote matching
+`github.com/LearnedResponse/<gallery-name>` without pushing anything.
+
 After pushing the collection repositories, verify from a separate fresh clone that the quickstart works
 with the released package, not only the local checkout.
 
