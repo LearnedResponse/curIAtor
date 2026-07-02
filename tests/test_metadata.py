@@ -77,6 +77,11 @@ def test_release_evidence_target_writes_ignored_artifacts():
     assert "release-evidence/" in gitignore
 
 
+def test_legacy_live_session_watcher_is_not_shipped():
+    """The packaged loop owns dispatch; the old live-session watcher must not reappear as a second path."""
+    assert not Path("curiator/loop/feedback_watch.sh").exists()
+
+
 def test_release_workflow_publishes_with_version_guard():
     data = yaml.safe_load(Path(".github/workflows/release.yml").read_text())
     jobs = data["jobs"]
