@@ -22,3 +22,6 @@ docs/demo.gif
 
 # local-login user store (password hashes) — never commit
 .curiator-users.json
+
+# local release/paper evidence snapshots may include machine-local clone paths
+release-evidence/

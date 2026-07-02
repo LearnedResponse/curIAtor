@@ -10,18 +10,21 @@ or checked out under `galleries/`:
 
 ```bash
 curiator release-preflight --fresh-clone
+curiator release-preflight --fresh-clone --json --output release-evidence/release-preflight.json
 curiator stats compare galleries/curiator-aviato galleries/curiator-ot galleries/curiator-geometry --markdown
 curiator stats compare galleries/curiator-aviato galleries/curiator-ot galleries/curiator-geometry --json
 curiator stats compare galleries/curiator-aviato galleries/curiator-ot galleries/curiator-geometry \
   --markdown --output docs/paper/figures/case-study-stats.md
 curiator stats compare galleries/curiator-aviato galleries/curiator-ot galleries/curiator-geometry \
-  --json --output docs/paper/figures/case-study-stats.json
+  --json --output release-evidence/case-study-stats.json
 ```
 
 The compare report includes the runner version/git head and each collection's git branch/head plus
 direct-fix, proposal, no-dispatch, and human-intervention rates derived from ledger statuses; do not
 recalculate those columns by hand. The `--output` form is preferred for the final paper evidence
-snapshot because it records the exact command product without shell-specific redirection.
+snapshot because it records the exact command product without shell-specific redirection. Keep raw JSON
+snapshots under the gitignored `release-evidence/` directory because they include local checkout and
+clone paths; commit only the portable Markdown/table excerpts that the paper actually cites.
 
 For per-collection appendix tables:
 

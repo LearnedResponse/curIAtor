@@ -51,6 +51,52 @@ def test_release_preflight_checks_nested_gallery(tmp_path, monkeypatch, capsys):
     assert payload["galleries"][0]["smoke"]["ok"] is True
 
 
+def test_release_preflight_json_output_writes_evidence_file(tmp_path, monkeypatch, capsys):
+    from curiator import cli
+
+    _make_gallery(tmp_path)
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("CURIATOR_GALLERY", raising=False)
+    out_path = tmp_path / "evidence" / "release-preflight.json"
+
+    assert cli.main([
+        "release-preflight",
+        "--gallery", "curiator-demo",
+        "--no-smoke",
+        "--json",
+        "--output", str(out_path),
+    ]) == 0
+
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert f"curiator: wrote {out_path}" in captured.err
+    payload = json.loads(out_path.read_text(encoding="utf-8"))
+    assert payload["ok"] is True
+    assert payload["checks"]["smoke"] is False
+    assert payload["galleries"][0]["name"] == "curiator-demo"
+
+
+def test_release_preflight_output_keeps_human_summary(tmp_path, monkeypatch, capsys):
+    from curiator import cli
+
+    _make_gallery(tmp_path)
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("CURIATOR_GALLERY", raising=False)
+    out_path = tmp_path / "evidence" / "release-preflight.json"
+
+    assert cli.main([
+        "release-preflight",
+        "--gallery", "curiator-demo",
+        "--no-smoke",
+        "--output", str(out_path),
+    ]) == 0
+
+    captured = capsys.readouterr()
+    assert "curiator: release preflight OK [nested] (1/1 galleries)" in captured.out
+    assert f"curiator: wrote {out_path}" in captured.err
+    assert json.loads(out_path.read_text(encoding="utf-8"))["galleries"][0]["name"] == "curiator-demo"
+
+
 def test_release_preflight_can_include_optional_public_galleries(tmp_path, monkeypatch, capsys):
     from curiator import cli
 

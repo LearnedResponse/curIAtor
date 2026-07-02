@@ -1551,13 +1551,23 @@ def _release_preflight_payload(args) -> dict:
             shutil.rmtree(clone_base, ignore_errors=True)
 
 
+def _write_json_artifact(payload: dict, output: str) -> None:
+    path = Path(output).expanduser()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+    print(f"curiator: wrote {path}", file=sys.stderr)
+
+
 def cmd_release_preflight(args) -> int:
     if args.no_smoke and args.http_smoke:
         print("curiator: release-preflight --http-smoke requires smoke checks; remove --no-smoke")
         return 2
     payload = _release_preflight_payload(args)
+    if args.output:
+        _write_json_artifact(payload, args.output)
     if args.json:
-        print(json.dumps(payload, indent=2))
+        if not args.output:
+            print(json.dumps(payload, indent=2))
         return 0 if payload["ok"] else 1
 
     passed = sum(1 for g in payload["galleries"] if g["ok"])
@@ -3275,6 +3285,7 @@ def main(argv=None) -> int:
     rp.add_argument("--http-smoke", "--http", action="store_true", dest="http_smoke",
                     help="also start proxy apps briefly and verify configured HTTP smoke paths")
     rp.add_argument("--strict", action="store_true", help="fail when doctor warnings are present")
+    rp.add_argument("--output", help="write the JSON preflight payload to a file")
     rp.add_argument("--json", action="store_true", help="emit machine-readable diagnostics")
     rp.set_defaults(func=cmd_release_preflight)
     pp = sub.add_parser("playground-preflight", help="check hosted public-playground readiness")

@@ -34,6 +34,7 @@ Run the full gate from the runner checkout:
 make release-check
 curiator release-preflight --include-optional --fresh-clone --strict
 curiator release-preflight --gallery curiator-aviato --http-smoke
+curiator release-preflight --fresh-clone --json --output release-evidence/release-preflight.json
 ```
 
 `make release-check` runs lint, the full pytest suite, release-doc checks, strict fresh-clone preflight
@@ -43,6 +44,11 @@ the generated storyboard fallback. The optional preflight adds finance and phylo
 proxy apps briefly and polls configured `smoke_http` paths or default app URLs; it expects app
 dependencies to be installed in the tree being checked, so use it against the nested workspace or a
 fresh clone after dependency installation.
+
+Use the `--output` form when you need a durable release or paper evidence artifact. It writes the full
+JSON payload, including runner checks, gallery heads, doctor issues, smoke results, path hits, and
+publish-artifact hits. Keep raw JSON evidence under the gitignored `release-evidence/` directory
+because it records local clone/source paths.
 
 Clean local build artifacts after inspection if needed:
 

@@ -1,8 +1,9 @@
 # Backlog — the companion paper (Zenodo)
 
 > **Status:** scoped 2026-07-01; stats CLI, local Zenodo metadata, a conservative `docs/paper/`
-> Markdown draft scaffold, draft related-work prose, draft acknowledgements, and `curiator stats
-> --output` evidence snapshots have landed. Paper/DOI publication work is still blocked on public
+> Markdown draft scaffold, draft related-work prose, draft acknowledgements, and command-backed
+> `curiator stats --output` / `curiator release-preflight --output` evidence snapshots have landed.
+> Paper/DOI publication work is still blocked on public
 > collection publication and Zenodo wiring. A citable software/systems paper, self-archived on **Zenodo** with a DOI. Sequences last:
 > the three public collections are its evaluation, so [public-release](public-release.md) → the
 > collections → this.

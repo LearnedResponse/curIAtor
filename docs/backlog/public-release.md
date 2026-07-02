@@ -58,8 +58,9 @@ leave feedback → watch the fix land and the ⚙ reply arrive. Every item below
    virtualenvs, and `node_modules`; `curiator
    release-preflight --fresh-clone` repeats the same gate from temporary clones of the committed
    gallery histories, and `--http-smoke` can add the proxy process + HTTP response check when the app
-   dependencies are installed in the tree being checked. Remaining release work is the fresh-clone check
-   on a machine that isn't this one, and the loop must close there.
+   dependencies are installed in the tree being checked. `--output <path>` writes the JSON payload as
+   a release/paper evidence artifact. Remaining release work is the fresh-clone check on a machine that
+   isn't this one, and the loop must close there.
 4. **Publish the three example collections** as public sibling repos, each linked from the README's
    Examples section. README links are prepared for `LearnedResponse/curiator-aviato`,
    `LearnedResponse/curiator-ot`, and `LearnedResponse/curiator-geometry`; publication and

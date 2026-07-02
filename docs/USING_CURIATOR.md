@@ -275,6 +275,7 @@ curiator smoke --jobs 4 --json # run independent app checks concurrently, preser
 curiator release-preflight     # nested public galleries + publish-unsafe artifacts/local deps
 curiator release-preflight --fresh-clone
 curiator release-preflight --fresh-clone --strict  # fail on doctor warnings for publication gates
+curiator release-preflight --fresh-clone --json --output release-evidence/release-preflight.json
 curiator release-preflight --http-smoke  # also start proxy apps and poll HTTP when deps are installed
 curiator release-preflight --include-optional --fresh-clone --strict  # add finance + phylogenetics
 curiator playground-preflight  # hosted pilot posture: auth, quotas, queue, doctor, smoke
