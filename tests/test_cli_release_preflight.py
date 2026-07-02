@@ -51,6 +51,27 @@ def test_release_preflight_checks_nested_gallery(tmp_path, monkeypatch, capsys):
     assert payload["galleries"][0]["smoke"]["ok"] is True
 
 
+def test_release_preflight_can_include_optional_public_galleries(tmp_path, monkeypatch, capsys):
+    from curiator import cli
+
+    required = ["curiator-aviato", "curiator-ot", "curiator-geometry"]
+    optional = ["curiator-finance", "curiator-phylogenetics"]
+    for name in [*required, *optional]:
+        _make_gallery(tmp_path, name=name)
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("CURIATOR_GALLERY", raising=False)
+
+    assert cli.main(["release-preflight", "--no-smoke", "--json"]) == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert [g["name"] for g in payload["galleries"]] == required
+    assert payload["checks"]["include_optional"] is False
+
+    assert cli.main(["release-preflight", "--include-optional", "--no-smoke", "--json"]) == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert [g["name"] for g in payload["galleries"]] == [*required, *optional]
+    assert payload["checks"]["include_optional"] is True
+
+
 def test_release_preflight_strict_fails_doctor_warnings(tmp_path, monkeypatch, capsys):
     from curiator import cli
 

@@ -68,7 +68,10 @@ leave feedback → watch the fix land and the ⚙ reply arrive. Every item below
    `curiator-finance` is now a verified optional fourth: its public-demo posture is pinned/no-login,
    the stale machine-local ledger note is sanitized, and
    `curiator release-preflight --gallery curiator-finance --fresh-clone --strict` passes at `d6270bd`.
-   The three above remain the minimum release set unless scope expands.
+   `curiator-phylogenetics` is also a verified paper-linked optional collection at `b1b3586`. To check
+   the minimum set plus these optional public-shaped collections, run
+   `curiator release-preflight --include-optional --fresh-clone --strict`. The three above remain the
+   minimum release set unless scope expands.
 5. **SECURITY.md — reviewed against current defaults; re-read once at release cut.** The product auto-runs a coding agent against
    feedback text. The first policy now states: one-container-per-collection as the blast-radius unit,
    the autonomy dial, group-gated elevated profiles, dispatch quotas/trusted dispatch groups as admission

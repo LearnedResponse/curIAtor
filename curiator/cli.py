@@ -1157,6 +1157,7 @@ def cmd_smoke(args) -> int:
 
 
 _PUBLIC_RELEASE_GALLERIES = ("curiator-aviato", "curiator-ot", "curiator-geometry")
+_OPTIONAL_RELEASE_GALLERIES = ("curiator-finance", "curiator-phylogenetics")
 
 
 def _load_config_for_gallery(gallery: Path) -> dict:
@@ -1417,7 +1418,12 @@ def _release_preflight_paths(args) -> tuple[Path, list[str], tuple[str, ...]]:
     project = _project_root()
     root_arg = Path(args.root).expanduser()
     root = root_arg if root_arg.is_absolute() else (project / root_arg).resolve()
-    names = args.gallery or list(_PUBLIC_RELEASE_GALLERIES)
+    if args.gallery:
+        names = list(args.gallery)
+    else:
+        names = list(_PUBLIC_RELEASE_GALLERIES)
+        if args.include_optional:
+            names.extend(_OPTIONAL_RELEASE_GALLERIES)
     needles = tuple(sorted({str(Path.home()), str(project)} | set(args.path_needle or [])))
     return root, names, needles
 
@@ -1443,6 +1449,7 @@ def _release_preflight_payload_for_root(args) -> dict:
             "allow_dirty": args.allow_dirty,
             "strict": args.strict,
             "path_needles": list(needles),
+            "include_optional": bool(args.include_optional),
         },
     }
 
@@ -1496,6 +1503,7 @@ def _release_preflight_payload_for_clones(args, clone_base: Path) -> dict:
             "strict": args.strict,
             "fresh_clone": True,
             "path_needles": list(needles),
+            "include_optional": bool(args.include_optional),
         },
     }
 
@@ -3084,6 +3092,8 @@ def main(argv=None) -> int:
     rp.add_argument("--root", default="galleries", help="directory containing curiator-* gallery repos")
     rp.add_argument("--gallery", action="append",
                     help="gallery directory name under --root; repeatable; default is the public release set")
+    rp.add_argument("--include-optional", action="store_true",
+                    help="with the default public release set, also check optional public-shaped galleries")
     rp.add_argument("--path-needle", action="append",
                     help="extra machine-local path string to reject in tracked files")
     rp.add_argument("--allow-dirty", action="store_true", help="report dirty nested repos without failing")

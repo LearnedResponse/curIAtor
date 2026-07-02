@@ -125,7 +125,8 @@ nested public example galleries under `galleries/` and rejects tracked runtime/a
 local user stores, task traces, screenshots, SQLite sidecars, env files, cache files, and installed
 dependency directories, plus local editable/path dependency pins in requirements files; add `--fresh-clone` to
 verify the committed state survives a same-machine clone, and `--strict` to make doctor warnings fail
-publication gates.
+publication gates. Add `--include-optional` when checking finance and phylogenetics alongside the
+minimum release set.
 Screenshot capture details and fidelity tradeoffs are in [`docs/SCREENSHOT_CAPTURE.md`](docs/SCREENSHOT_CAPTURE.md).
 
 Already inside an app repo with Claude Code or Codex? Link it once and use the same loop interactively:
