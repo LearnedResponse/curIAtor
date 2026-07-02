@@ -690,6 +690,18 @@ body {
   vector-effect: non-scaling-stroke;
 }
 
+.rshell-annotation-replay-box.active,
+.rshell-annotation-replay-arrow.active {
+  stroke: #1f9d55;
+  stroke-width: 6;
+}
+
+.rshell-annotation-replay-box.inactive,
+.rshell-annotation-replay-arrow.inactive,
+.rshell-annotation-replay-redact.inactive {
+  opacity: .22;
+}
+
 .rshell-annotation-replay-arrow {
   stroke: #2980b9;
   stroke-width: 4;
@@ -700,6 +712,11 @@ body {
 .rshell-annotation-replay-redact {
   fill: #111;
   opacity: .78;
+}
+
+.rshell-annotation-replay-redact.active {
+  fill: #1f9d55;
+  opacity: .9;
 }
 
 .rshell-annotation-replay-pin {
@@ -718,11 +735,67 @@ body {
   box-shadow: 0 1px 6px rgba(0, 0, 0, .28);
 }
 
+.rshell-annotation-replay-pin.active {
+  background: #1f9d55;
+  transform: translate(-50%, -50%) scale(1.18);
+}
+
+.rshell-annotation-replay-pin.inactive {
+  opacity: .35;
+}
+
 .rshell-annotation-replay-list {
   min-height: 0;
   max-height: 72vh;
   overflow: auto;
   padding: 10px;
+}
+
+.rshell-narrative-replay {
+  display: grid;
+  gap: 5px;
+  margin-bottom: 10px;
+  padding: 7px;
+  border: 1px solid #dbe8df;
+  border-radius: 4px;
+  background: #fbfffc;
+  color: #2f4436;
+  font-size: 11px;
+}
+
+.rshell-narrative-replay-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.rshell-narrative-replay-actions {
+  display: inline-flex;
+  gap: 5px;
+}
+
+.rshell-narrative-step {
+  display: grid;
+  grid-template-columns: 54px minmax(0, 1fr);
+  gap: 6px;
+  width: 100%;
+  min-height: 34px;
+  box-sizing: border-box;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+  padding: 4px;
+}
+
+.rshell-narrative-step:hover,
+.rshell-narrative-step.active {
+  border-color: #b9dbc3;
+  background: #eef9f1;
 }
 
 .rshell-shot {

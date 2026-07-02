@@ -169,23 +169,24 @@
     });
   }
 
-  function AnnotationReplayOverlay({marks}) {
+  function AnnotationReplayOverlay({marks, activeIndex}) {
     const shapes = [];
     const pins = [];
     marks.forEach((mark, idx) => {
       const b = replayBounds(mark);
       const key = idx + "-" + (mark.tool || "mark");
+      const state = activeIndex ? (activeIndex === idx + 1 ? " active" : " inactive") : "";
       if (mark.tool === "box") {
-        shapes.push(h("rect", {key, className: "rshell-annotation-replay-box",
+        shapes.push(h("rect", {key, className: "rshell-annotation-replay-box" + state,
           x: b.x, y: b.y, width: b.w, height: b.h}));
       } else if (mark.tool === "arrow") {
-        shapes.push(h("line", {key, className: "rshell-annotation-replay-arrow",
+        shapes.push(h("line", {key, className: "rshell-annotation-replay-arrow" + state,
           x1: b.x1, y1: b.y1, x2: b.x2, y2: b.y2}));
       } else if (mark.tool === "redact") {
-        shapes.push(h("rect", {key, className: "rshell-annotation-replay-redact",
+        shapes.push(h("rect", {key, className: "rshell-annotation-replay-redact" + state,
           x: b.x, y: b.y, width: b.w, height: b.h}));
       } else if (mark.tool === "pin") {
-        pins.push(h("span", {key, className: "rshell-annotation-replay-pin",
+        pins.push(h("span", {key, className: "rshell-annotation-replay-pin" + state,
           style: {left: pct(b.x1), top: pct(b.y1)}}, annotationLabel(mark, idx)));
       }
     });
@@ -319,18 +320,73 @@
       rows.length > 8 ? h("div", {className: "rshell-voice-more"}, "+" + (rows.length - 8) + " more") : null);
   }
 
+  function narrativeStepDuration(row) {
+    const delta = numberValue(row && row.end_ms) - numberValue(row && row.start_ms);
+    if (!Number.isFinite(delta) || delta <= 0) return 1400;
+    return Math.max(900, Math.min(3000, delta));
+  }
+
+  function NarrativeReplay({rows, activeIndex, setActiveIndex, playing, setPlaying}) {
+    if (!rows.length) return null;
+    return h("div", {className: "rshell-narrative-replay"},
+      h("div", {className: "rshell-narrative-replay-head"},
+        h("b", null, "Narrative replay"),
+        h("div", {className: "rshell-narrative-replay-actions"},
+          h("button", {className: "rshell-annotation-preview-btn",
+            title: "Play transcript-timed narrative",
+            onClick: () => {
+              if (!activeIndex) setActiveIndex(rows[0].index);
+              setPlaying(!playing);
+            }}, playing ? "pause" : "play"),
+          activeIndex ? h("button", {className: "rshell-annotation-preview-btn",
+            title: "Clear active mark", onClick: () => { setPlaying(false); setActiveIndex(null); }}, "clear") : null)),
+      rows.map((row) => h("button", {key: row.index, className: "rshell-narrative-step" +
+          (activeIndex === row.index ? " active" : ""), onClick: () => {
+            setPlaying(false);
+            setActiveIndex(row.index);
+          }},
+        h("span", {className: "rshell-voice-time"}, timeRange(row.start_ms, row.end_ms)),
+        h("span", {className: "rshell-voice-copy"},
+          h("b", null, row.label + " · " + row.tool),
+          row.note ? " — " + row.note : "",
+          row.target ? h("code", {className: "rshell-annotation-target"}, row.target) : null,
+          h("span", {className: row.text ? "rshell-voice-text" : "rshell-voice-text muted"},
+            row.text || "no overlapping transcript")))));
+  }
+
   function AnnotationPreview({entry, onClose, onUseDraft}) {
     const marks = (entry && entry.annotations) || [];
+    const narrative = useMemo(() => buildNarrative(entry), [entry]);
     const [editing, setEditing] = useState(false);
     const [draftMarks, setDraftMarks] = useState(copyAnnotations(marks));
+    const [activeIndex, setActiveIndex] = useState(null);
+    const [playing, setPlaying] = useState(false);
     useEffect(() => {
       setEditing(false);
       setDraftMarks(copyAnnotations(marks));
+      setActiveIndex(null);
+      setPlaying(false);
     }, [entry]);
+    useEffect(() => {
+      if (!playing || !narrative.length) return undefined;
+      let pos = narrative.findIndex((row) => row.index === activeIndex);
+      if (pos < 0) {
+        setActiveIndex(narrative[0].index);
+        return undefined;
+      }
+      const timer = window.setTimeout(() => {
+        if (pos >= narrative.length - 1) {
+          setPlaying(false);
+        } else {
+          setActiveIndex(narrative[pos + 1].index);
+        }
+      }, narrativeStepDuration(narrative[pos]));
+      return () => window.clearTimeout(timer);
+    }, [playing, activeIndex, narrative]);
     if (!entry || !marks.length) return null;
     const preview = h("div", {className: "rshell-annotation-replay-frame"},
       h("img", {src: entry.shot_url, alt: "annotated screenshot"}),
-      h(AnnotationReplayOverlay, {marks}));
+      h(AnnotationReplayOverlay, {marks, activeIndex: editing ? null : activeIndex}));
     const editor = entry.shot_url ? h(AnnotationEditor, {
       image: entry.shot_url,
       annotations: draftMarks,
@@ -351,6 +407,7 @@
           entry.shot_url ? h("div", {className: "rshell-annotation-replay-shot"},
             editing ? editor : preview) : null,
           h("div", {className: "rshell-annotation-replay-list"},
+            !editing ? h(NarrativeReplay, {rows: narrative, activeIndex, setActiveIndex, playing, setPlaying}) : null,
             h(AnnotationRows, {marks: editing ? draftMarks : marks})))));
   }
 

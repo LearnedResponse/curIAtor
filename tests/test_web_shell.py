@@ -90,6 +90,8 @@ def test_react_shell_has_burned_screenshot_annotations(web_client):
     assert "function AnnotationReplayOverlay" in js
     assert "function VoiceSummary" in js
     assert "function buildNarrative" in js
+    assert "function NarrativeReplay" in js
+    assert "function narrativeStepDuration" in js
     assert "function copyAnnotations" in js
     assert "function useAnnotationDraft" in js
     assert "function composeShot" in js
@@ -109,6 +111,10 @@ def test_react_shell_has_burned_screenshot_annotations(web_client):
     assert "rshell-annotation-modal" in js
     assert "rshell-annotation-replay-overlay" in js
     assert "rshell-annotation-replay-pin" in js
+    assert "rshell-narrative-replay" in js
+    assert "Narrative replay" in js
+    assert "Play transcript-timed narrative" in js
+    assert "activeIndex" in js
     assert "Use as reply draft" in js
     assert 'setShotSource("replay")' in js
     assert "annotations: screenshot ? annotations : []" in js
@@ -138,6 +144,9 @@ def test_react_shell_has_burned_screenshot_annotations(web_client):
     assert ".rshell-annotation-replay-arrow" in css
     assert ".rshell-annotation-replay-redact" in css
     assert ".rshell-annotation-replay-pin" in css
+    assert ".rshell-narrative-replay" in css
+    assert ".rshell-narrative-step.active" in css
+    assert ".rshell-annotation-replay-box.active" in css
     assert ".rshell-annotation-target" in css
     assert "touch-action: none" in css
 

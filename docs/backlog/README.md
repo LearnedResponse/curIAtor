@@ -54,4 +54,5 @@ deliberate (ship, let the example demos surface what to prioritize).
   `curiator voice setup` configures the packaged faster-whisper adapter; explicit public/hosted Web
   Speech opt-in is available; recording mode aligns
   annotation marks and transcript segments to one clock, and timed marks with overlapping speech render
-  as an ordered `Narrated feedback` task-bundle block and compact prior-feedback summary.
+  as an ordered `Narrated feedback` task-bundle block, compact prior-feedback summary, and
+  transcript-timed annotation replay.

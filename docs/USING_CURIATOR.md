@@ -238,9 +238,11 @@ timestamps are sanitized, stored with the feedback entry, and included in the ag
 `Voice transcript segments` block. If screenshot annotations also carry `start_ms` / `end_ms`,
 curIAtor derives a `Narrated feedback` block that pairs each timed mark with overlapping speech; prior
 feedback threads show the same compact narrative summary, falling back to a `Voice transcript` summary
-when there are segments but no timed marks. When you annotate while recording, the React shell uses the
+when there are segments but no timed marks. Saved annotated entries with timed marks can also open a
+transcript-timed **Narrative replay** in the annotation preview: each step highlights the saved mark and
+shows the overlapping transcript phrase. When you annotate while recording, the React shell uses the
 recording start as the shared clock zero, so mark timestamps and transcript segments line up in the UI
-and task bundle.
+and task bundle. Audio clips are not retained by default; replay uses the saved transcript timing.
 
 For public or hosted collections that can accept browser-provider speech services, enable the optional
 Web Speech dictation button explicitly:

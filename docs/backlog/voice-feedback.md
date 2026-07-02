@@ -16,10 +16,12 @@
 > comment box, and stores returned segment timestamps on the feedback entry so agents see
 > `Voice transcript segments` plus a derived `Narrated feedback` block when timed marks overlap timed
 > speech. Prior feedback threads now show the compact `Narrated feedback` summary, with a `Voice
-> transcript` fallback when saved speech has no timed marks. Browser Web Speech dictation is available
-> only behind explicit `voice.web_speech: true` / `curiator voice web-speech on` opt-in, because it may
-> use browser-provider speech services and does not provide reliable segment timestamps. When recording
-> is active, annotation marks and transcript segments share the recording start as `t=0`.
+> transcript` fallback when saved speech has no timed marks, and the annotation preview can replay a
+> transcript-timed narrative tour that highlights each saved mark with its overlapping phrase. Browser
+> Web Speech dictation is available only behind explicit `voice.web_speech: true` /
+> `curiator voice web-speech on` opt-in, because it may use browser-provider speech services and does
+> not provide reliable segment timestamps. When recording is active, annotation marks and transcript
+> segments share the recording start as `t=0`.
 > Composes with `annotated-feedback.md`, not a separate feature. Captured 2026-07-02.
 
 ## The pitch
@@ -73,8 +75,9 @@ The whole thing hinges on **one shared clock**:
    `[(box①, "the legend's cramped"), (arrow②, "move it up here"), (pin③, "this number's wrong")]`.
 4. The task bundle gains a **"Narrative" block** — ordered ①②③, each with its mark, its DOM target,
    and the exact phrase spoken while drawing it — so the agent gets **sequence and dependencies**
-   ("do this, *then* this"), not a static blob. And the existing annotation **replay overlay** becomes
-   a **narrated replay** (marks played back in order with the audio) — a shareable artifact in itself.
+   ("do this, *then* this"), not a static blob. The existing annotation **replay overlay** now has a
+   transcript-timed narrative tour; a true **narrated replay** with audio playback remains the
+   follow-on once audio retention has an explicit policy.
 
 **Why Whisper is required here (not Web Speech):** the merge needs reliable per-segment timestamps to
 align speech to the mark being drawn. Web Speech's interim timing can't do it. So the north star
@@ -99,10 +102,11 @@ to retrofit.
    fields, and `/api/transcribe` accepts/returns segment timestamps. Transcript segments are now
    persisted into the feedback ledger and task bundle, and React recording mode aligns marks plus
    transcript segments to the same `t=0`.
-5. **Narrated feedback** — first task-bundle and UI summaries landed: timed marks pair with overlapping
-   transcript segments into an ordered `Narrated feedback` block, and prior feedback threads expose the
-   same compact summary. Remaining: persist any richer narrative metadata that proves useful and upgrade
-   the replay overlay to narrated replay.
+5. **Narrated feedback** — first task-bundle, UI summaries, and transcript-timed replay landed: timed
+   marks pair with overlapping transcript segments into an ordered `Narrated feedback` block, prior
+   feedback threads expose the same compact summary, and the annotation preview can step through the
+   saved mark/phrase sequence. Remaining: persist any richer narrative metadata that proves useful and
+   decide whether/how to retain audio for true audio-backed replay.
 6. **Verify by running** — a spoken-while-drawing review round-trips; the agent's reply follows the
    ordered narrative and lands the marks in sequence.
 
