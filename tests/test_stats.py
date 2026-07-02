@@ -4,8 +4,12 @@ from __future__ import annotations
 import csv
 import io
 import json
+import subprocess
+import textwrap
+from pathlib import Path
 
 from curiator import ledger, stats
+from curiator.config import load_config_at
 
 
 def _seed_two_cycles(cfg):
@@ -17,6 +21,37 @@ def _seed_two_cycles(cfg):
     fid2 = ledger.save_entry(cfg, "sample", stars=3, comment="needs a filter",
                              ts="2026-07-01T12:10:00+00:00")
     return fid1, fid2
+
+
+def _git(cwd: Path, *args: str) -> None:
+    subprocess.run(["git", *args], cwd=cwd, check=True, capture_output=True)
+
+
+def _make_collection(root: Path, name: str) -> dict:
+    collection = root / name
+    (collection / "apps").mkdir(parents=True)
+    (collection / "feedback").mkdir()
+    (collection / "apps" / "sample.py").write_text("app = object()\n")
+    (collection / "gallery.yaml").write_text(textwrap.dedent("""\
+        apps:
+          - name: sample
+            title: Sample
+            mount: { kind: dash-inproc, module: sample }
+            source: apps/sample.py
+        feedback:
+          dir: feedback
+        git:
+          commit: true
+          branch:
+          signoff: true
+          include_ledger: true
+    """))
+    _git(collection, "init", "-q")
+    _git(collection, "config", "user.name", "Test Curator")
+    _git(collection, "config", "user.email", "curator@test.local")
+    _git(collection, "add", "-A")
+    _git(collection, "commit", "-q", "-m", "init")
+    return load_config_at(collection)
 
 
 def test_summarize_ledger_counts_cycles_statuses_and_latency(cfg):
@@ -90,3 +125,57 @@ def test_summarize_git_counts_curator_commits(cfg):
     assert summary["git"]["curator_commits"] == 1
     assert summary["git"]["feedback_ids"] == 1
     assert summary["git"]["apps"] == {"sample": 1}
+
+
+def test_stats_compare_combines_collection_rows(tmp_path, capsys):
+    from curiator import cli, gitmem
+
+    alpha = _make_collection(tmp_path, "alpha")
+    beta = _make_collection(tmp_path, "beta")
+    fid_alpha, _ = _seed_two_cycles(alpha)
+    fid_beta = ledger.save_entry(beta, "sample", stars=4, comment="tighten labels",
+                                 ts="2026-07-01T12:00:00+00:00")
+    ledger.add_system_note(beta, "sample", "Tightened labels.", reply_to=[fid_beta],
+                           ts="2026-07-01T12:01:00+00:00")
+    ledger.set_status(beta, "sample", [fid_beta], "done")
+    assert gitmem.commit_run(alpha, "sample", fid_alpha, status="done", note_text="Fixed.")["committed"]
+    assert gitmem.commit_run(beta, "sample", fid_beta, status="done", note_text="Fixed.")["committed"]
+
+    report = stats.compare([alpha, beta])
+    assert report["totals"]["collections"] == 2
+    assert report["totals"]["cycles"] == 3
+    assert report["totals"]["replied_cycles"] == 2
+    assert report["totals"]["curator_commits"] == 2
+    rows = {row["collection"]: row for row in report["collections"]}
+    assert rows["alpha"]["reply_rate_percent"] == 50.0
+    assert rows["alpha"]["curator_commits"] == 1
+    assert rows["beta"]["reply_rate_percent"] == 100.0
+    assert rows["beta"]["median_reply_seconds"] == 60
+
+    markdown = stats.format_compare_markdown(report)
+    assert "| alpha | 2 | 1 | 1 | 50.0% | 5m 30s | 1 | 1 |" in markdown
+    assert "| beta | 1 | 0 | 1 | 100.0% | 1m | 1 | 1 |" in markdown
+
+    assert cli.main([
+        "stats",
+        "compare",
+        str(Path(alpha["gallery_path"]).parent),
+        str(beta["gallery_path"]),
+        "--json",
+    ]) == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["totals"]["cycles"] == 3
+    assert [row["collection"] for row in payload["collections"]] == ["alpha", "beta"]
+
+
+def test_stats_compare_csv_keeps_single_collection_csv_unchanged(tmp_path):
+    alpha = _make_collection(tmp_path, "alpha")
+    _seed_two_cycles(alpha)
+
+    rows = list(csv.DictReader(io.StringIO(stats.format_compare_csv(stats.compare([alpha], include_git=False)))))
+    assert rows[0]["collection"] == "alpha"
+    assert rows[0]["curator_commits"] == ""
+
+    app_rows = list(csv.DictReader(io.StringIO(stats.format_csv(stats.summarize(alpha, include_git=False)))))
+    assert "app" in app_rows[0]
+    assert "collection" not in app_rows[0]

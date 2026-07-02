@@ -47,7 +47,8 @@ the durable record of that conversation.
 2. **`curiator stats` — core landed.** It reads a collection ledger + git log and emits the
    case-study numbers (cycles, status distribution, per-app counts, reply latency, curator commits),
    with `--json` for machine-readable snapshots, `--markdown` for paper/release-note tables, and
-   `--csv` for app-level spreadsheets or plotting scripts.
+   `--csv` for app-level spreadsheets or plotting scripts. `curiator stats compare <gallery>...`
+   now emits the cross-collection case-study table directly.
    Remaining paper work: run it against each public collection after publication and cite the exact
    command/output snapshot.
 3. Draft in `docs/paper/` (markdown → pandoc PDF). Figures: the shell with the feedback panel, one

@@ -3,23 +3,6 @@
 These are ready-to-file issues for the public launch. After the repo is published, create them as
 GitHub issues, label them `good first issue`, and pin 2-3 that best match the current release focus.
 
-## Add `curiator stats compare`
-
-Labels: `good first issue`, `enhancement`, `documentation`
-
-Why: the paper/release path needs reproducible numbers across multiple public collections, and a
-comparison command would make the case-study table less manual.
-
-Scope:
-- Add a subcommand or option that accepts multiple collection gallery paths.
-- Emit one row per collection with totals, reply rate, latency, and curator commit counts.
-- Keep existing single-collection `--json`, `--markdown`, and `--csv` unchanged.
-- Add focused tests in `tests/test_stats.py`.
-
-Done when:
-- Two temporary collections produce a combined comparison table.
-- The docs show the exact command intended for the paper case-study table.
-
 ## Add a Streamlit Scaffold Template
 
 Labels: `good first issue`, `enhancement`, `example-collection`

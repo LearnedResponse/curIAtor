@@ -228,6 +228,112 @@ def summarize(cfg: dict, app: str | None = None, include_git: bool = True) -> di
     return out
 
 
+def _collection_label(summary: dict[str, Any]) -> str:
+    gallery = summary.get("gallery")
+    if gallery:
+        return Path(gallery).resolve().parent.name
+    repo = summary.get("repo_root")
+    return Path(repo).resolve().name if repo else "collection"
+
+
+def _compare_row(summary: dict[str, Any]) -> dict[str, Any]:
+    totals = summary["totals"]
+    latency = summary["reply_latency"]
+    git = summary.get("git") or {}
+    git_available = bool(git.get("available"))
+    return {
+        "collection": _collection_label(summary),
+        "gallery": summary.get("gallery"),
+        "cycles": totals["cycles"],
+        "open_cycles": totals["open_cycles"],
+        "replied_cycles": totals["replied_cycles"],
+        "reply_rate_percent": totals["reply_rate_percent"],
+        "agent_notes": totals["agent_notes"],
+        "screenshots": totals["screenshots"],
+        "rated_cycles": totals["rated_cycles"],
+        "median_reply_seconds": latency["median_seconds"],
+        "avg_reply_seconds": latency["avg_seconds"],
+        "git_available": git_available,
+        "curator_commits": git["curator_commits"] if git_available else None,
+        "revert_commits": git["revert_commits"] if git_available else None,
+    }
+
+
+def compare(configs: list[dict], include_git: bool = True) -> dict[str, Any]:
+    """Summarize several collections for a release/paper case-study table."""
+    summaries = [summarize(cfg, include_git=include_git) for cfg in configs]
+    rows = [_compare_row(summary) for summary in summaries]
+    cycles = sum(row["cycles"] for row in rows)
+    replied = sum(row["replied_cycles"] for row in rows)
+    return {
+        "collections": rows,
+        "totals": {
+            "collections": len(rows),
+            "cycles": cycles,
+            "open_cycles": sum(row["open_cycles"] for row in rows),
+            "replied_cycles": replied,
+            "reply_rate_percent": _percent(replied, cycles),
+            "agent_notes": sum(row["agent_notes"] for row in rows),
+            "curator_commits": sum(row["curator_commits"] or 0 for row in rows),
+        },
+    }
+
+
+def _fmt_optional_int(value) -> str:
+    return "n/a" if value is None else str(value)
+
+
+def format_compare_markdown(report: dict[str, Any]) -> str:
+    """Render collection-level comparison rows for papers and release notes."""
+    lines = [
+        "# curIAtor Stats Compare",
+        "",
+        "| Collection | Cycles | Open | Replied | Reply rate | Median reply | Agent notes | Curator commits |",
+        "|---|---:|---:|---:|---:|---:|---:|---:|",
+    ]
+    for row in report["collections"]:
+        lines.append(
+            f"| {_md(row['collection'])} | {row['cycles']} | {row['open_cycles']} | "
+            f"{row['replied_cycles']} | {row['reply_rate_percent']}% | "
+            f"{_fmt_seconds(row['median_reply_seconds'])} | {row['agent_notes']} | "
+            f"{_fmt_optional_int(row['curator_commits'])} |"
+        )
+    totals = report["totals"]
+    lines.extend([
+        "",
+        f"_Totals: {totals['collections']} collections, {totals['cycles']} cycles, "
+        f"{totals['replied_cycles']} replied ({totals['reply_rate_percent']}%), "
+        f"{totals['curator_commits']} curator commits._",
+    ])
+    return "\n".join(lines) + "\n"
+
+
+def format_compare_csv(report: dict[str, Any]) -> str:
+    """Render collection-level comparison rows as CSV."""
+    buf = io.StringIO()
+    fieldnames = [
+        "collection",
+        "gallery",
+        "cycles",
+        "open_cycles",
+        "replied_cycles",
+        "reply_rate_percent",
+        "agent_notes",
+        "screenshots",
+        "rated_cycles",
+        "median_reply_seconds",
+        "avg_reply_seconds",
+        "git_available",
+        "curator_commits",
+        "revert_commits",
+    ]
+    writer = csv.DictWriter(buf, fieldnames=fieldnames)
+    writer.writeheader()
+    for row in report["collections"]:
+        writer.writerow(row)
+    return buf.getvalue()
+
+
 def format_markdown(summary: dict[str, Any]) -> str:
     """Render a stable Markdown table for release notes and papers."""
     totals = summary["totals"]

@@ -34,7 +34,7 @@ import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 
-from .config import LINK_REL, agent_label, app_spec, app_specs, load_config
+from .config import LINK_REL, agent_label, app_spec, app_specs, load_config, load_config_at
 from . import ledger
 
 
@@ -1122,9 +1122,48 @@ def _fmt_counts(counts: dict) -> str:
     return ", ".join(f"{k}={v}" for k, v in sorted(counts.items())) or "none"
 
 
+def _fmt_optional_int(value) -> str:
+    return "n/a" if value is None else str(value)
+
+
 def cmd_stats(args) -> int:
     """Emit reproducible collection metrics for release notes and case studies."""
     from . import stats as stats_mod
+
+    if args.mode == "compare":
+        if args.app:
+            print("curiator: `stats compare` cannot be combined with --app")
+            return 2
+        if not args.galleries:
+            print("curiator: `stats compare` needs at least one gallery path")
+            return 2
+        configs = [load_config_at(gallery) for gallery in args.galleries]
+        report = stats_mod.compare(configs, include_git=not args.no_git)
+        if args.json:
+            print(json.dumps(report, indent=2, sort_keys=True))
+            return 0
+        if args.markdown:
+            print(stats_mod.format_compare_markdown(report), end="")
+            return 0
+        if args.csv:
+            print(stats_mod.format_compare_csv(report), end="")
+            return 0
+        totals = report["totals"]
+        print("curIAtor stats compare")
+        print(
+            "  totals: "
+            f"{totals['collections']} collections, {totals['cycles']} cycles, "
+            f"{totals['replied_cycles']} replied ({totals['reply_rate_percent']}%), "
+            f"{totals['curator_commits']} curator commits"
+        )
+        for row in report["collections"]:
+            print(
+                f"  {row['collection']}: {row['cycles']} cycles, {row['open_cycles']} open, "
+                f"{row['replied_cycles']} replied ({row['reply_rate_percent']}%), "
+                f"median reply {_fmt_seconds(row['median_reply_seconds'])}, "
+                f"curator commits {_fmt_optional_int(row['curator_commits'])}"
+            )
+        return 0
 
     cfg = load_config()
     summary = stats_mod.summarize(cfg, app=args.app, include_git=not args.no_git)
@@ -1573,6 +1612,8 @@ def main(argv=None) -> int:
     sd = sub.add_parser("seed", help="load canned feedback (YAML) into the ledger — a self-building demo queue")
     sd.add_argument("file"); sd.set_defaults(func=cmd_seed)
     stt = sub.add_parser("stats", help="summarize ledger + git-as-memory metrics")
+    stt.add_argument("mode", nargs="?", choices=["compare"], help="use `compare` for collection-level rows")
+    stt.add_argument("galleries", nargs="*", help="gallery.yaml paths or collection directories for `stats compare`")
     stt.add_argument("--app", help="limit metrics to one app")
     stats_out = stt.add_mutually_exclusive_group()
     stats_out.add_argument("--json", action="store_true", help="emit machine-readable JSON")

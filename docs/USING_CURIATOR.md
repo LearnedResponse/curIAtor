@@ -144,6 +144,7 @@ curiator stats                 # human-readable ledger + git-as-memory summary
 curiator stats --json --app revenue
 curiator stats --markdown      # paper/release-note tables
 curiator stats --csv           # app-level spreadsheet/plotting rows
+curiator stats compare ../curiator-aviato ../curiator-ot ../curiator-geometry --markdown
 ```
 
 Before moving or publishing a collection, run the portability preflight:

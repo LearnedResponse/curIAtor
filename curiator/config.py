@@ -60,14 +60,19 @@ def find_gallery() -> Path:
     return Path(__file__).resolve().parents[1] / "gallery.yaml"
 
 
-def load_config() -> dict:
-    p = find_gallery()
+def _gallery_file(path: str | Path) -> Path:
+    p = Path(path).expanduser()
+    return p / "gallery.yaml" if p.is_dir() else p
+
+
+def _load_config_from_path(path: str | Path, *, link: dict | None = None) -> dict:
+    p = _gallery_file(path)
     if not p.exists():
         raise SystemExit(f"curIAtor: no gallery.yaml found (looked at {p}). See docs/DESIGN.md.")
     cfg = yaml.safe_load(p.read_text()) or {}
     cfg["repo_root"] = str(p.resolve().parent)   # everything (feedback/, sources) is relative to here
     cfg["gallery_path"] = str(p.resolve())
-    link = load_link()
+    link = link or {}
     if link:
         cfg["link"] = {k: v for k, v in link.items() if not k.startswith("_")}
         cfg["link_path"] = link["_path"]
@@ -95,6 +100,15 @@ def load_config() -> dict:
     cfg["auth"] = auth
     cfg["current_app"] = (link.get("app") if link else None) or infer_current_app(cfg)
     return cfg
+
+
+def load_config() -> dict:
+    return _load_config_from_path(find_gallery(), link=load_link())
+
+
+def load_config_at(path: str | Path) -> dict:
+    """Load an explicit gallery path or collection directory without consulting local app links."""
+    return _load_config_from_path(path, link={})
 
 
 def _resolve(base: Path, value: str | None) -> Path | None:

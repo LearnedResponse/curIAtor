@@ -35,7 +35,7 @@ def test_labels_cover_issue_templates_and_good_first_issues():
     assert {"bug", "enhancement", "needs-triage", "example-collection", "good first issue"} <= names
 
     issue_seed = Path("docs/GOOD_FIRST_ISSUES.md").read_text()
-    assert "## Add `curiator stats compare`" in issue_seed
+    assert "## Add a Streamlit Scaffold Template" in issue_seed
     assert "Labels: `good first issue`" in issue_seed
     assert "Done when:" in issue_seed
 
