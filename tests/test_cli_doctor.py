@@ -111,6 +111,13 @@ def test_doctor_warns_for_missing_dependency_manifests_separately(collection, ca
     (collection / "apps" / "node_panel" / "server.js").write_text("console.log('ok')\n")
     (collection / "apps" / "streamlit_panel").mkdir()
     (collection / "apps" / "streamlit_panel" / "app.py").write_text("print('ok')\n")
+    (collection / "apps" / "fastapi_panel").mkdir()
+    (collection / "apps" / "fastapi_panel" / "main.py").write_text("from fastapi import FastAPI\napp = FastAPI()\n")
+    (collection / "apps" / "gradio_panel").mkdir()
+    (collection / "apps" / "gradio_panel" / "app.py").write_text("import gradio as gr\n")
+    (collection / "apps" / "fastapi_ok").mkdir()
+    (collection / "apps" / "fastapi_ok" / "main.py").write_text("from fastapi import FastAPI\napp = FastAPI()\n")
+    (collection / "apps" / "fastapi_ok" / "requirements.txt").write_text("fastapi>=0.115\n")
     (collection / "gallery.yaml").write_text(textwrap.dedent("""\
         apps:
           - name: node_panel
@@ -123,6 +130,21 @@ def test_doctor_warns_for_missing_dependency_manifests_separately(collection, ca
             source: .
             smoke: python -m py_compile app.py
             mount: { kind: proxy, cmd: "streamlit run app.py --server.port 8801", port: 8801 }
+          - name: fastapi_panel
+            root: apps/fastapi_panel
+            source: .
+            smoke: python -m py_compile main.py
+            mount: { kind: proxy, cmd: "python main.py --port 8802 --root-path /app/{app}", port: 8802 }
+          - name: gradio_panel
+            root: apps/gradio_panel
+            source: .
+            smoke: python -m py_compile app.py
+            mount: { kind: proxy, cmd: "python app.py --port 8803 --root-path /app/{app}", port: 8803 }
+          - name: fastapi_ok
+            root: apps/fastapi_ok
+            source: .
+            smoke: python -m py_compile main.py
+            mount: { kind: proxy, cmd: "python main.py --port 8804 --root-path /app/{app}", port: 8804 }
     """))
 
     assert cli.main(["doctor", "--json"]) == 0
@@ -132,4 +154,7 @@ def test_doctor_warns_for_missing_dependency_manifests_separately(collection, ca
     messages = "\n".join(issue["message"] for issue in payload["issues"])
     assert "Node app is missing dependency manifest (package.json)" in messages
     assert "Python/Streamlit app is missing dependency manifest" in messages
+    assert "Python/FastAPI app is missing dependency manifest" in messages
+    assert "Python/Gradio app is missing dependency manifest" in messages
     assert "requirements.txt or pyproject.toml" in messages
+    assert all(issue["where"] != "app fastapi_ok dependencies" for issue in payload["issues"])

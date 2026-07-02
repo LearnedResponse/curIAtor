@@ -129,12 +129,14 @@ mount, opinionated only at scaffold time.
    Streamlit also has a first scaffold using `server.baseUrlPath`, a prefix-preserving proxy mount,
    and a generated note about the lightweight proxy's WebSocket/production limits.
    Gradio has the same first-pass shape using `root_path` and a prefix-preserving proxy mount.
-4. JS-specific niceties beyond the first scaffold pass: `commands.preview` now lands in Vite scaffold
+4. JS/framework-specific niceties beyond the first scaffold pass: `commands.preview` now lands in Vite scaffold
    gallery entries and appears in `curiator status` / `curiator context`; proxy failures now render a
    diagnostic page with command/cwd/port/target/process state plus recent stdout/stderr. WebSocket/HMR
    upgrade requests now get an explicit lightweight-proxy diagnostic instead of falling through the
    HTTP proxy path, and `curiator doctor` warns when proxy commands look like HMR-oriented framework dev
-   servers; full live-HMR reverse proxying remains demand-paced per framework.
+   servers. Doctor also warns when optional Python framework apps such as FastAPI, Gradio, or Streamlit
+   lack a dependency manifest, which keeps proxy scaffolds portable before publication. Full live-HMR
+   reverse proxying remains demand-paced per framework.
 
 Dash-first is the *launch wedge* (ship fast, own the data/HMI audience), **not the identity** — the
 overlay stayed framework-agnostic and the non-Dash proof now runs (`curiator-aviato`: React SSR + Rust +

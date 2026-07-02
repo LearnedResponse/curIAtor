@@ -26,6 +26,7 @@
 from __future__ import annotations
 
 import argparse
+import ast
 import json
 import os
 import re
@@ -627,6 +628,42 @@ def _manifest_expectations(command: str | None) -> dict[str, list[str]]:
     return {}
 
 
+_OPTIONAL_PYTHON_FRAMEWORKS = {
+    "fastapi": "Python/FastAPI app",
+    "gradio": "Python/Gradio app",
+    "streamlit": "Python/Streamlit app",
+}
+_PYTHON_DEP_MANIFESTS = ["requirements.txt", "pyproject.toml", "environment.yml", "environment.yaml"]
+
+
+def _python_import_roots(path: Path) -> set[str]:
+    try:
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+    except (OSError, SyntaxError, UnicodeDecodeError):
+        return set()
+    roots: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            roots.update(alias.name.split(".", 1)[0].lower() for alias in node.names)
+        elif isinstance(node, ast.ImportFrom) and node.module:
+            roots.add(node.module.split(".", 1)[0].lower())
+    return roots
+
+
+def _python_framework_manifest_expectations(root: Path) -> dict[str, list[str]]:
+    """Return optional Python framework dependency manifests implied by top-level app imports."""
+    if not root.exists() or not root.is_dir():
+        return {}
+    imports: set[str] = set()
+    for path in sorted(root.glob("*.py")):
+        imports.update(_python_import_roots(path))
+    return {
+        label: _PYTHON_DEP_MANIFESTS
+        for module, label in _OPTIONAL_PYTHON_FRAMEWORKS.items()
+        if module in imports
+    }
+
+
 def _command_tokens(command: str | None) -> list[str]:
     if not command:
         return []
@@ -667,8 +704,10 @@ def _doctor_warn_missing_manifests(
     commands: list[str | None],
 ) -> None:
     seen: set[tuple[str, tuple[str, ...]]] = set()
-    for command in commands:
-        for label, filenames in _manifest_expectations(command).items():
+    expectation_sets = [_manifest_expectations(command) for command in commands]
+    expectation_sets.append(_python_framework_manifest_expectations(root))
+    for expectations in expectation_sets:
+        for label, filenames in expectations.items():
             key = (label, tuple(filenames))
             if key in seen:
                 continue

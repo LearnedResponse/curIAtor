@@ -50,7 +50,8 @@ All notable changes to curIAtor are documented here. The format follows
   app roots/sources as errors, with release-hardening warnings for missing smoke hooks, proxy commands
   that do not mention their configured port, likely HMR dev-server proxy commands, missing command
   executables, and common missing dependency manifests such as `package.json`, `requirements.txt`, and
-  `Cargo.toml`.
+  `Cargo.toml`; it now also detects missing Python dependency manifests for FastAPI, Gradio, and
+  Streamlit apps from top-level imports.
 - `curiator smoke` runs each app's configured smoke command or fallback import check across a collection,
   with `--app`, `--jobs`, `--json`, and configurable `smoke_timeout` / `smoke.timeout` limits for
   release preflight automation.
