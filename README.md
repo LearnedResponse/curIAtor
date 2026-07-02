@@ -81,8 +81,8 @@ curiator app create orange_picker --template dash --title "Orange Picker"
 curiator app import https://github.com/me/lab-viewer.git lab_viewer --template react
 ```
 
-Run `curiator app templates` to inspect the supported Dash, static, Python, Node, Rust, and JS/web
-framework scaffolds.
+Run `curiator app templates` to inspect the supported Dash, static, Python, Node, Flask, FastAPI,
+Rust, React/Vite, Svelte/Vite, Vue/Vite, Next.js, Streamlit, and Gradio scaffolds.
 
 …or point it at existing apps in `gallery.yaml`:
 

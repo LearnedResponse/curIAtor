@@ -141,6 +141,8 @@ All notable changes to curIAtor are documented here. The format follows
 - `curiator playground-preflight --output <path>` does the same for hosted-pilot posture checks.
 - `make release-evidence` refreshes the standard gitignored release/paper evidence bundle under
   `release-evidence/`.
+- `curiator context` now gives a collection-level context summary when no app is selected in a
+  multi-app gallery, so repo-local Claude/Codex shims can run status+context from the runner root.
 - The release-doc gate now enforces the standard `release-evidence/` raw JSON/CSV evidence location,
   while allowing portable Markdown excerpts under the paper figures directory.
 - `.zenodo.json` provides GitHub-Zenodo archive metadata, and

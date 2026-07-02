@@ -1610,7 +1610,12 @@ def cmd_release_preflight(args) -> int:
 
 def cmd_context(args) -> int:
     cfg = load_config()
-    app = _resolve_app(cfg, args.app)
+    try:
+        app = _resolve_app(cfg, args.app)
+    except SystemExit:
+        if args.app or cfg.get("current_app") or len(_app_names(cfg)) <= 1:
+            raise
+        return _print_collection_context(cfg, args.limit)
     spec = app_spec(cfg, app) or {}
     total, open_n = _feedback_counts(cfg, app)
     print(f"# curIAtor Context: {app}")
@@ -1635,6 +1640,55 @@ def cmd_context(args) -> int:
     print("## Recent Feedback")
     print("")
     _print_feedback_items(cfg, app, limit=args.limit)
+    return 0
+
+
+def _print_collection_context(cfg: dict, limit: int) -> int:
+    from .loop.adapters import GENERAL_KEY
+    specs = app_specs(cfg)
+    data = ledger.load(cfg)
+    app_names = [str(spec.get("name") or spec.get("app_name") or "") for spec in specs if spec.get("name")]
+    total = sum(len(data.get(name, [])) for name in app_names)
+    open_n = sum(
+        1
+        for name in app_names
+        for entry in data.get(name, [])
+        if entry.get("kind") != "system" and entry.get("status") in OPEN_FEEDBACK_STATUSES
+    )
+    general_total, general_open = _feedback_counts(cfg, GENERAL_KEY)
+    if general_total:
+        total += general_total
+        open_n += general_open
+
+    print("# curIAtor Context: collection")
+    print("")
+    print(f"- gallery: `{cfg['gallery_path']}`")
+    print(f"- shell: `{_shell_url(cfg)}`")
+    print(f"- apps: {len(specs)}")
+    print(f"- feedback: {open_n} open / {total} total")
+    print("- selected app: none")
+    print("")
+    print("## Ready Commands")
+    print("")
+    print(f"- select an app: `{_curiator_env_cmd(cfg, 'context', '--app', '<app>')}`")
+    print(f"- show all feedback: `{_curiator_env_cmd(cfg, 'feedback', 'show', '--limit', str(limit))}`")
+    print(f"- add General feedback: `{_curiator_env_cmd(cfg, 'feedback', 'add', GENERAL_KEY, '<comment>')}`")
+    print(f"- list app templates: `{_curiator_env_cmd(cfg, 'app', 'templates')}`")
+    print(f"- open gallery: `{_shell_url(cfg)}`")
+    print("")
+    print("## Apps")
+    print("")
+    if not specs:
+        print("- no apps configured")
+    for spec in specs:
+        name = str(spec.get("name") or spec.get("app_name") or "")
+        total_i, open_i = _feedback_counts(cfg, name)
+        smoke = spec.get("smoke") or "none configured"
+        print(f"- `{name}`: {open_i} open / {total_i} total; smoke `{smoke}`; root `{spec.get('root') or ''}`")
+    print("")
+    print("## Recent General Feedback")
+    print("")
+    _print_feedback_items(cfg, GENERAL_KEY, limit=limit)
     return 0
 
 

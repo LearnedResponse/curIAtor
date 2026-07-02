@@ -80,6 +80,39 @@ def test_status_and_context_default_to_current_app(collection, monkeypatch, caps
     assert "curiator work --app sample" in out
 
 
+def test_context_without_selected_app_summarizes_multi_app_collection(collection, monkeypatch, capsys):
+    import yaml
+
+    from curiator import cli
+
+    (collection / "apps" / "other").mkdir()
+    (collection / "apps" / "other" / "server.py").write_text("print('other')\n")
+    gallery = yaml.safe_load((collection / "gallery.yaml").read_text())
+    gallery["apps"].append({
+        "name": "other",
+        "title": "Other",
+        "root": "apps/other",
+        "source": ".",
+        "smoke": "python -m py_compile server.py",
+        "mount": {"kind": "proxy", "cmd": "python server.py --port 8810", "port": 8810},
+    })
+    (collection / "gallery.yaml").write_text(yaml.safe_dump(gallery, sort_keys=False))
+
+    outside = collection.parent / "outside"
+    outside.mkdir(exist_ok=True)
+    monkeypatch.chdir(outside)
+    assert cli.main(["context", "--limit", "1"]) == 0
+
+    out = capsys.readouterr().out
+    assert "# curIAtor Context: collection" in out
+    assert "- apps: 2" in out
+    assert "- selected app: none" in out
+    assert "curiator context --app" in out
+    assert "`sample`:" in out
+    assert "`other`:" in out
+    assert "Recent General Feedback" in out
+
+
 def test_status_surfaces_nested_app_repo(collection, monkeypatch, capsys):
     import subprocess
 
