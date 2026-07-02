@@ -109,6 +109,7 @@ def test_react_shell_has_burned_screenshot_annotations(web_client):
     assert "rshell-annotation-note" in js
     assert "rshell-annotation-summary" in js
     assert "annotation note " in js
+    assert "OS dictation can type feedback here." in js
     assert "shotSource" in js
     assert 'setShotSource("capture")' in js
     assert 'setShotSource("upload")' in js

@@ -9,6 +9,7 @@
     held: "#6f42c1",
     rejected: "#555"
   };
+  const DICTATION_HINT = "OS dictation can type feedback here.";
 
   function api(path, opts) {
     return fetch(path, Object.assign({headers: {"content-type": "application/json"}}, opts || {}))
@@ -719,6 +720,7 @@
           h("button", {className: "rshell-reply", style: {float: "right", color: "#777"}, onClick: () => setReplyTo(null)}, "×")),
         h("div", {style: {fontSize: 11, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap"}}, excerpt(target))) : null,
       h("textarea", {className: "rshell-textarea", placeholder: "What's good / what to change…",
+        title: DICTATION_HINT, "aria-label": "Feedback comment. " + DICTATION_HINT,
         value: comment, onChange: (e) => setComment(e.target.value)}),
       h("div", {style: {display: "flex", gap: 8, margin: "6px 0"}},
         h("button", {className: "rshell-button secondary", onClick: capture}, "📷 Capture view"),

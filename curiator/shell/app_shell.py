@@ -1451,6 +1451,7 @@ def build_shell() -> Dash:
         dcc.Store(id="fb-reply-to"),
         html.Div(id="fb-reply-context"),
         dcc.Textarea(id="fb-comment", placeholder="What's good / what to change…",
+                     title="OS dictation can type feedback here.",
                      style={"width": "100%", "height": "80px", "fontSize": "12px", "marginBottom": "6px",
                             "boxSizing": "border-box"}),
         html.Div([

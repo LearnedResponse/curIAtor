@@ -198,6 +198,11 @@ redaction marks, uploads, and unreadable/cross-origin mounts do not carry DOM ta
 threads show those annotation summaries, and saved annotated entries can be reopened as a scrollable
 preview from the feedback panel or loaded as an editable reply draft.
 
+The comment field is a normal textarea, so OS-level dictation works without curIAtor-specific audio
+handling. On macOS, use Dictation; on Windows, use Win+H voice typing. Linux desktop dictation depends
+on the local environment, which is why the planned built-in voice path favors a local Whisper-style
+transcriber rather than a browser-cloud API.
+
 ## 3. Work Interactively From An App Repo
 
 If you are already inside Claude Code, Codex, or another coding agent in an app repo, use the same

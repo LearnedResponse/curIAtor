@@ -45,3 +45,9 @@ deliberate (ship, let the example demos surface what to prioritize).
   annotation metadata rides through the ledger/task bundle, and the React shell records same-origin DOM
   targets when available. A reproducible Brave dogfood check now covers capture/draw/save/task-bundle;
   remaining work is the native-capture fidelity follow-on.
+- [**voice-feedback**](voice-feedback.md) — talk through the fix instead of typing it. Three tiers
+  (OS dictation / Web Speech / local Whisper), where the **privacy moat** picks **local Whisper as the
+  default** (on-device, works on Linux, zero egress). North star: **"narrated feedback"** — voice +
+  annotation on a *shared clock*, so a review becomes an ordered, intent-per-mark tour the agent
+  follows. Composes with `annotated-feedback`; accessibility wins for motor/low-vision (voice +
+  DOM-target snapping). Design-now: put marks + transcript segments on one clock.
