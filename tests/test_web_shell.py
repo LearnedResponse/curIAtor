@@ -317,6 +317,12 @@ def test_react_shell_feedback_api_threads_replies(web_client):
 
 
 def test_react_shell_feedback_api_stores_sanitized_annotations(web_client):
+    from pathlib import Path
+
+    from curiator import ledger
+    from curiator.config import load_config
+    from curiator.loop.adapters import build_task
+
     r = web_client.post("/api/feedback/sample", json={
         "comment": "marked chart",
         "screenshot": "data:image/png;base64,aGVsbG8=",
@@ -360,6 +366,22 @@ def test_react_shell_feedback_api_stores_sanitized_annotations(web_client):
     assert "legend overlaps chart" in home
     assert "#chart .legend" in home
     assert "target omitted" in home
+
+    cfg = load_config()
+    entry = ledger.load(cfg)["sample"][-1]
+    assert entry["screenshot"].startswith("shots/sample_")
+    assert (Path(cfg["repo_root"]) / "feedback" / entry["screenshot"]).exists()
+
+    task = build_task(cfg, "sample", entry)
+    body = Path(task.task_file).read_text()
+    assert "screenshot (Read this PNG): `feedback/shots/sample_" in body
+    assert "## Screenshot annotations" in body
+    assert "mark 1: `box` at x1=0.000, y1=0.200, x2=0.900, y2=1.000" in body
+    assert "selector `#chart .legend`" in body
+    assert "data-testid `legend`" in body
+    assert "legend overlaps chart" in body
+    assert "mark 2: `redact` at x1=0.100, y1=0.100, x2=0.200, y2=0.200 (target omitted for redaction)" in body
+    assert "#secret" not in body
 
 
 def test_react_shell_trace_and_app_mount(collection, web_mod):
