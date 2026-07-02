@@ -37,8 +37,8 @@ import shlex
 import subprocess
 from pathlib import Path
 
-from . import ledger
-from .app_cli import (
+from .. import ledger
+from ..app_cli import (
     _APP_TEMPLATE_CHOICES,
     _JS_PACKAGE_MANAGERS,
     _app_names,
@@ -47,8 +47,8 @@ from .app_cli import (
     cmd_app_import,
     cmd_app_templates,
 )
-from .auth_cli import cmd_auth, cmd_user
-from .collection_cli import (
+from ..auth_cli import cmd_auth, cmd_user
+from ..collection_cli import (
     _doctor_issues,  # noqa: F401 - compatibility export used by release/preflight callers
     _doctor_warn_missing_manifests,  # noqa: F401 - compatibility export used by app_cli
     _doctor_warn_proxy_base_path,  # noqa: F401 - compatibility export used by app_cli
@@ -63,8 +63,8 @@ from .collection_cli import (
     cmd_smoke,
     cmd_status,
 )
-from .galleries_cli import cmd_galleries, cmd_galleries_adopt, cmd_galleries_clone
-from .serve_cli import (
+from ..galleries_cli import cmd_galleries, cmd_galleries_adopt, cmd_galleries_clone
+from ..serve_cli import (
     _child_env,  # noqa: F401 - compatibility export for runtime shell extensions
     _reload_in_shell,  # noqa: F401 - compatibility export used by workflow_cli
     _reset_demo,  # noqa: F401 - compatibility export for demo tooling
@@ -79,15 +79,15 @@ from .serve_cli import (
     cmd_up,
     cmd_watch,
 )
-from .release_cli import (
+from ..release_cli import (
     _PUBLIC_RELEASE_OWNER,
     _clone_gallery as _clone_gallery,
     cmd_playground_preflight,
     cmd_release_preflight,
 )
-from .stats_cli import cmd_stats
-from .voice.cli import cmd_voice
-from .workflow_cli import (
+from ..stats_cli import cmd_stats
+from ..voice.cli import cmd_voice
+from ..workflow_cli import (
     _parse_actions_arg,  # noqa: F401 - compatibility export for workflow tooling
     _post_reply,  # noqa: F401 - compatibility export for workflow tooling
     _print_feedback_items,  # noqa: F401 - compatibility export for feedback tooling
@@ -138,7 +138,7 @@ def _resolve_app(cfg: dict, app: str | None = None) -> str:
     """The app an app-scoped command targets: the explicit --app, else the linked/inferred current
     app, else the only app. Explicit/linked names are validated against the gallery so a typo (or a
     comment swallowed by a positional) can't create ledger entries under a nonexistent key."""
-    from .loop.adapters import GENERAL_KEY
+    from ..loop.adapters import GENERAL_KEY
     names = _app_names(cfg)
     chosen = app or cfg.get("current_app")
     if chosen:
@@ -198,7 +198,7 @@ def _curiator_env_cmd(cfg: dict, *parts: str) -> str:
 
 
 def _cli_user(cfg: dict) -> dict | None:
-    from . import auth
+    from .. import auth
     user = auth.current_user(cfg.get("auth") or {})
     if not user:
         # header/oidc/local modes have no request context on the CLI — record the local git identity

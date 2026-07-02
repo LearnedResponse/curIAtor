@@ -33,7 +33,15 @@ Source = "https://github.com/LearnedResponse/curiator"
 curiator = "curiator.cli:main"
 
 [tool.setuptools]
-packages = ["curiator", "curiator.shell", "curiator.shell.assets", "curiator.loop", "curiator.loop.adapters", "curiator.voice"]
+packages = [
+  "curiator",
+  "curiator.cli",
+  "curiator.shell",
+  "curiator.shell.assets",
+  "curiator.loop",
+  "curiator.loop.adapters",
+  "curiator.voice",
+]
 
 [tool.setuptools.package-data]
 "curiator.shell.assets" = ["*"]
