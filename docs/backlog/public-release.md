@@ -36,7 +36,7 @@ leave feedback → watch the fix land and the ⚙ reply arrive. Every item below
    `.claude/commands/curiator.md` and `.agents/skills/curiator/SKILL.md`; the three release
    collections carry those current paths and now default to `runner.mode: pinned` for standalone
    `pip install curiator` use (`curiator-aviato` `b23e0bc`, `curiator-ot` `36e21cf`,
-   `curiator-geometry` `e6d9141`). `curiator doctor` now gives a local preflight for machine-absolute paths,
+   `curiator-geometry` `30bb155` on `curiator/auto`). `curiator doctor` now gives a local preflight for machine-absolute paths,
    missing app roots/sources, weak smoke coverage, suspicious proxy port wiring, missing command
    executables, and common missing dependency manifests; `curiator smoke` runs the same per-app smoke
    hooks used by git-as-memory commits. From the runner checkout,
@@ -50,9 +50,9 @@ leave feedback → watch the fix land and the ⚙ reply arrive. Every item below
    fresh-clone verification remain. Sanitize machine paths and anything private, but **keep the feedback→fix
    commits** — the ledger and the git log *are* the demo; a laundered squeaky-clean history shows
    nothing. `curiator-geometry` now has seven public Dash/Plotly apps (including two algebraic-geometry
-   explainers filtered from 4+ star Kwisatz taste signals) and passes `curiator doctor`, `curiator smoke`,
-   and direct Dash import/build checks; it still needs the feedback loop run and a fresh-clone portability
-   gate. `curiator-ot` now has a deterministic tank sim, local SQLite historian, rough rainbow Dash HMI,
+   explainers filtered from 4+ star Kwisatz taste signals), one completed convex-hull feedback→fix cycle
+   at `30bb155`, and passing `curiator doctor`, `curiator smoke`, direct Dash import/build, and
+   same-machine fresh-clone preflight checks. `curiator-ot` now has a deterministic tank sim, local SQLite historian, rough rainbow Dash HMI,
    10-item operator feedback queue, repo-local curIAtor skill shims, seed commit `6c5e2d6`, and latest
    release-hygiene commit `36e21cf`; its
    seeded feedback loop is complete on `curiator/auto` with ten curator commits from rainbow baseline

@@ -1,6 +1,7 @@
 # Backlog — math/geometry example collection (public)
 
-> **Status:** scaffolded 2026-07-01 in nested repo `galleries/curiator-geometry`. The third public example for the
+> **Status:** scaffolded 2026-07-01 in nested repo `galleries/curiator-geometry`; first feedback loop
+> receipt landed at `30bb155` on `curiator/auto`. The third public example for the
 > [release](public-release.md) — and the origin story made public: curIAtor's shell was proven over
 > dozens of feedback→fix cycles in a private research repo full of interactive geometry explainers
 > before it was extracted. **The IP guardrail up front:** this is a NEW collection of public-knowledge
@@ -61,7 +62,8 @@ feedback ledger has 12 apps with at least one 4+ star rating:
 3. `seed/feedback.yaml` authored as a mathematician-reviewer — done; the feedback must read like a colleague
    at a whiteboard ("the ±√μ branches need distinct line styles — solid stable, dashed unstable"), not
    a QA checklist.
-4. Run the loop, keep the commits: the git log = the collection polishing itself.
+4. Run the loop, keep the commits: first loop receipt landed (`30bb155`), and the git log now has the
+   collection polishing itself.
 5. README + link from the main repo's Examples — README link prepared; the before/after screenshots
    feed the [paper](zenodo-paper.md)'s case-study section.
 
@@ -69,11 +71,12 @@ feedback ledger has 12 apps with at least one 4+ star rating:
 
 - `curiator doctor` against `galleries/curiator-geometry/gallery.yaml`: passing, no errors or warnings.
 - `curiator smoke` against `galleries/curiator-geometry/gallery.yaml`: passing for all seven apps.
-- Direct import/build check: every Dash module exposes a layout through `build_app()`.
-- `galleries/curiator-geometry` is initialized as a git repo on `main` with seed commit `c409fcf`; current
-  head `e6d9141` adds repo-local `.claude/commands/curiator.md` /
-  `.agents/skills/curiator/SKILL.md` interactive shims and switches the public collection to
-  `runner.mode: pinned`.
+- Direct import/build check for the feedback-edited hull app: `build_app()` constructs cleanly.
+- `curiator stats --json`: 1 cycle, 1 replied/done cycle, 1 curator commit, latest `30bb155`.
+- `curiator release-preflight --gallery curiator-geometry --fresh-clone --json`: passing at `30bb155`.
+- `galleries/curiator-geometry` is initialized as a git repo with seed commit `c409fcf`; `main` still
+  carries the rough seed + pinned runner profile (`e6d9141`), and `curiator/auto` now carries the
+  feedback-loop receipt `30bb155`.
 
 ## Guardrails
 
