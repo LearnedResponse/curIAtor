@@ -2206,6 +2206,36 @@ def _playground_int_value(raw) -> int | None:
     return value if value >= 0 else None
 
 
+def _playground_git_file_state(repo: Path, path: str | None) -> dict:
+    state = {"inside_repo": None, "tracked": None, "ignored": None, "rel": None}
+    if not path:
+        return state
+    repo = repo.resolve()
+    p = Path(path).resolve()
+    try:
+        rel = p.relative_to(repo).as_posix()
+    except ValueError:
+        state["inside_repo"] = False
+        return state
+    state["inside_repo"] = True
+    state["rel"] = rel
+    tracked = subprocess.run(
+        ["git", "ls-files", "--error-unmatch", "--", rel],
+        cwd=repo,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    ignored = subprocess.run(
+        ["git", "check-ignore", "--quiet", "--", rel],
+        cwd=repo,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    state["tracked"] = tracked.returncode == 0
+    state["ignored"] = ignored.returncode == 0
+    return state
+
+
 def _playground_user_summary(cfg: dict) -> dict:
     from . import auth
 
@@ -2223,6 +2253,7 @@ def _playground_user_summary(cfg: dict) -> dict:
     users_file = auth_cfg.get("users_file")
     users_file_mode = None
     users_file_owner_only = None
+    git_state = _playground_git_file_state(Path(cfg["repo_root"]), users_file)
     if users_file and Path(users_file).exists():
         try:
             mode = stat.S_IMODE(Path(users_file).stat().st_mode)
@@ -2235,6 +2266,10 @@ def _playground_user_summary(cfg: dict) -> dict:
         "users_file": users_file,
         "users_file_mode": users_file_mode,
         "users_file_owner_only": users_file_owner_only,
+        "users_file_inside_repo": git_state["inside_repo"],
+        "users_file_rel": git_state["rel"],
+        "users_file_tracked": git_state["tracked"],
+        "users_file_ignored": git_state["ignored"],
         "inline_users": len(inline_users),
         "total": len(users),
         "active": len(active),
@@ -2284,6 +2319,24 @@ def _playground_preflight_issues(cfg: dict, user_summary: dict) -> list[dict]:
                 "error",
                 "auth.users_file",
                 "local-auth users_file contains password hashes and must be owner-only (0600)",
+            ))
+        if user_summary["users_file_inside_repo"] is False:
+            issues.append(_playground_issue(
+                "error",
+                "auth.users_file",
+                "local-auth users_file should live under the mounted collection root for backup/preflight coverage",
+            ))
+        if user_summary["users_file_tracked"]:
+            issues.append(_playground_issue(
+                "error",
+                "auth.users_file",
+                "local-auth users_file contains password hashes and must not be tracked by git",
+            ))
+        if user_summary["users_file_mode"] and user_summary["users_file_ignored"] is False:
+            issues.append(_playground_issue(
+                "error",
+                "auth.users_file",
+                "local-auth users_file must be gitignored so password hashes do not appear as untracked publish drift",
             ))
         if user_summary["active"] == 0:
             issues.append(_playground_issue(

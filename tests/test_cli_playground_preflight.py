@@ -2,7 +2,15 @@
 from __future__ import annotations
 
 import json
+import subprocess
 import textwrap
+
+
+def _ignore_local_users_file(collection):
+    path = collection / ".gitignore"
+    current = path.read_text() if path.exists() else ""
+    if ".curiator-users.json" not in current.splitlines():
+        path.write_text(current + ("\n" if current and not current.endswith("\n") else "") + ".curiator-users.json\n")
 
 
 def test_playground_preflight_fails_unsafe_collection_defaults(collection, capsys):
@@ -52,6 +60,7 @@ def test_playground_preflight_accepts_phase0_local_auth_config(collection, capsy
         shell:
           port: 8399
     """))
+    _ignore_local_users_file(collection)
     auth.save_users_file(
         str(collection / ".curiator-users.json"),
         {
@@ -73,6 +82,9 @@ def test_playground_preflight_accepts_phase0_local_auth_config(collection, capsy
     assert payload["user_store"]["inline_users"] == 0
     assert payload["user_store"]["users_file_mode"] == "0o600"
     assert payload["user_store"]["users_file_owner_only"] is True
+    assert payload["user_store"]["users_file_rel"] == ".curiator-users.json"
+    assert payload["user_store"]["users_file_tracked"] is False
+    assert payload["user_store"]["users_file_ignored"] is True
     assert payload["doctor"]["ok"] is True
     assert payload["smoke"]["ok"] is True
     assert payload["checks"] == {"smoke": True, "http_smoke": False}
@@ -103,6 +115,7 @@ def test_playground_preflight_json_output_writes_evidence_file(collection, capsy
             per_user_daily: 3
             global_daily: 25
     """))
+    _ignore_local_users_file(collection)
     auth.save_users_file(
         str(collection / ".curiator-users.json"),
         {"admin@example.com": {"name": "Admin", "groups": ["admin"], "password_hash": "test-hash"}},
@@ -145,6 +158,7 @@ def test_playground_preflight_output_keeps_human_summary(collection, capsys, tmp
             per_user_daily: 3
             global_daily: 25
     """))
+    _ignore_local_users_file(collection)
     auth.save_users_file(
         str(collection / ".curiator-users.json"),
         {"admin@example.com": {"name": "Admin", "groups": ["admin"], "password_hash": "test-hash"}},
@@ -184,6 +198,7 @@ def test_playground_preflight_rejects_world_readable_local_users_file(collection
             per_user_daily: 3
             global_daily: 25
     """))
+    _ignore_local_users_file(collection)
     users_file = collection / ".curiator-users.json"
     auth.save_users_file(
         str(users_file),
@@ -197,6 +212,83 @@ def test_playground_preflight_rejects_world_readable_local_users_file(collection
     assert payload["user_store"]["users_file_mode"] == "0o644"
     assert payload["user_store"]["users_file_owner_only"] is False
     assert "must be owner-only (0600)" in messages
+
+
+def test_playground_preflight_rejects_unignored_local_users_file(collection, capsys):
+    from curiator import auth, cli
+
+    (collection / "gallery.yaml").write_text(textwrap.dedent("""\
+        apps:
+          - name: sample
+            title: Sample
+            mount: { kind: dash-inproc, module: sample }
+            source: apps/sample.py
+        runner:
+          mode: pinned
+        git:
+          commit: true
+        auth:
+          mode: local
+          users_file: .curiator-users.json
+          admin_groups: [admin]
+        agent:
+          autonomy: propose-only
+          dispatch:
+            trusted_groups: [trusted]
+          quotas:
+            per_user_daily: 3
+            global_daily: 25
+    """))
+    auth.save_users_file(
+        str(collection / ".curiator-users.json"),
+        {"admin@example.com": {"name": "Admin", "groups": ["admin"], "password_hash": "test-hash"}},
+    )
+
+    assert cli.main(["playground-preflight", "--no-smoke", "--json"]) == 1
+    payload = json.loads(capsys.readouterr().out)
+    messages = "\n".join(issue["message"] for issue in payload["issues"])
+    assert payload["user_store"]["users_file_tracked"] is False
+    assert payload["user_store"]["users_file_ignored"] is False
+    assert "must be gitignored" in messages
+
+
+def test_playground_preflight_rejects_tracked_local_users_file(collection, capsys):
+    from curiator import auth, cli
+
+    (collection / "gallery.yaml").write_text(textwrap.dedent("""\
+        apps:
+          - name: sample
+            title: Sample
+            mount: { kind: dash-inproc, module: sample }
+            source: apps/sample.py
+        runner:
+          mode: pinned
+        git:
+          commit: true
+        auth:
+          mode: local
+          users_file: .curiator-users.json
+          admin_groups: [admin]
+        agent:
+          autonomy: propose-only
+          dispatch:
+            trusted_groups: [trusted]
+          quotas:
+            per_user_daily: 3
+            global_daily: 25
+    """))
+    users_file = collection / ".curiator-users.json"
+    auth.save_users_file(
+        str(users_file),
+        {"admin@example.com": {"name": "Admin", "groups": ["admin"], "password_hash": "test-hash"}},
+    )
+    subprocess.run(["git", "add", ".curiator-users.json"], cwd=collection, check=True, capture_output=True)
+
+    assert cli.main(["playground-preflight", "--no-smoke", "--json"]) == 1
+    payload = json.loads(capsys.readouterr().out)
+    messages = "\n".join(issue["message"] for issue in payload["issues"])
+    assert payload["user_store"]["users_file_tracked"] is True
+    assert "must not be tracked by git" in messages
 
 
 def test_playground_preflight_rejects_inline_local_users(collection, capsys):
@@ -261,6 +353,7 @@ def test_playground_preflight_can_run_http_smoke(collection, monkeypatch, capsys
             per_user_daily: 3
             global_daily: 25
     """))
+    _ignore_local_users_file(collection)
     auth.save_users_file(
         str(collection / ".curiator-users.json"),
         {"admin@example.com": {"name": "Admin", "groups": ["admin"], "password_hash": "test-hash"}},
@@ -322,6 +415,7 @@ def test_playground_preflight_strict_fails_warning_only_posture(collection, caps
           adapter: headless-cc
           autonomy: auto-small
     """))
+    _ignore_local_users_file(collection)
     auth.save_users_file(
         str(collection / ".curiator-users.json"),
         {"admin@example.com": {"name": "Admin", "groups": ["admin"], "password_hash": "test-hash"}},
