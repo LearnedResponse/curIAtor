@@ -25,9 +25,9 @@ leave feedback → watch the fix land and the ⚙ reply arrive. Every item below
    fresh-clone preflight `3/3` with zero publish-artifact hits, regenerated `docs/demo.gif`, built
    sdist/wheel, and `twine check` passed both artifacts. The broader optional-public gate
    `curiator release-preflight --include-optional --fresh-clone --strict` passed `5/5` with all smoke
-   hooks green.
-   Remaining external setup is configuring the PyPI Trusted Publisher, then running
-   `make release-prepare VERSION=0.2.0 DATE=<release-date>` and pushing the matching `v0.2.0` tag.
+   hooks green. Release metadata is cut locally for `0.2.0` / `2026-07-02` via
+   `make release-prepare`. Remaining external setup is configuring the PyPI Trusted Publisher, then
+   pushing the matching `v0.2.0` tag.
 2. **The hero `docs/demo.gif`** (absorbs the old M3) — the README now has a committed generated
    storyboard at this path (`make demo-gif`), so the launch page no longer has a broken image.
    Before release, replace it with the real take per `docs/DEMO_SCRIPT.md`: feedback on the broken

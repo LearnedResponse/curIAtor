@@ -6,6 +6,8 @@ All notable changes to curIAtor are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.2.0] — 2026-07-02
+
 ### Added
 - Flask + React overlay shell (`web_shell.py`) served by default, with the legacy Dash shell still
   available via `--legacy-dash-shell`. Dash remains supported as `dash-inproc`; the overlay itself is
@@ -170,5 +172,6 @@ First public release — the full feedback→fix loop, end-to-end, Dash-first.
 - **Project foundation.** Apache-2.0 + DCO; pytest suite + CI (Python 3.10–3.12, ruff, DCO check);
   `curiator serve` one-process runner; `pip install curiator` packaging.
 
-[Unreleased]: https://github.com/LearnedResponse/curiator/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/LearnedResponse/curiator/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/LearnedResponse/curiator/releases/tag/v0.2.0
 [0.1.0]: https://github.com/LearnedResponse/curiator/releases/tag/v0.1.0

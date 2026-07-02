@@ -14,8 +14,8 @@
     "research software"
   ],
   "license": "Apache-2.0",
-  "publication_date": "2026-06-29",
+  "publication_date": "2026-07-02",
   "title": "curIAtor: an AI-maintained web app feedback overlay",
   "upload_type": "software",
-  "version": "0.1.0"
+  "version": "0.2.0"
 }

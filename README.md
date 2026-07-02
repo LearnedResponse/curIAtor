@@ -206,7 +206,7 @@ thin to maintain.
 
 ## Status
 
-**v0.2.0-dev — framework-neutral overlay.** The shell is moving to a Flask + React overlay with
+**v0.2.0 — framework-neutral overlay.** The shell is moving to a Flask + React overlay with
 same-origin app mounting, SQLite feedback, threaded replies, and live agent traces. `dash-inproc`
 stays as a first-class mount for Dash apps; `proxy` is the universal mount for React/Node, Rust,
 Flask, Streamlit, Gradio, static apps, or anything else that speaks HTTP.
