@@ -213,6 +213,6 @@ First public release — the full feedback→fix loop, end-to-end, Dash-first.
 - **Project foundation.** Apache-2.0 + DCO; pytest suite + CI (Python 3.10–3.12, ruff, DCO check);
   `curiator serve` one-process runner; `pip install curiator` packaging.
 
-[Unreleased]: https://github.com/LearnedResponse/curiator/compare/v0.2.0...HEAD
-[0.2.0]: https://github.com/LearnedResponse/curiator/releases/tag/v0.2.0
-[0.1.0]: https://github.com/LearnedResponse/curiator/releases/tag/v0.1.0
+[Unreleased]: https://github.com/LearnedResponse/curIAtor/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/LearnedResponse/curIAtor/releases/tag/v0.2.0
+[0.1.0]: https://github.com/LearnedResponse/curIAtor/releases/tag/v0.1.0

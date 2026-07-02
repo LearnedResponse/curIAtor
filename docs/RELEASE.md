@@ -137,8 +137,8 @@ the local checkout.
 Before pushing the tag:
 
 - Configure PyPI Trusted Publishing for this repository's GitHub Actions workflow:
-  `LearnedResponse/curiator`, workflow `release.yml`, environment `pypi`.
-- Enable the GitHub to Zenodo integration for `LearnedResponse/curiator`.
+  `LearnedResponse/curIAtor`, workflow `release.yml`, environment `pypi`.
+- Enable the GitHub to Zenodo integration for `LearnedResponse/curIAtor`.
 - Confirm repository secrets are not needed for PyPI publication; the workflow uses OIDC
   (`id-token: write`) through Trusted Publishing.
 

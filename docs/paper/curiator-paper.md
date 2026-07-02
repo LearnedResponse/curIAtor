@@ -156,7 +156,7 @@ release time when the manuscript is exported for Zenodo/JOSS review.
 # 6. Availability
 
 curIAtor is released under Apache-2.0. The source repository is
-`https://github.com/LearnedResponse/curiator`; the package name and release-candidate version are
+`https://github.com/LearnedResponse/curIAtor`; the package name and release-candidate version are
 `curiator==0.2.0` from `pyproject.toml`; the PyPI publication target is
 `https://pypi.org/project/curiator/`. Documentation is shipped in the same repository, with
 `README.md`, `docs/USING_CURIATOR.md`, `docs/RELEASE.md`, and `docs/paper/reproducibility.md` as the

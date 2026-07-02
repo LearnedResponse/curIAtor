@@ -14,7 +14,7 @@ def test_citation_cff_has_release_metadata():
     assert data["title"].startswith("curIAtor")
     assert data["authors"][0]["family-names"] == "Guetz"
     assert data["license"] == "Apache-2.0"
-    assert data["repository-code"] == "https://github.com/LearnedResponse/curiator"
+    assert data["repository-code"] == "https://github.com/LearnedResponse/curIAtor"
 
 
 def test_zenodo_json_has_archive_metadata():

@@ -15,7 +15,7 @@ The feedback loop your dashboards never had.
 
 `pip install curiator`
 
-[![CI](https://github.com/LearnedResponse/curiator/actions/workflows/ci.yml/badge.svg)](https://github.com/LearnedResponse/curiator/actions/workflows/ci.yml)
+[![CI](https://github.com/LearnedResponse/curIAtor/actions/workflows/ci.yml/badge.svg)](https://github.com/LearnedResponse/curIAtor/actions/workflows/ci.yml)
 &nbsp;[![License: Apache-2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 &nbsp;![Python](https://img.shields.io/badge/python-3.10%E2%80%933.12-blue)
 

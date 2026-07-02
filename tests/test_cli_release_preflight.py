@@ -303,9 +303,9 @@ def test_release_preflight_can_require_runner_public_remote(tmp_path, monkeypatc
     assert payload["checks"]["require_runner_public_remote"] is True
     assert payload["ok"] is False
     assert runner["public_remote"]["ok"] is False
-    assert runner["public_remote"]["expected"] == "github.com/LearnedResponse/curiator"
+    assert runner["public_remote"]["expected"] == "github.com/LearnedResponse/curIAtor"
 
-    _git(project, "remote", "add", "origin", "git@github.com:LearnedResponse/curiator.git")
+    _git(project, "remote", "add", "origin", "git@github.com:LearnedResponse/curIAtor.git")
 
     assert cli.main([
         "release-preflight",
@@ -318,7 +318,7 @@ def test_release_preflight_can_require_runner_public_remote(tmp_path, monkeypatc
     runner = payload["runner"]
     assert payload["ok"] is True
     assert runner["public_remote"]["ok"] is True
-    assert runner["public_remote"]["origin"] == ["git@github.com:LearnedResponse/curiator.git"]
+    assert runner["public_remote"]["origin"] == ["git@github.com:LearnedResponse/curIAtor.git"]
 
 
 def test_release_preflight_can_require_runner_published_head_and_tag(tmp_path, monkeypatch, capsys):

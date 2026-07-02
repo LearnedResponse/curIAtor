@@ -17,6 +17,7 @@ from .config import load_config
 _PUBLIC_RELEASE_GALLERIES = ("curiator-aviato", "curiator-ot", "curiator-geometry")
 _OPTIONAL_RELEASE_GALLERIES = ("curiator-finance", "curiator-phylogenetics")
 _PUBLIC_RELEASE_OWNER = "LearnedResponse"
+_PUBLIC_RUNNER_REPO = "curIAtor"
 _USER_ABS_PATH_RE = re.compile(
     r"(?<![\w.-])(?:/[A-Za-z0-9_.-]+)?/(?:home|Users)/[^\s'\"`]+|[A-Za-z]:[\\/]+Users[\\/]+[^\s'\"`]+"
 )
@@ -192,7 +193,7 @@ def _runner_release_result(
         return result
     result["head"] = _git_output(repo, "rev-parse", "--short", "HEAD")
     if require_public_remote:
-        result["public_remote"] = _public_remote_result(repo, repo.name, public_remote_owner)
+        result["public_remote"] = _public_remote_result(repo, _PUBLIC_RUNNER_REPO, public_remote_owner)
     if require_published_head:
         result["published_head"] = _published_head_result(repo, subject="repo")
     if release_tag:

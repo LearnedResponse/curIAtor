@@ -1,6 +1,6 @@
 # curIAtor — AI-maintained app gallery (OSS design sketch)
 
-> **Name LOCKED 2026-06-28: `curIAtor`** (curator + IA; also *creator + curator*) · repo `LearnedResponse/curiator` · `pip install curiator` · skill `curiator`. Extraction receipt: [`docs/EXTRACTION_SCOPE.md`](EXTRACTION_SCOPE.md).
+> **Name LOCKED 2026-06-28: `curIAtor`** (curator + IA; also *creator + curator*) · repo `LearnedResponse/curIAtor` · `pip install curiator` · skill `curiator`. Extraction receipt: [`docs/EXTRACTION_SCOPE.md`](EXTRACTION_SCOPE.md).
 
 > ⚠️ **Orthogonal to the math program.** This started as a design note for extracting the viewer
 > shell + feedback + loop into a standalone open-source project. It has

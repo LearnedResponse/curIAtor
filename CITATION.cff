@@ -7,8 +7,8 @@ authors:
 version: "0.2.0"
 date-released: "2026-07-02"
 license: "Apache-2.0"
-repository-code: "https://github.com/LearnedResponse/curiator"
-url: "https://github.com/LearnedResponse/curiator"
+repository-code: "https://github.com/LearnedResponse/curIAtor"
+url: "https://github.com/LearnedResponse/curIAtor"
 abstract: >-
   curIAtor is a self-hosted overlay for web app collections: users rate, comment on, and screenshot
   live apps in the browser, and a coding agent turns that contextual feedback into reviewed source

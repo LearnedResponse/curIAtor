@@ -899,7 +899,7 @@ Node, Flask, FastAPI, and Rust use lightweight server scaffolds behind same-orig
 React/Svelte/Vue use Vite; React/Svelte/Vue/Next can auto-detect npm/pnpm/yarn/bun. Next, Streamlit, and Gradio use prefix-preserving proxy mounts.
 You can still edit `gallery.yaml` manually for existing apps.
 
-See the consumer guide: https://github.com/LearnedResponse/curiator/blob/main/docs/USING_CURIATOR.md
+See the consumer guide: https://github.com/LearnedResponse/curIAtor/blob/main/docs/USING_CURIATOR.md
 """
 
 _SCAFFOLD_GITIGNORE = """\

@@ -58,8 +58,8 @@ def _write_release_fixture(root: Path, *, existing_release: bool = False) -> Non
         "- Something new.\n\n"
         "## [0.1.0] \u2014 2026-06-29\n\n"
         "First public release.\n\n"
-        "[Unreleased]: https://github.com/LearnedResponse/curiator/compare/v0.1.0...HEAD\n"
-        "[0.1.0]: https://github.com/LearnedResponse/curiator/releases/tag/v0.1.0\n"
+        "[Unreleased]: https://github.com/LearnedResponse/curIAtor/compare/v0.1.0...HEAD\n"
+        "[0.1.0]: https://github.com/LearnedResponse/curIAtor/releases/tag/v0.1.0\n"
     )
 
 
@@ -87,9 +87,9 @@ def test_prepare_release_updates_version_citation_and_changelog(tmp_path):
 
     changelog = (tmp_path / "CHANGELOG.md").read_text()
     assert "## [Unreleased]\n\n## [0.2.0] \u2014 2026-07-02\n\n### Added" in changelog
-    assert "[Unreleased]: https://github.com/LearnedResponse/curiator/compare/v0.2.0...HEAD" in changelog
-    assert "[0.2.0]: https://github.com/LearnedResponse/curiator/releases/tag/v0.2.0" in changelog
-    assert "[0.1.0]: https://github.com/LearnedResponse/curiator/releases/tag/v0.1.0" in changelog
+    assert "[Unreleased]: https://github.com/LearnedResponse/curIAtor/compare/v0.2.0...HEAD" in changelog
+    assert "[0.2.0]: https://github.com/LearnedResponse/curIAtor/releases/tag/v0.2.0" in changelog
+    assert "[0.1.0]: https://github.com/LearnedResponse/curIAtor/releases/tag/v0.1.0" in changelog
 
 
 def test_prepare_release_dry_run_validates_without_writing(tmp_path):

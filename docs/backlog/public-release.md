@@ -27,11 +27,10 @@ leave feedback → watch the fix land and the ⚙ reply arrive. Every item below
    gate, `make release-launch-check`, also passed: strict release docs were clean and required plus
    optional public-shaped galleries passed fresh-clone preflight `5/5`. Release metadata is cut locally
    for `0.2.0` / `2026-07-02` via `make release-prepare`. Public collection publication is now
-   verified for the required three and optional public-shaped collections by the published-head gate.
-   Remaining external setup is pushing the runner repo's release-candidate commits (`origin/main`
-   lagged the local release-candidate `HEAD` on the 2026-07-02 check; the new
-   `--require-runner-published-head` gate reports this directly), configuring the PyPI
-   Trusted Publisher, enabling GitHub-to-Zenodo, and pushing the matching `v0.2.0` tag.
+   verified for the required three and optional public-shaped collections by the published-head gate,
+   and the runner branch publication check is now part of the release preflight. Remaining external
+   setup is configuring the PyPI Trusted Publisher, enabling GitHub-to-Zenodo, and pushing the matching
+   `v0.2.0` tag.
 2. **The hero `docs/demo.gif`** (absorbs the old M3) — done locally. The README now has a committed
    Brave-rendered browser capture at this path, produced by `make demo-capture`: a temporary gallery
    loads the broken `aviato`, feedback plus captured view appears in the rail, the thread moves through
@@ -61,9 +60,10 @@ leave feedback → watch the fix land and the ⚙ reply arrive. Every item below
    release-preflight --fresh-clone` repeats the same gate from temporary clones of the committed
    gallery histories, and `--http-smoke` can add the proxy process + HTTP response check when the app
    dependencies are installed in the tree being checked. `--output <path>` writes the JSON payload as
-   a release/paper evidence artifact. The example repos are published at their intended release heads;
-   remaining release work is pushing/tagging the runner and proving a fresh clone on a machine that
-   isn't this one can run the loop with the released package.
+   a release/paper evidence artifact. The example repos are published at their intended release heads,
+   and `--require-runner-published-head` covers the runner branch; remaining release work is tagging
+   the runner and proving a fresh clone on a machine that isn't this one can run the loop with the
+   released package.
 4. **Publish the three example collections** as public sibling repos, each linked from the README's
    Examples section. README links are prepared for `LearnedResponse/curiator-aviato`,
    `LearnedResponse/curiator-ot`, and `LearnedResponse/curiator-geometry`; their release-candidate
