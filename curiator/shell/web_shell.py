@@ -354,6 +354,9 @@ def build_flask_app() -> Flask:
             if auth_error:
                 return jsonify({"error": auth_error}), code or 401
             body = request.get_json(silent=True) or {}
+            screenshot = body.get("screenshot")
+            if status == "held" and screenshot and body.get("screenshot_source") != "capture":
+                return jsonify({"error": "anonymous upload is disabled; use Capture view"}), 400
             reply_to = body.get("reply_to") or []
             if isinstance(reply_to, str):
                 reply_to = [reply_to]
@@ -361,7 +364,7 @@ def build_flask_app() -> Flask:
                 key,
                 body.get("stars"),
                 body.get("comment", ""),
-                body.get("screenshot"),
+                screenshot,
                 user=u,
                 reply_to=reply_to,
                 status=status,

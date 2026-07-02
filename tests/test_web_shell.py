@@ -82,6 +82,9 @@ def test_react_shell_has_burned_screenshot_annotations(web_client):
     css = web_client.get("/assets/react_shell.css").get_data(as_text=True)
     assert "function AnnotationEditor" in js
     assert "function composeShot" in js
+    assert "shotSource" in js
+    assert 'setShotSource("capture")' in js
+    assert 'setShotSource("upload")' in js
     assert "drawAnnotation(ctx, mark" in js
     assert "tool === \"redact\"" in js
     assert "anonymousHeld ? null" in js
@@ -185,6 +188,40 @@ auth:
 
     items = ledger.load(load_config())["sample"]
     assert [e["status"] for e in items if e.get("author") == "user"] == ["held", "held"]
+
+
+def test_react_shell_rejects_anonymous_upload_screenshots(collection, monkeypatch):
+    from curiator import auth, ledger
+    from curiator.config import load_config
+
+    auth.clear_anonymous_feedback("127.0.0.1")
+    (collection / "gallery.yaml").write_text((collection / "gallery.yaml").read_text() + """
+auth:
+  mode: local
+  allow_anonymous: true
+  users_file: .curiator-users.json
+""")
+    mod = _load_web_mod(monkeypatch)
+    client = mod.build_flask_app().test_client()
+
+    upload = client.post("/api/feedback/sample", json={
+        "comment": "uploaded image",
+        "screenshot": "data:image/png;base64,aGVsbG8=",
+        "screenshot_source": "upload",
+    })
+    assert upload.status_code == 400
+    assert upload.get_json()["error"] == "anonymous upload is disabled; use Capture view"
+    assert ledger.load(load_config()).get("sample", []) == []
+
+    capture = client.post("/api/feedback/sample", json={
+        "comment": "captured image",
+        "screenshot": "data:image/png;base64,aGVsbG8=",
+        "screenshot_source": "capture",
+    })
+    assert capture.status_code == 200
+    entry = capture.get_json()["entry"]
+    assert entry["status"] == "held"
+    assert entry["screenshot"]
 
 
 def test_react_shell_allow_anonymous_feedback_is_rate_limited(collection, monkeypatch):

@@ -318,6 +318,7 @@
     const [stars, setStars] = useState("");
     const [comment, setComment] = useState("");
     const [shot, setShot] = useState(null);
+    const [shotSource, setShotSource] = useState(null);
     const [annotations, setAnnotations] = useState([]);
     const [replyTo, setReplyTo] = useState(null);
     const [msg, setMsg] = useState("");
@@ -353,6 +354,7 @@
       setMsg(shot && annotations.length ? "Compositing annotation…" : "");
       composeShot(shot, annotations).then((screenshot) => {
         const payload = {stars: stars ? Number(stars) : null, comment, screenshot,
+          screenshot_source: screenshot ? shotSource : null,
           reply_to: target ? [target.id] : []};
         return api("/api/feedback/" + encodeURIComponent(selected), {method: "POST", body: JSON.stringify(payload)});
       })
@@ -361,6 +363,7 @@
           setStars("");
           setComment("");
           setShot(null);
+          setShotSource(null);
           setAnnotations([]);
           setReplyTo(null);
           setMsg(data.entry.status === "held"
@@ -380,6 +383,7 @@
       html2canvas(doc.body, {logging: false, backgroundColor: "#ffffff"})
         .then((canvas) => {
           setShot(canvas.toDataURL("image/png"));
+          setShotSource("capture");
           setAnnotations([]);
         })
         .catch((e) => setMsg("Capture failed: " + e));
@@ -390,6 +394,7 @@
       const r = new FileReader();
       r.onload = () => {
         setShot(r.result);
+        setShotSource("upload");
         setAnnotations([]);
       };
       r.readAsDataURL(file);

@@ -3,7 +3,7 @@
 > **Status:** scoped 2026-07-01; phase-2 moderation primitive landed (`held` status,
 > `auth.allow_anonymous` held intake for `local`/`oidc`, admin `/queue` shell view, and
 > `curiator queue list|approve|reject` CLI, per-IP anonymous submission limits, and watcher-enforced
-> account/global dispatch quotas). Sequences AFTER
+> account/global dispatch quotas, plus anonymous-upload suppression in the React shell). Sequences AFTER
 > [public-release](public-release.md): the
 > static example repos are the pitch; this is the live complement — **a hosted public collection where
 > anyone can leave feedback and watch the curator work**, without handing an autonomous agent to the
@@ -85,9 +85,11 @@ present.
    (`curiator user add <email> --groups trusted` is already an upsert). v2 can *derive* "established"
    from the ledger — account age + accepted-fix count, which `curiator stats` already computes the
    material for — rather than storing a reputation score anywhere.
-6. **Anonymous screenshots: capture only.** The 📷 capture of the live app is fine (it renders the
-   app's own DOM); the arbitrary-file **upload** button is disabled for anonymous users — uploads are
-   a separate abuse/injection channel and the pool reviewers shouldn't have to moderate images.
+6. **Anonymous screenshots: capture only** — landed for the React shell path. The 📷 capture of the
+   live app is fine (it renders the app's own DOM); the arbitrary-file **upload** button is disabled
+   for anonymous users, and the feedback API rejects anonymous-held screenshots that are not explicitly
+   marked as captures by the shell. Uploads are a separate abuse/injection channel and the pool
+   reviewers shouldn't have to moderate arbitrary images.
 
 ## Deployment shape — a pattern, not a rearchitecture
 

@@ -285,7 +285,9 @@ Logged-out feedback is always saved as `held`; it will not wake the agent until 
 from **Queue** or `curiator queue approve`. Logged-in users keep the normal `new` feedback path. The
 anonymous feedback limit is per client IP in the running shell process; set
 `anonymous_feedback_max: 0` only for a private, already-gated deployment where you intentionally want
-no anonymous submission throttle.
+no anonymous submission throttle. In the default React shell, logged-out anonymous users can capture
+the live app view, but the arbitrary image-upload fallback is hidden and anonymous-held uploads are
+rejected by the feedback API.
 
 For hosted self-serve accounts, cap agent dispatch at the watcher:
 
