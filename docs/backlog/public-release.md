@@ -37,7 +37,9 @@ leave feedback → watch the fix land and the ⚙ reply arrive. Every item below
    on all three public collections after removing the sibling-checkout `runner.path`; remaining release
    work is the fresh-clone check on a machine that isn't this one, and the loop must close there.
 4. **Publish the three example collections** as public sibling repos, each linked from the README's
-   Examples section. Sanitize machine paths and anything private, but **keep the feedback→fix
+   Examples section. README links are prepared for `LearnedResponse/curiator-aviato`,
+   `LearnedResponse/curiator-ot`, and `LearnedResponse/curiator-geometry`; publication and
+   fresh-clone verification remain. Sanitize machine paths and anything private, but **keep the feedback→fix
    commits** — the ledger and the git log *are* the demo; a laundered squeaky-clean history shows
    nothing. `curiator-geometry` now has seven public Dash/Plotly apps (including two algebraic-geometry
    explainers filtered from 4+ star Kwisatz taste signals) and passes `curiator doctor`, `curiator smoke`,

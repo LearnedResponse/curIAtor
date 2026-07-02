@@ -176,6 +176,18 @@ thin to maintain.
 
 ## Examples
 
+- **[curiator-aviato](https://github.com/LearnedResponse/curiator-aviato)** — the framework-neutral
+  proof collection: a shared Dash app directory, a React/Node SSR app with multiple proxy endpoints,
+  a Rust HTTP server, and an orange-tree segmentation Dash app. This is the app-directory/proxy proof
+  for using curIAtor as a general overlay over mixed local web apps.
+- **[curiator-ot](https://github.com/LearnedResponse/curiator-ot)** — the OT/HMI flagship: a
+  deterministic tank simulator writes to a local SQLite historian, and seeded operator feedback moves
+  a rough rainbow Dash HMI toward a High-Performance-HMI / ISA-101 style operating display. The git log
+  is the maintenance story.
+- **[curiator-geometry](https://github.com/LearnedResponse/curiator-geometry)** — the friction-free
+  public math quickstart: Dash + Plotly + numpy explainers for polytopes, Voronoi/Delaunay, domain
+  coloring, curvature, convex hull, simple normal crossings, and a conifold slice. Public-knowledge
+  toy models only; no private research content.
 - **[curiator-finance](https://github.com/LearnedResponse/curiator-finance)** — a *self-building* demo
   collection: deliberately-rough finance apps (portfolio, watchlist, correlation, returns) on
   reproducible committed data + a **seeded review queue** authored by an analyst. Run

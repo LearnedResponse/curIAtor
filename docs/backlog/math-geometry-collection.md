@@ -62,8 +62,8 @@ feedback ledger has 12 apps with at least one 4+ star rating:
    at a whiteboard ("the ±√μ branches need distinct line styles — solid stable, dashed unstable"), not
    a QA checklist.
 4. Run the loop, keep the commits: the git log = the collection polishing itself.
-5. README + link from the main repo's Examples; the before/after screenshots feed the
-   [paper](zenodo-paper.md)'s case-study section.
+5. README + link from the main repo's Examples — README link prepared; the before/after screenshots
+   feed the [paper](zenodo-paper.md)'s case-study section.
 
 ## Current checks
 
