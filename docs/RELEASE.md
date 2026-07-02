@@ -121,6 +121,14 @@ After pushing the collection repositories, prove the remote contains each releas
 curiator release-preflight --fresh-clone --strict --require-public-remotes --require-published-head
 ```
 
+Before pushing the runner release tag, prove this checkout's public `origin` is correct and contains
+the release-candidate runner commit:
+
+```bash
+curiator release-preflight --fresh-clone --strict --require-public-remotes --require-published-head \
+  --require-runner-public-remote --require-runner-published-head
+```
+
 Then verify from a separate fresh clone that the quickstart works with the released package, not only
 the local checkout.
 
@@ -144,6 +152,13 @@ lint, tests, release-doc checks, package build, and `twine check` before publish
 ```bash
 git tag v0.2.0
 git push origin v0.2.0
+```
+
+After the tag is pushed, the final publication proof should also require the tag:
+
+```bash
+curiator release-preflight --fresh-clone --strict --require-public-remotes --require-published-head \
+  --require-runner-public-remote --require-runner-published-head --require-release-tag v0.2.0
 ```
 
 If those gates pass, the workflow attaches the wheel and sdist to the GitHub release and publishes to

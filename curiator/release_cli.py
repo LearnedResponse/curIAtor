@@ -83,7 +83,7 @@ def _public_remote_result(repo: Path, name: str, owner: str) -> dict:
     }
 
 
-def _published_head_result(repo: Path) -> dict:
+def _published_head_result(repo: Path, subject: str = "gallery") -> dict:
     head = _git_output(repo, "rev-parse", "HEAD") or ""
     short = _git_output(repo, "rev-parse", "--short", "HEAD") or head[:7]
     r = subprocess.run(["git", "ls-remote", "origin"], cwd=repo, capture_output=True, text=True)
@@ -116,9 +116,94 @@ def _published_head_result(repo: Path) -> dict:
         "message": (
             f"origin contains HEAD {short} at {', '.join(matches)}"
             if ok else
-            f"origin is readable but does not contain HEAD {short}; push this gallery before release"
+            f"origin is readable but does not contain HEAD {short}; push this {subject} before release"
         ),
     }
+
+
+def _release_tag_result(repo: Path, tag: str) -> dict:
+    clean_tag = str(tag or "").strip()
+    if not clean_tag:
+        return {
+            "ok": False,
+            "tag": clean_tag,
+            "oid": None,
+            "matching_refs": [],
+            "message": "release tag is empty",
+        }
+    tag_ref = f"refs/tags/{clean_tag}"
+    tag_oid = _git_output(repo, "rev-parse", tag_ref)
+    if not tag_oid:
+        return {
+            "ok": False,
+            "tag": clean_tag,
+            "oid": None,
+            "matching_refs": [],
+            "message": f"local release tag {clean_tag} is missing",
+        }
+    r = subprocess.run(["git", "ls-remote", "origin", tag_ref], cwd=repo, capture_output=True, text=True)
+    if r.returncode != 0:
+        detail = " ".join((r.stderr or r.stdout or f"git ls-remote exited {r.returncode}").split())
+        return {
+            "ok": False,
+            "tag": clean_tag,
+            "oid": tag_oid,
+            "matching_refs": [],
+            "message": f"origin is not readable: {detail}",
+        }
+    matches = []
+    for line in r.stdout.splitlines():
+        parts = line.split()
+        if len(parts) >= 2 and parts[0] == tag_oid:
+            matches.append(parts[1])
+    ok = bool(matches)
+    return {
+        "ok": ok,
+        "tag": clean_tag,
+        "oid": tag_oid,
+        "matching_refs": matches,
+        "message": (
+            f"origin contains tag {clean_tag} at {', '.join(matches)}"
+            if ok else
+            f"origin is readable but does not contain local tag {clean_tag}; push this tag before release"
+        ),
+    }
+
+
+def _runner_release_result(
+    repo: Path,
+    *,
+    require_public_remote: bool,
+    public_remote_owner: str,
+    require_published_head: bool,
+    release_tag: str | None,
+) -> dict:
+    result = {
+        "name": repo.name,
+        "path": str(repo),
+        "ok": False,
+        "head": None,
+        "public_remote": None,
+        "published_head": None,
+        "release_tag": None,
+    }
+    if _git_output(repo, "rev-parse", "--is-inside-work-tree") != "true":
+        result["error"] = f"runner repo is not a git repository: {repo}"
+        return result
+    result["head"] = _git_output(repo, "rev-parse", "--short", "HEAD")
+    if require_public_remote:
+        result["public_remote"] = _public_remote_result(repo, repo.name, public_remote_owner)
+    if require_published_head:
+        result["published_head"] = _published_head_result(repo, subject="repo")
+    if release_tag:
+        result["release_tag"] = _release_tag_result(repo, release_tag)
+    result["ok"] = (
+        not result.get("error")
+        and (not require_public_remote or (result.get("public_remote") or {}).get("ok"))
+        and (not require_published_head or (result.get("published_head") or {}).get("ok"))
+        and (not release_tag or (result.get("release_tag") or {}).get("ok"))
+    )
+    return result
 
 
 def _load_config_for_gallery(gallery: Path) -> dict:
@@ -434,9 +519,21 @@ def _release_preflight_payload_for_root(args) -> dict:
         )
         for name in names
     ]
+    runner = _runner_release_result(
+        _project_root(),
+        require_public_remote=args.require_runner_public_remote,
+        public_remote_owner=args.public_remote_owner,
+        require_published_head=args.require_runner_published_head,
+        release_tag=args.require_release_tag,
+    ) if (
+        args.require_runner_public_remote
+        or args.require_runner_published_head
+        or args.require_release_tag
+    ) else None
     return {
-        "ok": all(g["ok"] for g in galleries),
+        "ok": all(g["ok"] for g in galleries) and (runner is None or runner["ok"]),
         "root": str(root),
+        "runner": runner,
         "galleries": galleries,
         "checks": {
             "smoke": not args.no_smoke,
@@ -448,6 +545,9 @@ def _release_preflight_payload_for_root(args) -> dict:
             "require_public_remotes": bool(args.require_public_remotes),
             "public_remote_owner": args.public_remote_owner,
             "require_published_head": bool(args.require_published_head),
+            "require_runner_public_remote": bool(args.require_runner_public_remote),
+            "require_runner_published_head": bool(args.require_runner_published_head),
+            "require_release_tag": args.require_release_tag,
         },
     }
 
@@ -505,10 +605,22 @@ def _release_preflight_payload_for_clones(args, clone_base: Path) -> dict:
             "cloned_from": str(source_repo),
         })
         galleries.append(result)
+    runner = _runner_release_result(
+        _project_root(),
+        require_public_remote=args.require_runner_public_remote,
+        public_remote_owner=args.public_remote_owner,
+        require_published_head=args.require_runner_published_head,
+        release_tag=args.require_release_tag,
+    ) if (
+        args.require_runner_public_remote
+        or args.require_runner_published_head
+        or args.require_release_tag
+    ) else None
     return {
-        "ok": all(g["ok"] for g in galleries),
+        "ok": all(g["ok"] for g in galleries) and (runner is None or runner["ok"]),
         "root": str(root),
         "clone_root": str(clone_base),
+        "runner": runner,
         "galleries": galleries,
         "checks": {
             "smoke": not args.no_smoke,
@@ -521,6 +633,9 @@ def _release_preflight_payload_for_clones(args, clone_base: Path) -> dict:
             "require_public_remotes": bool(args.require_public_remotes),
             "public_remote_owner": args.public_remote_owner,
             "require_published_head": bool(args.require_published_head),
+            "require_runner_public_remote": bool(args.require_runner_public_remote),
+            "require_runner_published_head": bool(args.require_runner_published_head),
+            "require_release_tag": args.require_release_tag,
         },
     }
 
@@ -615,6 +730,38 @@ def cmd_release_preflight(args) -> int:
         for r in smoke_results:
             if not r["ok"]:
                 print(f"    smoke FAIL {r['app']}: {r['message']}")
+    runner = payload.get("runner")
+    if runner:
+        remote = runner.get("public_remote") or {}
+        published = runner.get("published_head") or {}
+        tag = runner.get("release_tag") or {}
+        print(
+            f"  {'OK' if runner['ok'] else 'FAIL'} runner {runner['name']} {runner.get('head') or '-'}"
+            + (f" remote={'OK' if remote.get('ok') else 'FAIL'}"
+               if payload.get("checks", {}).get("require_runner_public_remote") else "")
+            + (f" published={'OK' if published.get('ok') else 'FAIL'}"
+               if payload.get("checks", {}).get("require_runner_published_head") else "")
+            + (f" tag={'OK' if tag.get('ok') else 'FAIL'}"
+               if payload.get("checks", {}).get("require_release_tag") else "")
+        )
+        if runner.get("error"):
+            print(f"    error: {runner['error']}")
+        if payload.get("checks", {}).get("require_runner_public_remote") and not remote.get("ok"):
+            print(f"    remote: {remote.get('message')}")
+            for url in remote.get("origin") or []:
+                print(f"    remote origin {url}")
+        if payload.get("checks", {}).get("require_runner_published_head"):
+            if published.get("ok"):
+                refs = ", ".join(published.get("matching_refs") or [])
+                print(f"    published: HEAD {published.get('short')} found at {refs}")
+            else:
+                print(f"    published: {published.get('message')}")
+        if payload.get("checks", {}).get("require_release_tag"):
+            if tag.get("ok"):
+                refs = ", ".join(tag.get("matching_refs") or [])
+                print(f"    tag: {tag.get('tag')} found at {refs}")
+            else:
+                print(f"    tag: {tag.get('message')}")
     return 0 if payload["ok"] else 1
 
 

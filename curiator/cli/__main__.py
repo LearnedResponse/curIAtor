@@ -292,6 +292,12 @@ def main(argv=None) -> int:
                     help="also require each gallery's origin remote to match its expected public GitHub repo")
     rp.add_argument("--require-published-head", action="store_true",
                     help="also require each gallery's exact HEAD commit to be present on origin")
+    rp.add_argument("--require-runner-public-remote", action="store_true",
+                    help="also require this runner checkout's origin to match its expected public GitHub repo")
+    rp.add_argument("--require-runner-published-head", action="store_true",
+                    help="also require this runner checkout's exact HEAD commit to be present on origin")
+    rp.add_argument("--require-release-tag",
+                    help="also require the named local release tag to be present on this runner checkout's origin")
     rp.add_argument("--public-remote-owner", default=_PUBLIC_RELEASE_OWNER,
                     help=f"GitHub owner/org for --require-public-remotes (default: {_PUBLIC_RELEASE_OWNER})")
     rp.add_argument("--output", help="write the JSON preflight payload to a file")

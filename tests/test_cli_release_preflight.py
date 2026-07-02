@@ -37,6 +37,18 @@ def _make_gallery(tmp_path: Path, name: str = "curiator-demo") -> Path:
     return repo
 
 
+def _make_runner_repo(tmp_path: Path, name: str = "curiator") -> Path:
+    repo = tmp_path / name
+    repo.mkdir()
+    (repo / "README.md").write_text("# runner\n")
+    _git(repo, "init", "-q")
+    _git(repo, "config", "user.name", "Test Curator")
+    _git(repo, "config", "user.email", "curator@test.local")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-q", "-m", "init runner")
+    return repo
+
+
 def test_release_preflight_checks_nested_gallery(tmp_path, monkeypatch, capsys):
     from curiator import cli
 
@@ -269,6 +281,114 @@ def test_release_preflight_published_head_gate_checks_fresh_clone_source(tmp_pat
     assert gallery["mode"] == "fresh-clone"
     assert gallery["published_head"]["ok"] is True
     assert "refs/heads/main" in gallery["published_head"]["matching_refs"]
+
+
+def test_release_preflight_can_require_runner_public_remote(tmp_path, monkeypatch, capsys):
+    from curiator import cli
+
+    project = _make_runner_repo(tmp_path)
+    _make_gallery(project)
+    monkeypatch.chdir(project)
+    monkeypatch.delenv("CURIATOR_GALLERY", raising=False)
+
+    assert cli.main([
+        "release-preflight",
+        "--gallery", "curiator-demo",
+        "--no-smoke",
+        "--require-runner-public-remote",
+        "--json",
+    ]) == 1
+    payload = json.loads(capsys.readouterr().out)
+    runner = payload["runner"]
+    assert payload["checks"]["require_runner_public_remote"] is True
+    assert payload["ok"] is False
+    assert runner["public_remote"]["ok"] is False
+    assert runner["public_remote"]["expected"] == "github.com/LearnedResponse/curiator"
+
+    _git(project, "remote", "add", "origin", "git@github.com:LearnedResponse/curiator.git")
+
+    assert cli.main([
+        "release-preflight",
+        "--gallery", "curiator-demo",
+        "--no-smoke",
+        "--require-runner-public-remote",
+        "--json",
+    ]) == 0
+    payload = json.loads(capsys.readouterr().out)
+    runner = payload["runner"]
+    assert payload["ok"] is True
+    assert runner["public_remote"]["ok"] is True
+    assert runner["public_remote"]["origin"] == ["git@github.com:LearnedResponse/curiator.git"]
+
+
+def test_release_preflight_can_require_runner_published_head_and_tag(tmp_path, monkeypatch, capsys):
+    from curiator import cli
+
+    project = _make_runner_repo(tmp_path)
+    _make_gallery(project)
+    remote = tmp_path / "runner-remote.git"
+    _git(tmp_path, "init", "--bare", "-q", str(remote))
+    _git(project, "remote", "add", "origin", str(remote))
+    monkeypatch.chdir(project)
+    monkeypatch.delenv("CURIATOR_GALLERY", raising=False)
+
+    assert cli.main([
+        "release-preflight",
+        "--gallery", "curiator-demo",
+        "--no-smoke",
+        "--require-runner-published-head",
+        "--json",
+    ]) == 1
+    payload = json.loads(capsys.readouterr().out)
+    runner = payload["runner"]
+    assert payload["checks"]["require_runner_published_head"] is True
+    assert payload["ok"] is False
+    assert runner["published_head"]["ok"] is False
+    assert "does not contain HEAD" in runner["published_head"]["message"]
+
+    _git(project, "push", "-q", "origin", "HEAD:refs/heads/main")
+
+    assert cli.main([
+        "release-preflight",
+        "--gallery", "curiator-demo",
+        "--no-smoke",
+        "--require-runner-published-head",
+        "--json",
+    ]) == 0
+    payload = json.loads(capsys.readouterr().out)
+    runner = payload["runner"]
+    assert runner["published_head"]["ok"] is True
+    assert "refs/heads/main" in runner["published_head"]["matching_refs"]
+
+    assert cli.main([
+        "release-preflight",
+        "--gallery", "curiator-demo",
+        "--no-smoke",
+        "--require-release-tag", "v0.2.0",
+        "--json",
+    ]) == 1
+    payload = json.loads(capsys.readouterr().out)
+    runner = payload["runner"]
+    assert payload["checks"]["require_release_tag"] == "v0.2.0"
+    assert runner["release_tag"]["ok"] is False
+    assert "local release tag v0.2.0 is missing" in runner["release_tag"]["message"]
+
+    _git(project, "tag", "v0.2.0")
+    _git(project, "push", "-q", "origin", "refs/tags/v0.2.0")
+
+    assert cli.main([
+        "release-preflight",
+        "--gallery", "curiator-demo",
+        "--no-smoke",
+        "--require-runner-published-head",
+        "--require-release-tag", "v0.2.0",
+        "--json",
+    ]) == 0
+    payload = json.loads(capsys.readouterr().out)
+    runner = payload["runner"]
+    assert runner["published_head"]["ok"] is True
+    assert runner["release_tag"]["ok"] is True
+    assert runner["release_tag"]["matching_refs"] == ["refs/tags/v0.2.0"]
 
 
 def test_release_preflight_fresh_clone_rechecks_published_head_after_clone(tmp_path, monkeypatch, capsys):

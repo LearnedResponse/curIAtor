@@ -21,15 +21,16 @@ leave feedback → watch the fix land and the ⚙ reply arrive. Every item below
    a tag-vs-`pyproject.toml` version guard; `make release-check` now runs the local gate (lint, tests,
    strict public-gallery fresh-clone preflight, `docs/demo.gif` presence validation, package build, and `twine check`). The
    human release checklist now lives in [`docs/RELEASE.md`](../RELEASE.md). Local gate evidence from
-   July 2, 2026: `make release-check` passed with 282 tests, public-gallery
+   July 2, 2026: `make release-check` passed with 284 tests, public-gallery
    fresh-clone preflight `3/3` with zero publish-artifact hits, validated the browser-captured
    `docs/demo.gif`, built sdist/wheel, and `twine check` passed both artifacts. The final local launch
    gate, `make release-launch-check`, also passed: strict release docs were clean and required plus
    optional public-shaped galleries passed fresh-clone preflight `5/5`. Release metadata is cut locally
    for `0.2.0` / `2026-07-02` via `make release-prepare`. Public collection publication is now
    verified for the required three and optional public-shaped collections by the published-head gate.
-   Remaining external setup is pushing the runner repo's release-candidate commits (`origin/main` was
-   still `1d18093` while local `HEAD` was `6cfcd99` on the 2026-07-02 check), configuring the PyPI
+   Remaining external setup is pushing the runner repo's release-candidate commits (`origin/main`
+   lagged the local release-candidate `HEAD` on the 2026-07-02 check; the new
+   `--require-runner-published-head` gate reports this directly), configuring the PyPI
    Trusted Publisher, enabling GitHub-to-Zenodo, and pushing the matching `v0.2.0` tag.
 2. **The hero `docs/demo.gif`** (absorbs the old M3) — done locally. The README now has a committed
    Brave-rendered browser capture at this path, produced by `make demo-capture`: a temporary gallery
@@ -117,7 +118,9 @@ offline; it proves the local repos are wired to the intended public destinations
 push the GitHub repositories. After the repositories are pushed,
 `curiator release-preflight --fresh-clone --strict --require-public-remotes --require-published-head`
 proves each required gallery's exact release-candidate HEAD is present on its origin; this now passes
-for the required release set.
+for the required release set. Add `--require-runner-public-remote --require-runner-published-head`
+before tagging to prove the runner checkout is also published, and add `--require-release-tag v0.2.0`
+after the tag push to prove the release tag is on origin.
 
 ## Guardrails
 
