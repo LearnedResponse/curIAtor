@@ -563,33 +563,67 @@ def _smoke_specs(cfg: dict, app: str | None = None) -> list[dict]:
     return specs
 
 
-def _smoke_results(cfg: dict, app: str | None = None) -> list[dict]:
-    from . import gitmem
-
-    results = []
+def _smoke_work_specs(cfg: dict, app: str | None = None) -> list[dict]:
+    specs = []
     seen: set[str] = set()
     for spec in _smoke_specs(cfg, app):
         name = str(spec.get("name") or spec.get("app_name") or spec.get("module"))
         if not name or name in seen:
             continue
         seen.add(name)
+        specs.append(spec)
+    return specs
+
+
+def _smoke_result_metadata(cfg: dict, spec: dict) -> dict:
+    return {
+        "app": str(spec.get("name") or spec.get("app_name") or spec.get("module")),
+        "smoke": spec.get("smoke"),
+        "smoke_timeout": spec.get("smoke_timeout") or ((cfg.get("smoke") or {}).get("timeout")
+                                                       if isinstance(cfg.get("smoke"), dict) else None),
+        "root": _repo_path(cfg, spec.get("root")),
+        "source": _repo_path(cfg, spec.get("source")),
+    }
+
+
+def _smoke_result_for_spec(cfg: dict, spec: dict) -> dict:
+    from . import gitmem
+
+    result = _smoke_result_metadata(cfg, spec)
+    try:
+        name = result["app"]
         ok, message = gitmem.smoke_app(cfg, name, spec.get("source"))
-        results.append({
-            "app": name,
-            "ok": ok,
-            "message": message,
-            "smoke": spec.get("smoke"),
-            "smoke_timeout": spec.get("smoke_timeout") or ((cfg.get("smoke") or {}).get("timeout")
-                                                           if isinstance(cfg.get("smoke"), dict) else None),
-            "root": _repo_path(cfg, spec.get("root")),
-            "source": _repo_path(cfg, spec.get("source")),
-        })
-    return results
+    except Exception as exc:  # noqa: BLE001
+        ok, message = False, f"{type(exc).__name__}: {exc}"
+    result.update({"ok": ok, "message": message})
+    return result
+
+
+def _smoke_results(cfg: dict, app: str | None = None, jobs: int = 1) -> list[dict]:
+    specs = _smoke_work_specs(cfg, app)
+    if jobs <= 1 or len(specs) <= 1:
+        return [_smoke_result_for_spec(cfg, spec) for spec in specs]
+
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+
+    results: list[dict | None] = [None] * len(specs)
+    with ThreadPoolExecutor(max_workers=min(jobs, len(specs))) as pool:
+        futures = {
+            pool.submit(_smoke_result_for_spec, cfg, spec): index
+            for index, spec in enumerate(specs)
+        }
+        for future in as_completed(futures):
+            index = futures[future]
+            results[index] = future.result()
+    return [result for result in results if result is not None]
 
 
 def cmd_smoke(args) -> int:
     cfg = load_config()
-    results = _smoke_results(cfg, args.app)
+    if args.jobs < 1:
+        print("curiator: smoke --jobs must be >= 1")
+        return 2
+    results = _smoke_results(cfg, args.app, jobs=args.jobs)
     ok = all(r["ok"] for r in results)
     if args.json:
         print(json.dumps({"ok": ok, "results": results}, indent=2))
@@ -1679,6 +1713,7 @@ def main(argv=None) -> int:
     dr.set_defaults(func=cmd_doctor)
     sm = sub.add_parser("smoke", help="run configured app smoke commands for this collection")
     sm.add_argument("--app", help="limit smoke checks to one app")
+    sm.add_argument("--jobs", type=int, default=1, help="run up to N smoke checks concurrently (default: 1)")
     sm.add_argument("--json", action="store_true", help="emit machine-readable results")
     sm.set_defaults(func=cmd_smoke)
     rp = sub.add_parser("release-preflight", help="run release checks across nested public galleries")

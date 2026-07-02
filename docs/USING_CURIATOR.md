@@ -168,6 +168,7 @@ curiator doctor                # errors on absolute/missing paths; warns on weak
 curiator doctor --json
 curiator smoke                 # runs each app's configured smoke command/fallback import
 curiator smoke --app revenue --json
+curiator smoke --jobs 4 --json # run independent app checks concurrently, preserving report order
 curiator release-preflight     # from a runner checkout: checks nested public galleries
 curiator release-preflight --fresh-clone
 ```

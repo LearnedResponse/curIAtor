@@ -41,8 +41,8 @@ All notable changes to curIAtor are documented here. The format follows
   that do not mention their configured port, missing command executables, and common missing dependency
   manifests such as `package.json`, `requirements.txt`, and `Cargo.toml`.
 - `curiator smoke` runs each app's configured smoke command or fallback import check across a collection,
-  with `--app`, `--json`, and configurable `smoke_timeout` / `smoke.timeout` limits for release
-  preflight automation.
+  with `--app`, `--jobs`, `--json`, and configurable `smoke_timeout` / `smoke.timeout` limits for
+  release preflight automation.
 - `curiator release-preflight` runs doctor/smoke/path checks across the nested public release
   collections, and `--fresh-clone` repeats those checks from temporary clones of the committed gallery
   histories.
@@ -55,8 +55,8 @@ All notable changes to curIAtor are documented here. The format follows
 - `CITATION.cff` provides machine-readable software citation metadata for GitHub and Zenodo.
 - GitHub issue templates cover runner bugs, feature requests, and example-collection quickstart
   failures.
-- Repository labels and `docs/GOOD_FIRST_ISSUES.md` seed a publish-time set of small contribution
-  issues with scopes and done criteria.
+- Repository labels and `docs/GOOD_FIRST_ISSUES.md` track publish-time good-first issue seeds; the
+  initial release-hardening seeds have been implemented.
 - The release workflow now publishes tagged builds through PyPI trusted publishing and blocks tags
   whose `vX.Y.Z` does not match `pyproject.toml`.
 - CI now builds the sdist/wheel and runs `twine check`, so package metadata regressions are caught

@@ -67,8 +67,8 @@ leave feedback → watch the fix land and the ⚙ reply arrive. Every item below
    hosted examples need auth/propose-only or a human-reviewed queue. Before release, do one final reread
    against the tag's adapter defaults.
 6. **Repo hygiene** — issue templates are present (bug, feature, example-collection quickstart), labels
-   are tracked in `.github/labels.yml`, and `docs/GOOD_FIRST_ISSUES.md` has ready-to-file issue seeds.
-   Remaining after publication: README badges for PyPI/DOI and creating/pinning the GitHub issues.
+   are tracked in `.github/labels.yml`, and the first good-first seed queue has been drained.
+   Remaining after publication: README badges for PyPI/DOI and creating/pinning any new GitHub issues.
    `CONTRIBUTING.md` and the DCO check already exist.
 7. **Zenodo wiring** — `CITATION.cff` is present with current release metadata; remaining release-time
    work is enabling the GitHub↔Zenodo integration so every release auto-archives with a DOI, then

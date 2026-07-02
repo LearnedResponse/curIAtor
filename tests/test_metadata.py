@@ -35,9 +35,8 @@ def test_labels_cover_issue_templates_and_good_first_issues():
     assert {"bug", "enhancement", "needs-triage", "example-collection", "good first issue"} <= names
 
     issue_seed = Path("docs/GOOD_FIRST_ISSUES.md").read_text()
-    assert "## Add Parallel Smoke Execution" in issue_seed
-    assert "Labels: `good first issue`" in issue_seed
-    assert "Done when:" in issue_seed
+    assert "No ready-to-file good-first issue seeds remain right now" in issue_seed
+    assert "add new entries here when a scoped starter issue is identified" in issue_seed
 
 
 def test_release_workflow_publishes_with_version_guard():
