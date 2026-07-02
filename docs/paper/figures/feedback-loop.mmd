@@ -1,0 +1,26 @@
+flowchart LR
+  reviewer["Reviewer<br/>gallery shell"]
+  app["Live app<br/>iframe or proxy mount"]
+  feedback["Feedback capture<br/>stars, comment, screenshot, annotations"]
+  ledger[("SQLite feedback ledger")]
+  task["Task bundle<br/>thread, source scope, screenshot, smoke command"]
+  adapter["Agent adapter<br/>Codex, Claude, or command"]
+  source["App source edit<br/>collection app directory"]
+  smoke["Smoke test<br/>build or health check"]
+  reload["Reload app<br/>same-origin shell"]
+  reply["Reply trace<br/>threaded status update"]
+  git[("Git as memory<br/>one curator commit")]
+
+  reviewer --> app
+  app --> feedback
+  feedback --> ledger
+  ledger --> task
+  task --> adapter
+  adapter --> source
+  source --> smoke
+  smoke --> reload
+  reload --> app
+  smoke --> reply
+  reply --> ledger
+  smoke --> git
+  git --> task

@@ -44,6 +44,8 @@ The autonomy setting determines whether the agent applies small fixes directly o
 
 When git-as-memory is enabled, each accepted agent run becomes one commit with provenance trailers. The
 commit, ledger entry, and reply thread remain linked, making the history inspectable and revertible.
+The end-to-end loop is summarized in [Figure 1](figures/feedback-loop.mmd), which is kept as a
+repo-native Mermaid source until the release PDF export.
 
 # 3. Case Studies
 

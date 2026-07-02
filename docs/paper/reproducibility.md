@@ -31,6 +31,11 @@ Use `--csv` when building figures or spreadsheets:
 CURIATOR_GALLERY=galleries/curiator-geometry/gallery.yaml curiator stats --csv
 ```
 
+## Figures
+
+`figures/feedback-loop.mmd` is the source for the feedback-loop diagram. Regenerate or embed it from
+the Mermaid source at release time; do not hand-redraw a divergent copy.
+
 ## Local pre-publication snapshot
 
 The current local nested galleries are useful for draft shaping, but they are not publication evidence

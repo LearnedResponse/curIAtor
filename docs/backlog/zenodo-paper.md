@@ -57,7 +57,8 @@ the durable record of that conversation.
    command/output snapshot.
 3. Draft in `docs/paper/` (markdown → pandoc PDF) — scaffolded with `curiator-paper.md` and
    `reproducibility.md`, including release-time `curiator stats` commands and TODO markers instead of
-   invented numbers. Figures still needed: the shell with the feedback panel, one loop diagram, a
+   invented numbers. The loop diagram source has landed at
+   `docs/paper/figures/feedback-loop.mmd`. Figures still needed: the shell with the feedback panel, a
    rainbow→ISA-101 before/after, a git-log excerpt with provenance trailers.
 4. Deposit on Zenodo; DOI badge in the README; decide on the JOSS submission after.
 
