@@ -205,6 +205,40 @@ def _discover_galleries(root: Path) -> list[Path]:
     )
 
 
+def _sibling_gallery_candidates(root: Path) -> list[dict]:
+    """Find legacy sibling curiator-* collection paths next to the runner checkout.
+
+    The canonical local workspace is now ./galleries/curiator-*/. Sibling aliases are easy for agents
+    to follow back outside the writable runner root, so surface them in `curiator galleries`.
+    """
+    project = _project_root()
+    parent = project.parent
+    if not parent.exists():
+        return []
+    rows: list[dict] = []
+    for p in sorted(parent.iterdir(), key=lambda x: x.name):
+        if not p.name.startswith("curiator-"):
+            continue
+        resolved = p.resolve()
+        if resolved == project:
+            continue
+        if not (resolved / "gallery.yaml").exists():
+            continue
+        nested = (root / p.name).resolve()
+        relation = "alias-to-nested" if nested.exists() and resolved == nested else "sibling-checkout"
+        row = {
+            "name": p.name,
+            "path": str(p),
+            "resolved": str(resolved),
+            "is_symlink": p.is_symlink(),
+            "relation": relation,
+        }
+        if relation == "sibling-checkout":
+            row["adopt_command"] = f"curiator galleries adopt {_rel_cmd_path(str(p))}"
+        rows.append(row)
+    return rows
+
+
 def _is_relative_to(path: Path, parent: Path) -> bool:
     try:
         path.relative_to(parent)
@@ -237,7 +271,13 @@ def _rel_cmd_path(path: str) -> str:
 def cmd_galleries(args) -> int:
     root = _galleries_root(args.root)
     galleries = [_gallery_summary(repo) for repo in _discover_galleries(root)]
-    payload = {"root": str(root), "count": len(galleries), "galleries": galleries}
+    siblings = _sibling_gallery_candidates(root)
+    payload = {
+        "root": str(root),
+        "count": len(galleries),
+        "galleries": galleries,
+        "sibling_galleries": siblings,
+    }
     if args.json:
         print(json.dumps(payload, indent=2))
         return 0
@@ -245,17 +285,28 @@ def cmd_galleries(args) -> int:
     print(f"curiator: {len(galleries)} nested galleries under {root}")
     if not galleries:
         print("  none found; create one with `curiator init galleries/curiator-my-topic --git`")
-        return 0
-    for g in galleries:
-        git = "not-git"
-        if g["git"]:
-            branch = g.get("branch") or "detached"
-            head = g.get("head") or "no-head"
-            git = f"{branch}@{head}"
-        dirty = f"{len(g['dirty'])} dirty" if g["dirty"] else "clean"
-        gallery = _rel_cmd_path(g["gallery"])
-        print(f"  {g['name']}: {git}, {dirty}")
-        print(f"    use: CURIATOR_GALLERY={shlex.quote(gallery)} curiator status")
+    else:
+        for g in galleries:
+            git = "not-git"
+            if g["git"]:
+                branch = g.get("branch") or "detached"
+                head = g.get("head") or "no-head"
+                git = f"{branch}@{head}"
+            dirty = f"{len(g['dirty'])} dirty" if g["dirty"] else "clean"
+            gallery = _rel_cmd_path(g["gallery"])
+            print(f"  {g['name']}: {git}, {dirty}")
+            print(f"    use: CURIATOR_GALLERY={shlex.quote(gallery)} curiator status")
+    if siblings:
+        print("")
+        print("curiator: sibling curiator-* gallery paths found next to this checkout")
+        print("  canonical local workspace: ./galleries/curiator-*/")
+        for s in siblings:
+            if s["relation"] == "alias-to-nested":
+                print(f"  {s['name']}: alias -> {_rel_cmd_path(s['resolved'])}")
+                print("    archive or remove the alias so agents stay inside ./galleries/")
+            else:
+                print(f"  {s['name']}: {_rel_cmd_path(s['path'])}")
+                print(f"    adopt: {s['adopt_command']}")
     return 0
 
 

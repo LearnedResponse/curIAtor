@@ -56,6 +56,11 @@ curiator galleries
 CURIATOR_GALLERY=galleries/curiator-my-topic/gallery.yaml curiator status
 ```
 
+If `curiator galleries` sees old `../curiator-*` paths next to the runner checkout, it reports them.
+Real sibling checkouts should be moved with `curiator galleries adopt`; old symlink aliases that
+already point into `./galleries/` should be archived or removed so agents stay inside the writable
+workspace root.
+
 Clone a public/example collection directly into the nested workspace:
 
 ```bash

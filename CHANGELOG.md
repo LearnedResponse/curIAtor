@@ -70,7 +70,8 @@ All notable changes to curIAtor are documented here. The format follows
   traces, screenshots, SQLite sidecars, env files, and legacy JSON ledgers, and `--fresh-clone` repeats
   those checks from temporary clones of the committed gallery histories.
 - `curiator galleries` lists nested `galleries/curiator-*` collection repos with git head, dirty state,
-  and the `CURIATOR_GALLERY=...` command for targeting one from the runner checkout.
+  and the `CURIATOR_GALLERY=...` command for targeting one from the runner checkout; it now also reports
+  legacy sibling `curiator-*` checkouts or aliases next to the runner so they can be adopted or archived.
 - `curiator galleries clone <repo>` clones public/example collection repos directly into the nested
   `galleries/` workspace, refusing non-gallery clones and preserving each collection's independent git
   history.

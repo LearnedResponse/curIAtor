@@ -87,6 +87,62 @@ def test_galleries_prints_target_command(tmp_path, monkeypatch, capsys):
     assert "CURIATOR_GALLERY=galleries/curiator-demo/gallery.yaml curiator status" in out
 
 
+def test_galleries_reports_sibling_checkout_to_adopt(tmp_path, monkeypatch, capsys):
+    from curiator import cli
+
+    project = tmp_path / "curiator"
+    project.mkdir()
+    _make_sibling_gallery(tmp_path, project)
+    monkeypatch.chdir(project)
+    monkeypatch.delenv("CURIATOR_GALLERY", raising=False)
+
+    assert cli.main(["galleries", "--json"]) == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["galleries"] == []
+    assert payload["sibling_galleries"] == [{
+        "name": "curiator-demo",
+        "path": str(tmp_path / "curiator-demo"),
+        "resolved": str((tmp_path / "curiator-demo").resolve()),
+        "is_symlink": False,
+        "relation": "sibling-checkout",
+        "adopt_command": "curiator galleries adopt ../curiator-demo",
+    }]
+
+    assert cli.main(["galleries"]) == 0
+    out = capsys.readouterr().out
+    assert "sibling curiator-* gallery paths found" in out
+    assert "adopt: curiator galleries adopt ../curiator-demo" in out
+
+
+def test_galleries_reports_sibling_symlink_alias_to_nested_repo(tmp_path, monkeypatch, capsys):
+    from curiator import cli
+
+    project = tmp_path / "curiator"
+    project.mkdir()
+    nested = _make_gallery(project)
+    alias = tmp_path / "curiator-demo"
+    alias.symlink_to(nested, target_is_directory=True)
+    monkeypatch.chdir(project)
+    monkeypatch.delenv("CURIATOR_GALLERY", raising=False)
+
+    assert cli.main(["galleries", "--json"]) == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert [g["name"] for g in payload["galleries"]] == ["curiator-demo"]
+    assert payload["sibling_galleries"] == [{
+        "name": "curiator-demo",
+        "path": str(alias),
+        "resolved": str(nested.resolve()),
+        "is_symlink": True,
+        "relation": "alias-to-nested",
+    }]
+
+    assert cli.main(["galleries"]) == 0
+    out = capsys.readouterr().out
+    assert "curiator-demo: alias -> galleries/curiator-demo" in out
+    assert "archive or remove the alias" in out
+    assert "adopt:" not in out
+
+
 def test_galleries_adopt_moves_sibling_repo_and_rewrites_runner_path(tmp_path, monkeypatch, capsys):
     from curiator import cli
 
