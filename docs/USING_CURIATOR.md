@@ -79,14 +79,14 @@ curiator app create revenue --template dash --title "Revenue dashboard" --tags f
 ```
 
 Templates today: `dash` (in-process Dash), `static` (same-origin proxy using `http.server`), `python`
-(tiny proxy-served Python HTTP app), `react` (Vite + React), `svelte` (Vite + Svelte), `vue`
-(Vite + Vue), `streamlit`, and `gradio`.
-The JS templates use `proxy` mounts and set Vite's base path from `CURIATOR_APP` so assets resolve
-under `/app/<name>/`; pass `--package-manager pnpm|yarn|bun|npm` to override auto-detection from
-lockfiles. They also add `commands.preview` to `gallery.yaml`, and `curiator status` / `curiator
-context` surface it alongside the smoke command. The Streamlit and Gradio templates use framework
-root-path settings with prefix-preserving proxy mounts and include generated README notes about the
-lightweight proxy's production reverse-proxy limits.
+(tiny proxy-served Python HTTP app), `node` (dependency-light Node HTTP server), `react` (Vite +
+React), `svelte` (Vite + Svelte), `vue` (Vite + Vue), `streamlit`, and `gradio`.
+The Node and JS templates use `proxy` mounts; Vite templates set their base path from `CURIATOR_APP` so
+assets resolve under `/app/<name>/`. Pass `--package-manager pnpm|yarn|bun|npm` to override
+auto-detection from lockfiles. They also add `commands.preview` to `gallery.yaml`, and
+`curiator status` / `curiator context` surface it alongside the smoke command. The Streamlit and Gradio
+templates use framework root-path settings with prefix-preserving proxy mounts and include generated
+README notes about the lightweight proxy's production reverse-proxy limits.
 
 When a proxied app cannot start or the backend port never responds, the app iframe shows a proxy
 diagnostic page with the configured command, working directory, port, target URL, process state, and

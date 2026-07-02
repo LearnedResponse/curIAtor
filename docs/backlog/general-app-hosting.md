@@ -2,7 +2,7 @@
 
 > **Status: core landed & proven in the wild (2026-07-01) — what's left is ergonomics + visibility.**
 > App directories, multi-endpoint `mounts:`, the same-origin `proxy` mount, and `curiator app create`
-> scaffolds (dash/static/python/react/svelte/vue/streamlit/gradio) are in the runner, and the **non-Dash proof now exists**:
+> scaffolds (dash/static/python/node/react/svelte/vue/streamlit/gradio) are in the runner, and the **non-Dash proof now exists**:
 > `curiator-aviato` runs a React/Node SSR app and a Rust HTTP server through `proxy` mounts next to
 > Dash, with per-root smoke commands — the loop closed on all of them. Remaining backlog: framework
 > template hardening beyond the first React/Svelte/Vue/Streamlit/Gradio scaffolds, heavier Docker/Compose
@@ -77,8 +77,8 @@ actually worth building is **scaffolding templates**, not plugins. The initial c
 curiator app create pnl-board --template dash     # scaffolds apps/pnl-board/ + the gallery.yaml entry
 ```
 
-i.e. a thin `create-vite`-style scaffolder per framework (currently dash / static / python / react /
-svelte / vue / streamlit / gradio), each emitting a directory + the right `mount` block. Plugins = lock-in + maintenance; templates
+i.e. a thin `create-vite`-style scaffolder per framework (currently dash / static / python / node /
+react / svelte / vue / streamlit / gradio), each emitting a directory + the right `mount` block. Plugins = lock-in + maintenance; templates
 + the generic proxy = leverage. Stay generic at the mount, opinionated only at scaffold time.
 
 ## Honest scoping & sequencing
@@ -120,7 +120,8 @@ svelte / vue / streamlit / gradio), each emitting a directory + the right `mount
 1. **Directories-per-app first** (landed).
 2. **The `proxy` mount + same-origin reverse-proxy** (landed as a lightweight localhost proxy; still needs
    framework-specific templates/build ergonomics).
-3. **Scaffold templates** (`curiator init-app --template …`) — first pass landed for React/Svelte/Vue via
+3. **Scaffold templates** (`curiator init-app --template …`) — Node's dependency-light HTTP scaffold is
+   available for small server-side prototypes; first pass landed for React/Svelte/Vue via
    Vite proxy mounts, including build smoke hooks, `CURIATOR_APP` base-path config, and npm/pnpm/yarn/bun
    package-manager detection/override.
    Streamlit also has a first scaffold using `server.baseUrlPath`, a prefix-preserving proxy mount,

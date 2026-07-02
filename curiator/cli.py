@@ -2053,6 +2053,18 @@ def _gallery_entry(
             f"    mount: {{ kind: proxy, cmd: \"{serve}\", port: {port} }}\n"
             f"    tags: {_yaml_list(tags)}\n"
         )
+    if template == "node":
+        return (
+            f"  - name: {name}\n"
+            f"    title: {json.dumps(title)}\n"
+            f"    root: {root}\n"
+            f"    source: .\n"
+            f"    smoke: node --check server.js\n"
+            f"    commands:\n"
+            f"      preview: {json.dumps(f'node server.js --port {port}')}\n"
+            f"    mount: {{ kind: proxy, cmd: \"node server.js --port {port}\", port: {port} }}\n"
+            f"    tags: {_yaml_list(tags)}\n"
+        )
     if template == "gradio":
         return (
             f"  - name: {name}\n"
@@ -2102,6 +2114,9 @@ def _app_template_files(name: str, template: str, title: str, package_manager: s
     if template == "vue":
         return {rel: content.format(name=name, title=title, title_json=json.dumps(title), js_smoke=js_smoke)
                 for rel, content in _APP_VUE_TEMPLATE.items()}
+    if template == "node":
+        return {rel: content.format(name=name, title=title, title_json=json.dumps(title))
+                for rel, content in _APP_NODE_TEMPLATE.items()}
     if template == "streamlit":
         return {rel: content.format(name=name, title=title, title_json=json.dumps(title))
                 for rel, content in _APP_STREAMLIT_TEMPLATE.items()}
@@ -2129,7 +2144,7 @@ def cmd_app_create(args) -> int:
         return 1
     title = args.title or _title_from_name(name)
     tags = _tags_arg(args.tags, template)
-    proxy_templates = {"static", "python", "react", "svelte", "vue", "streamlit", "gradio"}
+    proxy_templates = {"static", "python", "node", "react", "svelte", "vue", "streamlit", "gradio"}
     port = args.port if args.port is not None else (_next_proxy_port(cfg) if template in proxy_templates else None)
     package_manager = _resolve_package_manager(repo, args.package_manager) if template in {"react", "svelte", "vue"} else "npm"
 
@@ -2291,22 +2306,22 @@ def main(argv=None) -> int:
     app_sub = app.add_subparsers(dest="action", required=True)
     ac = app_sub.add_parser("create", help="scaffold an app directory and add it to gallery.yaml")
     ac.add_argument("name", help="app key, e.g. orange_picker")
-    ac.add_argument("--template", choices=["dash", "static", "python", "react", "svelte", "vue", "streamlit", "gradio"], default="dash",
+    ac.add_argument("--template", choices=["dash", "static", "python", "node", "react", "svelte", "vue", "streamlit", "gradio"], default="dash",
                     help="scaffold template (default: dash)")
     ac.add_argument("--title", help="display title")
     ac.add_argument("--tags", help="comma-separated tags; default is the template name")
-    ac.add_argument("--port", type=int, help="proxy port for static/python/react/svelte/vue/streamlit/gradio templates")
+    ac.add_argument("--port", type=int, help="proxy port for static/python/node/react/svelte/vue/streamlit/gradio templates")
     ac.add_argument("--package-manager", choices=["auto", *_JS_PACKAGE_MANAGERS], default="auto",
                     help="JS package manager for react/svelte/vue templates (default: auto)")
     ac.add_argument("--force", action="store_true", help="allow an existing apps/<name> directory")
     ac.set_defaults(func=cmd_app_create)
     ia = sub.add_parser("init-app", help="alias for `curiator app create`")
     ia.add_argument("name", help="app key, e.g. orange_picker")
-    ia.add_argument("--template", choices=["dash", "static", "python", "react", "svelte", "vue", "streamlit", "gradio"], default="dash",
+    ia.add_argument("--template", choices=["dash", "static", "python", "node", "react", "svelte", "vue", "streamlit", "gradio"], default="dash",
                     help="scaffold template (default: dash)")
     ia.add_argument("--title", help="display title")
     ia.add_argument("--tags", help="comma-separated tags; default is the template name")
-    ia.add_argument("--port", type=int, help="proxy port for static/python/react/svelte/vue/streamlit/gradio templates")
+    ia.add_argument("--port", type=int, help="proxy port for static/python/node/react/svelte/vue/streamlit/gradio templates")
     ia.add_argument("--package-manager", choices=["auto", *_JS_PACKAGE_MANAGERS], default="auto",
                     help="JS package manager for react/svelte/vue templates (default: auto)")
     ia.add_argument("--force", action="store_true", help="allow an existing apps/<name> directory")
@@ -2464,9 +2479,9 @@ Use the scaffold command; it creates `apps/<name>/` and updates `gallery.yaml`:
 
     curiator app create revenue --template dash --title "Revenue dashboard"
 
-Templates: `dash`, `static`, `python`, `react`, `svelte`, `vue`, `streamlit`, `gradio`.
-React/Svelte/Vue use Vite behind a same-origin proxy mount and can auto-detect npm/pnpm/yarn/bun;
-Streamlit and Gradio use prefix-preserving proxy mounts.
+Templates: `dash`, `static`, `python`, `node`, `react`, `svelte`, `vue`, `streamlit`, `gradio`.
+Node uses a dependency-light HTTP server behind a same-origin proxy mount. React/Svelte/Vue use Vite
+and can auto-detect npm/pnpm/yarn/bun; Streamlit and Gradio use prefix-preserving proxy mounts.
 You can still edit `gallery.yaml` manually for existing apps.
 
 See the consumer guide: https://github.com/LearnedResponse/curiator/blob/main/docs/USING_CURIATOR.md
@@ -3132,6 +3147,150 @@ The scaffold smoke test is:
 ```bash
 python -m py_compile app.py
 ```
+""",
+}
+
+_APP_NODE_TEMPLATE = {
+    "package.json": """\
+{{
+  "name": "{name}",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {{
+    "start": "node server.js",
+    "check": "node --check server.js"
+  }}
+}}
+""",
+    "server.js": """\
+import http from "node:http";
+
+const TITLE = {title_json};
+
+function optionValue(flag) {{
+  const index = process.argv.indexOf(flag);
+  return index >= 0 ? process.argv[index + 1] : undefined;
+}}
+
+const port = Number(optionValue("--port") || process.env.PORT || 8700);
+
+function page() {{
+  return `<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>${{TITLE}}</title>
+    <style>
+      body {{
+        margin: 0;
+        font-family: system-ui, sans-serif;
+        color: #22272e;
+        background: #f6f7f8;
+      }}
+      main {{
+        max-width: 880px;
+        padding: 32px;
+      }}
+      h1 {{
+        margin: 0 0 12px;
+        color: #8e44ad;
+      }}
+      p {{
+        color: #5e6670;
+        line-height: 1.55;
+      }}
+      .metricGrid {{
+        display: grid;
+        grid-template-columns: repeat(3, minmax(120px, 1fr));
+        gap: 12px;
+        margin-top: 24px;
+        max-width: 620px;
+      }}
+      .metricGrid div {{
+        border: 1px solid #d9dde2;
+        border-radius: 8px;
+        background: white;
+        padding: 14px;
+      }}
+      .metricGrid b {{
+        display: block;
+        font-size: 24px;
+      }}
+      .metricGrid span {{
+        color: #6c747d;
+        font-size: 13px;
+      }}
+    </style>
+  </head>
+  <body>
+    <main>
+      <p style="margin:0 0 8px;color:#8e44ad;font-size:13px;font-weight:700">curIAtor Node scaffold</p>
+      <h1>${{TITLE}}</h1>
+      <p>
+        This dependency-light Node app is served through a same-origin proxy mount. Use the feedback
+        rail to shape the server-rendered HTML; the curator edits files in this directory and
+        smoke-tests with <code>node --check server.js</code>.
+      </p>
+      <section class="metricGrid" aria-label="demo metrics">
+        <div><b>3</b><span>routes</span></div>
+        <div><b>0</b><span>dependencies</span></div>
+        <div><b>1</b><span>server file</span></div>
+      </section>
+    </main>
+  </body>
+</html>`;
+}}
+
+const server = http.createServer((req, res) => {{
+  if (req.url === "/healthz") {{
+    const body = JSON.stringify({{ ok: true, app: "{name}" }});
+    res.writeHead(200, {{
+      "content-type": "application/json; charset=utf-8",
+      "content-length": Buffer.byteLength(body),
+    }});
+    res.end(body);
+    return;
+  }}
+  const body = page();
+  res.writeHead(200, {{
+    "content-type": "text/html; charset=utf-8",
+    "content-length": Buffer.byteLength(body),
+  }});
+  res.end(body);
+}});
+
+server.listen(port, "127.0.0.1", () => {{
+  console.log(`${{TITLE}} listening on http://127.0.0.1:${{port}}`);
+}});
+""",
+    "README.md": """\
+# {title}
+
+This Node app was scaffolded by curIAtor. It has no npm dependencies: `server.js` uses Node's built-in
+HTTP server and renders HTML on the server side.
+
+Run it through the gallery:
+
+```bash
+curiator up
+```
+
+The generated `gallery.yaml` entry runs:
+
+```bash
+node server.js --port <port>
+```
+
+The scaffold smoke test is:
+
+```bash
+node --check server.js
+```
+
+Use this template for small server-side prototypes, lightweight API-backed views, or as a base before
+promoting to a heavier framework.
 """,
 }
 

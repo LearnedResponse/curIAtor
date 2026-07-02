@@ -48,6 +48,35 @@ def test_init_app_alias_static_and_python_proxy_ports(collection):
     assert status["smoke"] == "python -m py_compile server.py"
 
 
+def test_app_create_node_proxy_template(collection, capsys):
+    from curiator import cli
+    from curiator.config import app_spec, load_config
+
+    assert cli.main(["app", "create", "node_status", "--template", "node"]) == 0
+
+    root = collection / "apps" / "node_status"
+    assert (root / "server.js").exists()
+    assert (root / "package.json").exists()
+    assert (root / "README.md").exists()
+    server_js = (root / "server.js").read_text()
+    assert "import http from \"node:http\"" in server_js
+    assert "node --check server.js" in server_js
+    assert "server.listen(port, \"127.0.0.1\"" in server_js
+
+    data = _gallery(collection)
+    app = next(a for a in data["apps"] if a["name"] == "node_status")
+    assert app["mount"] == {"kind": "proxy", "cmd": "node server.js --port 8700", "port": 8700}
+    assert app["smoke"] == "node --check server.js"
+    assert app["commands"]["preview"] == "node server.js --port 8700"
+    assert app["tags"] == ["node"]
+    assert app_spec(load_config(), "node_status")["commands"]["preview"] == "node server.js --port 8700"
+
+    assert cli.main(["context", "--app", "node_status", "--limit", "1"]) == 0
+    out = capsys.readouterr().out
+    assert "- smoke: `node --check server.js`" in out
+    assert "- preview: `node server.js --port 8700`" in out
+
+
 def test_app_create_react_svelte_and_vue_proxy_templates(collection, capsys):
     from curiator import cli
     from curiator.config import app_spec, load_config
