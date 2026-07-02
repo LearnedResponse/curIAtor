@@ -78,8 +78,9 @@ curiator app create pnl-board --template dash     # scaffolds apps/pnl-board/ + 
 ```
 
 i.e. a thin `create-vite`-style scaffolder per framework (currently dash / static / python / node /
-react / svelte / vue / streamlit / gradio), each emitting a directory + the right `mount` block. Plugins = lock-in + maintenance; templates
-+ the generic proxy = leverage. Stay generic at the mount, opinionated only at scaffold time.
+flask / react / svelte / vue / streamlit / gradio), each emitting a directory + the right `mount`
+block. Plugins = lock-in + maintenance; templates + the generic proxy = leverage. Stay generic at the
+mount, opinionated only at scaffold time.
 
 ## Honest scoping & sequencing
 

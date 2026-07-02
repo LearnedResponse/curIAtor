@@ -68,8 +68,9 @@ Two tiers, and the second is the one only curiator can do:
 5. **Richer annotation replay** — second replay surface landed: prior-feedback threads and the
    General collection home show compact structured annotation summaries with per-mark notes and
    DOM targets, and saved annotated entries can open a scrollable preview modal showing the burned
-   screenshot plus the structured mark list. Follow-on: preserve an editable/replayable overlay view
-   for reviewers rather than only the burned PNG plus task-bundle text.
+   screenshot plus the structured mark list. A replay overlay now redraws saved boxes, arrows,
+   redactions, and pins from normalized coordinates on top of the preview image. Follow-on: preserve
+   an editable overlay view for reviewers rather than only replaying saved marks.
 6. **Graceful fallback.** Same-origin only (already the screenshot moat's requirement); for
    a cross-origin proxy iframe, fall back to burn-in-only for that mount.
 

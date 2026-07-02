@@ -140,6 +140,52 @@
     });
   }
 
+  function clamp01(value) {
+    const n = Number(value);
+    if (!Number.isFinite(n)) return 0;
+    return Math.max(0, Math.min(1, n));
+  }
+
+  function replayBounds(mark) {
+    const x1 = clamp01(mark.x1);
+    const y1 = clamp01(mark.y1);
+    const x2 = clamp01(mark.x2 == null ? mark.x1 : mark.x2);
+    const y2 = clamp01(mark.y2 == null ? mark.y1 : mark.y2);
+    return {x1, y1, x2, y2, x: Math.min(x1, x2), y: Math.min(y1, y2),
+      w: Math.abs(x2 - x1), h: Math.abs(y2 - y1)};
+  }
+
+  function pct(value) {
+    return (clamp01(value) * 100) + "%";
+  }
+
+  function AnnotationReplayOverlay({marks}) {
+    const shapes = [];
+    const pins = [];
+    marks.forEach((mark, idx) => {
+      const b = replayBounds(mark);
+      const key = idx + "-" + (mark.tool || "mark");
+      if (mark.tool === "box") {
+        shapes.push(h("rect", {key, className: "rshell-annotation-replay-box",
+          x: b.x, y: b.y, width: b.w, height: b.h}));
+      } else if (mark.tool === "arrow") {
+        shapes.push(h("line", {key, className: "rshell-annotation-replay-arrow",
+          x1: b.x1, y1: b.y1, x2: b.x2, y2: b.y2}));
+      } else if (mark.tool === "redact") {
+        shapes.push(h("rect", {key, className: "rshell-annotation-replay-redact",
+          x: b.x, y: b.y, width: b.w, height: b.h}));
+      } else if (mark.tool === "pin") {
+        pins.push(h("span", {key, className: "rshell-annotation-replay-pin",
+          style: {left: pct(b.x1), top: pct(b.y1)}}, annotationLabel(mark, idx)));
+      }
+    });
+    if (!shapes.length && !pins.length) return null;
+    return h("div", {className: "rshell-annotation-replay-overlay", "aria-hidden": "true"},
+      h("svg", {className: "rshell-annotation-replay-svg", viewBox: "0 0 1 1", preserveAspectRatio: "none"},
+        shapes),
+      pins);
+  }
+
   function AnnotationSummary({entry, onPreview}) {
     const marks = (entry && entry.annotations) || [];
     if (!marks.length) return null;
@@ -163,7 +209,9 @@
           h("button", {className: "rshell-modal-close", title: "Close", onClick: onClose}, "×")),
         h("div", {className: "rshell-annotation-modal-body"},
           entry.shot_url ? h("div", {className: "rshell-annotation-replay-shot"},
-            h("img", {src: entry.shot_url, alt: "annotated screenshot"})) : null,
+            h("div", {className: "rshell-annotation-replay-frame"},
+              h("img", {src: entry.shot_url, alt: "annotated screenshot"}),
+              h(AnnotationReplayOverlay, {marks}))) : null,
           h("div", {className: "rshell-annotation-replay-list"},
             h(AnnotationRows, {marks})))));
   }

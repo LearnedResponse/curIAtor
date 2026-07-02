@@ -83,12 +83,15 @@ def test_react_shell_has_burned_screenshot_annotations(web_client):
     assert "function AnnotationEditor" in js
     assert "function AnnotationSummary" in js
     assert "function AnnotationPreview" in js
+    assert "function AnnotationReplayOverlay" in js
     assert "function composeShot" in js
     assert "function withDomTarget" in js
     assert "function selectorFor" in js
     assert "function annotationTarget" in js
     assert "rshell-annotation-preview-btn" in js
     assert "rshell-annotation-modal" in js
+    assert "rshell-annotation-replay-overlay" in js
+    assert "rshell-annotation-replay-pin" in js
     assert "annotations: screenshot ? annotations : []" in js
     assert "rshell-annotation-note" in js
     assert "rshell-annotation-summary" in js
@@ -105,6 +108,11 @@ def test_react_shell_has_burned_screenshot_annotations(web_client):
     assert ".rshell-annotation-preview-btn" in css
     assert ".rshell-modal-backdrop" in css
     assert ".rshell-annotation-modal-body" in css
+    assert ".rshell-annotation-replay-overlay" in css
+    assert ".rshell-annotation-replay-box" in css
+    assert ".rshell-annotation-replay-arrow" in css
+    assert ".rshell-annotation-replay-redact" in css
+    assert ".rshell-annotation-replay-pin" in css
     assert ".rshell-annotation-target" in css
     assert "touch-action: none" in css
 

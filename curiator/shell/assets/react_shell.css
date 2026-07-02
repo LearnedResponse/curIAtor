@@ -593,6 +593,61 @@ body {
   height: auto;
 }
 
+.rshell-annotation-replay-frame {
+  position: relative;
+  display: inline-block;
+  max-width: 100%;
+}
+
+.rshell-annotation-replay-overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.rshell-annotation-replay-svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.rshell-annotation-replay-box {
+  fill: transparent;
+  stroke: #8e44ad;
+  stroke-width: 3;
+  vector-effect: non-scaling-stroke;
+}
+
+.rshell-annotation-replay-arrow {
+  stroke: #2980b9;
+  stroke-width: 4;
+  stroke-linecap: round;
+  vector-effect: non-scaling-stroke;
+}
+
+.rshell-annotation-replay-redact {
+  fill: #111;
+  opacity: .78;
+}
+
+.rshell-annotation-replay-pin {
+  position: absolute;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  transform: translate(-50%, -50%);
+  border: 2px solid #fff;
+  border-radius: 50%;
+  background: #cc7a00;
+  color: #fff;
+  font: 700 12px/1 system-ui, sans-serif;
+  box-shadow: 0 1px 6px rgba(0, 0, 0, .28);
+}
+
 .rshell-annotation-replay-list {
   min-height: 0;
   max-height: 72vh;
