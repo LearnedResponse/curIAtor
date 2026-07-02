@@ -100,6 +100,13 @@ def _load_config_from_path(path: str | Path, *, link: dict | None = None) -> dic
     # local-login user store (hashed passwords) — resolved against the collection root; gitignored
     auth["users_file"] = str(Path(cfg["repo_root"]) / auth.get("users_file", ".curiator-users.json"))
     cfg["auth"] = auth
+    # Voice feedback is opt-in. The default keeps the UI on plain text/OS dictation; a collection can
+    # provide a local command that receives an audio clip path and returns transcript text/JSON.
+    voice = cfg.get("voice") or {}
+    voice.setdefault("transcribe_cmd", None)
+    voice.setdefault("transcribe_timeout", 60)
+    voice.setdefault("transcribe_max_bytes", 25 * 1024 * 1024)
+    cfg["voice"] = voice
     cfg["current_app"] = (link.get("app") if link else None) or infer_current_app(cfg)
     return cfg
 

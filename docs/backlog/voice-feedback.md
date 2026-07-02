@@ -1,12 +1,15 @@
 # Backlog — voice + narrated feedback (talk through the fix)
 
-> **Status:** scoped; Tier 0 and annotation mark clock fields landed 2026-07-02. **North star:
+> **Status:** Tier 0, annotation mark clock fields, and the command-backed local transcription seam
+> landed 2026-07-02. **North star:
 > "narrated feedback"** — voice + annotation on a shared clock, so a review is an
 > *ordered, intent-per-mark tour* the agent can follow.
 > **Recommended shape: local-Whisper default** (moat-consistent, works on Linux), Web-Speech for the
 > public tier only, OS dictation as the free stopgap. The comment textarea now exposes a dictation hint,
 > `docs/USING_CURIATOR.md` documents OS dictation as the zero-code path, and annotation marks now carry
-> optional `start_ms` / `end_ms` offsets for future transcript alignment. Composes with
+> optional `start_ms` / `end_ms` offsets for future transcript alignment; collections can now opt into
+> a local `voice.transcribe_cmd` so the React shell records mic audio with `MediaRecorder`, POSTs it to
+> `/api/transcribe`, and appends the returned transcript to the comment box. Composes with
 > `annotated-feedback.md`, not a separate feature. Captured 2026-07-02.
 
 ## The pitch
@@ -72,12 +75,14 @@ to retrofit.
 
 1. **Tier 0** — landed. OS dictation is documented, and the shell comment textarea exposes a
    dictation hint for the default React shell and the legacy Dash shell.
-2. **Tier 2 (default)** — a curiator `/transcribe` route running `faster-whisper`; a 🎤 button that
-   `MediaRecorder`-captures → POSTs → drops the transcript into the comment. Local, any browser.
+2. **Tier 2 (default)** — landed as a command-backed curiator `/api/transcribe` seam: a 🎤 button that
+   `MediaRecorder`-captures → POSTs → drops the transcript into the comment. Local, any browser. Still
+   needs packaged/default model adapters or template wrappers for `faster-whisper` / `whisper.cpp`.
 3. **Tier 1 (optional)** — a Web Speech mic button **gated to public/hosted collections** (a config
    flag), never the private/OT ones.
 4. **Shared-clock data model** — annotation mark timestamps landed as optional `start_ms` / `end_ms`
-   fields. Transcript segments still need to join the same clock when transcription lands.
+   fields, and `/api/transcribe` accepts/returns segment timestamps. Transcript segments still need to
+   be persisted into the feedback ledger and joined to mark timing.
 5. **Narrated feedback** — record mode → merge timelines → the ordered narrative into the ledger
    (structured) + the task bundle "Narrative" block; upgrade the replay overlay to narrated replay.
 6. **Verify by running** — a spoken-while-drawing review round-trips; the agent's reply follows the

@@ -44,6 +44,8 @@ def test_defaults_when_blocks_absent(tmp_path, monkeypatch):
     assert cfg["git"]["signoff"] is True
     assert cfg["git"]["include_ledger"] is False
     assert cfg["auth"]["admin_groups"] == ["admin"]   # who may change agent settings (mode != none)
+    assert cfg["voice"]["transcribe_cmd"] is None
+    assert cfg["voice"]["transcribe_timeout"] == 60
 
 
 def test_infer_current_app_requires_an_unambiguous_match(tmp_path):

@@ -1,6 +1,8 @@
 """web_shell: Flask/React overlay shell API + same-origin app mounting."""
 from __future__ import annotations
 
+import io
+import sys
 from pathlib import Path
 
 import pytest
@@ -45,6 +47,7 @@ def test_react_shell_index_and_bootstrap(web_client):
     assert data["general_key"] == "__general__"
     assert data["general"]["key"] == "__general__"
     assert data["auth"]["is_admin"] is True
+    assert data["voice"]["local_transcribe"] is False
     sample = next(a for a in data["apps"] if a["key"] == "sample")
     assert sample["revision"] == 0
 
@@ -131,6 +134,51 @@ def test_react_shell_has_burned_screenshot_annotations(web_client):
     assert ".rshell-annotation-replay-pin" in css
     assert ".rshell-annotation-target" in css
     assert "touch-action: none" in css
+
+
+def test_react_shell_has_local_voice_transcription(web_client):
+    js = web_client.get("/assets/react_shell.js").get_data(as_text=True)
+    css = web_client.get("/assets/react_shell.css").get_data(as_text=True)
+    assert "function startVoice" in js
+    assert "function stopVoice" in js
+    assert "function transcribeBlob" in js
+    assert "MediaRecorder" in js
+    assert "getUserMedia" in js
+    assert 'fetch("/api/transcribe"' in js
+    assert "SpeechRecognition" not in js
+    assert "voice.local_transcribe" in js
+    assert ".rshell-button.secondary.active" in css
+
+
+def test_react_shell_transcribe_api_runs_configured_local_command(collection, monkeypatch):
+    script = collection / "transcribe_fixture.py"
+    script.write_text(
+        "import json, os, sys\n"
+        "audio = sys.argv[1]\n"
+        "assert audio == os.environ['CURIATOR_AUDIO']\n"
+        "print(json.dumps({'text': 'move the legend', 'segments': ["
+        "{'start': 0.25, 'end': 0.75, 'text': 'move'}, "
+        "{'start_ms': 800, 'end_ms': 1200, 'text': 'the legend'}]}))\n"
+    )
+    (collection / "gallery.yaml").write_text((collection / "gallery.yaml").read_text() + f"""
+voice:
+  transcribe_cmd: "{sys.executable} {script} {{audio}}"
+  transcribe_timeout: 5
+  transcribe_max_bytes: 1024
+""")
+    mod = _load_web_mod(monkeypatch)
+    client = mod.build_flask_app().test_client()
+
+    boot = client.get("/api/bootstrap").get_json()
+    assert boot["voice"]["local_transcribe"] is True
+    r = client.post("/api/transcribe", data={"audio": (io.BytesIO(b"audio"), "clip.webm")})
+    assert r.status_code == 200
+    data = r.get_json()
+    assert data["text"] == "move the legend"
+    assert data["segments"] == [
+        {"start_ms": 250.0, "end_ms": 750.0, "text": "move"},
+        {"start_ms": 800.0, "end_ms": 1200.0, "text": "the legend"},
+    ]
 
 
 def test_react_shell_profile_settings_and_collection_home(web_client):

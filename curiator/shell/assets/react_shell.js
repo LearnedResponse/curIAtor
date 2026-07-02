@@ -553,6 +553,9 @@
     const [replyTo, setReplyTo] = useState(null);
     const [previewEntry, setPreviewEntry] = useState(null);
     const [msg, setMsg] = useState("");
+    const [recording, setRecording] = useState(false);
+    const recorderRef = useRef(null);
+    const audioChunksRef = useRef([]);
 
     useEffect(() => {
       window.curiatorShell = window.curiatorShell || {};
@@ -560,6 +563,10 @@
         window.curiatorShell.selectApp(key);
         setReplyTo({key, id});
       };
+    }, []);
+    useEffect(() => () => {
+      const active = recorderRef.current;
+      if (active && active.stream) stopCaptureStream(active.stream);
     }, []);
     useEffect(() => {
       if (replyTo && replyTo.key !== selected) setReplyTo(null);
@@ -572,6 +579,7 @@
     const t = tree(items);
     const auth = (boot && boot.auth) || {};
     const user = (boot && boot.user) || {};
+    const voice = (boot && boot.voice) || {};
     const anonymousHeld = Boolean(auth.allow_anonymous && auth.mode !== "none" && !(user && user.name));
 
     function refresh() {
@@ -669,6 +677,69 @@
       }).catch((e) => setMsg("Native capture failed: " + (e && e.message ? e.message : e)));
     }
 
+    function appendTranscript(text) {
+      const clean = (text || "").trim();
+      if (!clean) return;
+      setComment((current) => current.trim() ? current.replace(/\s*$/, "\n\n") + clean : clean);
+    }
+
+    function transcribeBlob(blob) {
+      const form = new FormData();
+      form.append("audio", blob, "feedback.webm");
+      setMsg("Transcribing feedback…");
+      return fetch("/api/transcribe", {method: "POST", body: form})
+        .then((r) => r.ok ? r.json() : r.json().catch(() => ({})).then((j) => Promise.reject(j)))
+        .then((data) => {
+          appendTranscript(data.text || "");
+          const count = (data.segments || []).length;
+          setMsg(data.text ? "Transcript added" + (count ? " (" + count + " segments)" : "") + "." : "No speech detected.");
+        })
+        .catch((e) => setMsg(e.error || "Transcription failed."));
+    }
+
+    function startVoice() {
+      const media = navigator.mediaDevices || {};
+      if (!voice.local_transcribe) {
+        setMsg("Local transcription is not configured.");
+        return;
+      }
+      if (!media.getUserMedia || typeof MediaRecorder === "undefined") {
+        setMsg("Voice recording is unavailable in this browser.");
+        return;
+      }
+      media.getUserMedia({audio: true}).then((stream) => {
+        const recorder = new MediaRecorder(stream);
+        audioChunksRef.current = [];
+        recorderRef.current = {recorder, stream};
+        recorder.ondataavailable = (e) => {
+          if (e.data && e.data.size) audioChunksRef.current.push(e.data);
+        };
+        recorder.onstop = () => {
+          const active = recorderRef.current;
+          recorderRef.current = null;
+          setRecording(false);
+          stopCaptureStream(active && active.stream);
+          const blob = new Blob(audioChunksRef.current, {type: recorder.mimeType || "audio/webm"});
+          audioChunksRef.current = [];
+          if (!blob.size) {
+            setMsg("No audio recorded.");
+            return;
+          }
+          transcribeBlob(blob);
+        };
+        recorder.start();
+        setRecording(true);
+        setMsg("Recording feedback…");
+      }).catch((e) => setMsg("Voice recording failed: " + (e && e.message ? e.message : e)));
+    }
+
+    function stopVoice() {
+      const active = recorderRef.current;
+      if (!active || !active.recorder) return;
+      setMsg("Preparing transcript…");
+      active.recorder.stop();
+    }
+
     function upload(file) {
       if (!file) return;
       const r = new FileReader();
@@ -732,8 +803,11 @@
       h("textarea", {className: "rshell-textarea", placeholder: "What's good / what to change…",
         title: DICTATION_HINT, "aria-label": "Feedback comment. " + DICTATION_HINT,
         value: comment, onChange: (e) => setComment(e.target.value)}),
-      h("div", {style: {display: "flex", gap: 8, margin: "6px 0"}},
+      h("div", {style: {display: "flex", flexWrap: "wrap", gap: 8, margin: "6px 0"}},
         h("button", {className: "rshell-button secondary", onClick: capture}, "📷 Capture view"),
+        voice.local_transcribe ? h("button", {className: "rshell-button secondary" + (recording ? " active" : ""),
+          title: "Local voice transcription", onClick: recording ? stopVoice : startVoice},
+          recording ? "■ Stop" : "🎤 Record") : null,
         anonymousHeld ? null : h("button", {className: "rshell-button secondary",
           title: "Browser screen capture", onClick: nativeCapture}, "▣ Native"),
         anonymousHeld ? null : h("label", {className: "rshell-button secondary"}, "⬆ upload",

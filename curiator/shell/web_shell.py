@@ -6,7 +6,11 @@ a React UI and JSON API from plain Flask.
 """
 from __future__ import annotations
 
+import json
 import os
+import shlex
+import subprocess
+import tempfile
 from pathlib import Path
 
 from flask import Flask, Response, jsonify, redirect, request, send_from_directory
@@ -154,6 +158,114 @@ def _feedback_user_and_status(rate_limit_key: str | None = None) -> tuple[dict |
     return u, "new", None, 0
 
 
+def _voice_cfg() -> dict:
+    cfg = getattr(core.REG, "VOICE_CFG", None)
+    if not isinstance(cfg, dict):
+        cfg = (getattr(core.REG, "CONFIG", {}) or {}).get("voice") or {}
+    return cfg if isinstance(cfg, dict) else {}
+
+
+def _voice_int(key: str, default: int, *, low: int, high: int) -> int:
+    try:
+        value = int(_voice_cfg().get(key, default))
+    except (TypeError, ValueError):
+        value = default
+    return max(low, min(high, value))
+
+
+def _voice_payload() -> dict:
+    return {
+        "local_transcribe": bool(_voice_cfg().get("transcribe_cmd")),
+        "max_bytes": _voice_int("transcribe_max_bytes", 25 * 1024 * 1024, low=1, high=200 * 1024 * 1024),
+        "timeout": _voice_int("transcribe_timeout", 60, low=1, high=600),
+    }
+
+
+def _transcribe_args(command, audio_path: Path) -> list[str]:
+    sentinel = "__CURIATOR_AUDIO_PATH__"
+    if isinstance(command, list):
+        parts = [str(part) for part in command if str(part)]
+        if not parts:
+            return []
+        has_audio = any("{audio}" in part for part in parts)
+        args = [part.replace("{audio}", str(audio_path)) for part in parts]
+        return args if has_audio else [*args, str(audio_path)]
+    if not isinstance(command, str) or not command.strip():
+        return []
+    text = command.strip()
+    if "{audio}" in text:
+        return [part.replace(sentinel, str(audio_path))
+                for part in shlex.split(text.replace("{audio}", sentinel))]
+    return [*shlex.split(text), str(audio_path)]
+
+
+def _bounded_text(value, limit: int) -> str:
+    text = "" if value is None else str(value).strip()
+    return text[:limit]
+
+
+def _ms(value, *, seconds: bool) -> float | None:
+    try:
+        n = float(value)
+    except (TypeError, ValueError):
+        return None
+    if seconds:
+        n *= 1000.0
+    return max(0.0, min(86_400_000.0, n))
+
+
+def _clean_transcript_segments(raw) -> list[dict]:
+    if not isinstance(raw, list):
+        return []
+    out = []
+    for item in raw[:200]:
+        if not isinstance(item, dict):
+            continue
+        text = _bounded_text(item.get("text"), 1000)
+        if not text:
+            continue
+        start_ms = _ms(item.get("start_ms"), seconds=False)
+        end_ms = _ms(item.get("end_ms"), seconds=False)
+        if start_ms is None:
+            start_ms = _ms(item.get("start"), seconds=True)
+        if end_ms is None:
+            end_ms = _ms(item.get("end"), seconds=True)
+        seg = {"text": " ".join(text.split())}
+        if start_ms is not None:
+            seg["start_ms"] = start_ms
+        if end_ms is not None:
+            seg["end_ms"] = max(start_ms or 0.0, end_ms)
+        out.append(seg)
+    return out
+
+
+def _parse_transcript(stdout: str) -> dict:
+    raw = stdout.strip()
+    if not raw:
+        return {"text": "", "segments": []}
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError:
+        return {"text": _bounded_text(raw, 10000), "segments": []}
+    if isinstance(data, list):
+        segments = _clean_transcript_segments(data)
+        return {"text": _bounded_text(" ".join(s["text"] for s in segments), 10000), "segments": segments}
+    if not isinstance(data, dict):
+        return {"text": _bounded_text(raw, 10000), "segments": []}
+    segments = _clean_transcript_segments(data.get("segments"))
+    text = _bounded_text(data.get("text"), 10000)
+    if not text and segments:
+        text = _bounded_text(" ".join(s["text"] for s in segments), 10000)
+    return {"text": text, "segments": segments}
+
+
+def _transcribe_allowed() -> tuple[str | None, int]:
+    if auth.login_required(core.REG.AUTH_CFG) and not core._current_user():
+        if not auth.allow_anonymous_feedback(core.REG.AUTH_CFG):
+            return "sign in required", 401
+    return None, 0
+
+
 def _index() -> str:
     return f"""<!doctype html>
 <html>
@@ -251,6 +363,7 @@ def build_flask_app() -> Flask:
                 "anonymous_feedback_max": core.REG.AUTH_CFG.get("anonymous_feedback_max"),
                 "anonymous_feedback_window_seconds": core.REG.AUTH_CFG.get("anonymous_feedback_window_seconds"),
             },
+            "voice": _voice_payload(),
         })
 
     @app.route("/api/apps")
@@ -376,6 +489,62 @@ def build_flask_app() -> Flask:
     @app.route("/api/feedback")
     def _all_feedback():
         return jsonify({key: _feedback_payload(key) for key in core.load_feedback()})
+
+    @app.route("/api/transcribe", methods=["POST"])
+    def _transcribe():
+        voice = _voice_cfg()
+        command = voice.get("transcribe_cmd")
+        if not command:
+            return jsonify({"error": "local transcription is not configured"}), 404
+        auth_error, code = _transcribe_allowed()
+        if auth_error:
+            return jsonify({"error": auth_error}), code
+
+        max_bytes = _voice_int("transcribe_max_bytes", 25 * 1024 * 1024, low=1, high=200 * 1024 * 1024)
+        if request.content_length and request.content_length > max_bytes:
+            return jsonify({"error": "audio clip is too large"}), 413
+        upload = request.files.get("audio")
+        if not upload:
+            return jsonify({"error": "missing audio file"}), 400
+
+        suffix = Path(upload.filename or "").suffix.lower()
+        if suffix not in {".webm", ".ogg", ".mp3", ".m4a", ".mp4", ".wav", ".flac"}:
+            suffix = ".webm"
+        timeout = _voice_int("transcribe_timeout", 60, low=1, high=600)
+        with tempfile.TemporaryDirectory(prefix="curiator-audio-") as tmp:
+            audio_path = Path(tmp) / f"clip{suffix}"
+            upload.save(audio_path)
+            if audio_path.stat().st_size == 0:
+                return jsonify({"error": "audio clip is empty"}), 400
+            if audio_path.stat().st_size > max_bytes:
+                return jsonify({"error": "audio clip is too large"}), 413
+            args = _transcribe_args(command, audio_path)
+            if not args:
+                return jsonify({"error": "local transcription command is empty"}), 500
+            env = {
+                **os.environ,
+                "CURIATOR_AUDIO": str(audio_path),
+                "CURIATOR_GALLERY": str(core.REG.GALLERY_YAML),
+                "CURIATOR_COLLECTION_ROOT": str(core.REG.COLLECTION_ROOT),
+            }
+            try:
+                proc = subprocess.run(
+                    args,
+                    cwd=core.REG.COLLECTION_ROOT,
+                    env=env,
+                    capture_output=True,
+                    text=True,
+                    timeout=timeout,
+                    check=False,
+                )
+            except FileNotFoundError:
+                return jsonify({"error": f"transcriber not found: {args[0]}"}), 502
+            except subprocess.TimeoutExpired:
+                return jsonify({"error": f"transcription timed out after {timeout}s"}), 504
+            if proc.returncode != 0:
+                detail = _bounded_text(proc.stderr or proc.stdout, 500) or f"exit {proc.returncode}"
+                return jsonify({"error": "transcription failed", "detail": detail}), 502
+        return jsonify(_parse_transcript(proc.stdout))
 
     @app.route("/api/action", methods=["POST"])
     def _action():

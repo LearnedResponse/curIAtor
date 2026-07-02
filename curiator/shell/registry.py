@@ -51,6 +51,10 @@ SHELL_CFG = CONFIG.get("shell", {}) or {}
 AUTH_CFG = CONFIG.get("auth", {}) or {}        # identity / provenance (none | header | oidc | local)
 AUTH_CFG.setdefault("mode", "none")
 AUTH_CFG["users_file"] = str(COLLECTION_ROOT / AUTH_CFG.get("users_file", ".curiator-users.json"))
+VOICE_CFG = CONFIG.get("voice", {}) or {}
+VOICE_CFG.setdefault("transcribe_cmd", None)
+VOICE_CFG.setdefault("transcribe_timeout", 60)
+VOICE_CFG.setdefault("transcribe_max_bytes", 25 * 1024 * 1024)
 
 # the directories that hold app source — added to sys.path so in-process import works.
 APP_SOURCE_DIRS: list[Path] = []

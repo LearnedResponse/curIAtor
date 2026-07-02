@@ -201,8 +201,28 @@ or loaded as an editable reply draft.
 
 The comment field is a normal textarea, so OS-level dictation works without curIAtor-specific audio
 handling. On macOS, use Dictation; on Windows, use Win+H voice typing. Linux desktop dictation depends
-on the local environment, which is why the planned built-in voice path favors a local Whisper-style
-transcriber rather than a browser-cloud API.
+on the local environment.
+
+Collections can also opt into local voice transcription. Set `voice.transcribe_cmd` to a local command
+that accepts an audio clip path either through `{audio}` or as the final argument. The React shell then
+shows a **Record** button, captures microphone audio with `MediaRecorder`, posts it to `/api/transcribe`,
+and drops the returned transcript into the comment box. The command runs from the collection root with
+`CURIATOR_AUDIO`, `CURIATOR_GALLERY`, and `CURIATOR_COLLECTION_ROOT` in the environment. It can print
+plain transcript text or JSON:
+
+```yaml
+voice:
+  transcribe_cmd: "python scripts/transcribe.py {audio}"
+  transcribe_timeout: 60
+  transcribe_max_bytes: 26214400
+```
+
+```json
+{"text": "move the legend up", "segments": [{"start": 0.25, "end": 1.1, "text": "move the legend up"}]}
+```
+
+This is the private/default path: use a local Whisper or `whisper.cpp` wrapper for zero-egress review
+audio. Browser Web Speech is intentionally not used for private collections.
 
 ## 3. Work Interactively From An App Repo
 

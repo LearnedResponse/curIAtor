@@ -291,6 +291,12 @@ body {
   color: #777;
 }
 
+.rshell-button.secondary.active {
+  background: #f3f0fb;
+  border-color: #8e44ad;
+  color: #333;
+}
+
 .rshell-msg {
   min-height: 16px;
   font-size: 11px;
