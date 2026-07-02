@@ -95,6 +95,8 @@ def _load_config_from_path(path: str | Path, *, link: dict | None = None) -> dic
     auth.setdefault("mode", "none")              # none | header | oidc | local
     auth.setdefault("default_user", "anonymous@local")
     auth.setdefault("admin_groups", ["admin"])   # groups that may change agent settings (mode != none)
+    auth.setdefault("anonymous_feedback_max", 20)
+    auth.setdefault("anonymous_feedback_window_seconds", 86400)
     # local-login user store (hashed passwords) — resolved against the collection root; gitignored
     auth["users_file"] = str(Path(cfg["repo_root"]) / auth.get("users_file", ".curiator-users.json"))
     cfg["auth"] = auth

@@ -82,6 +82,20 @@ def test_allow_anonymous_feedback_only_for_explicit_login_gated_modes():
     assert auth.anonymous_user() == {"id": "anonymous", "email": "anonymous", "name": "anonymous", "groups": []}
 
 
+def test_anonymous_feedback_rate_limit_counts_per_key():
+    a = {"anonymous_feedback_max": 2, "anonymous_feedback_window_seconds": 60}
+    auth.clear_anonymous_feedback("1.2.3.4")
+    auth.clear_anonymous_feedback("5.6.7.8")
+    assert auth.anonymous_feedback_rate_limit_status(a, "1.2.3.4") == (False, 0)
+    auth.record_anonymous_feedback(a, "1.2.3.4")
+    auth.record_anonymous_feedback(a, "1.2.3.4")
+    blocked, retry = auth.anonymous_feedback_rate_limit_status(a, "1.2.3.4")
+    assert blocked is True and retry > 0
+    assert auth.anonymous_feedback_rate_limit_status(a, "5.6.7.8") == (False, 0)
+    auth.clear_anonymous_feedback("1.2.3.4")
+    assert auth.anonymous_feedback_rate_limit_status(a, "1.2.3.4") == (False, 0)
+
+
 def test_is_admin_open_in_none_group_gated_otherwise():
     assert auth.is_admin({"mode": "none"}, None) is True            # solo / your box → open
     assert auth.is_admin({}, None) is True                          # default mode is none

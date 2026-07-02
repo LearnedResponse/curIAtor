@@ -50,7 +50,8 @@ For personal/local use:
 For shared/team use:
 
 - Require sign-in with `auth.mode: local`, `header`, or `oidc`; if you allow logged-out public feedback
-  with `auth.allow_anonymous: true`, keep it in the enforced held queue.
+  with `auth.allow_anonymous: true`, keep it in the enforced held queue and leave the per-IP anonymous
+  submission limit enabled.
 - Use `agent.autonomy: propose-only` for feedback from broad groups.
 - Gate elevated profiles to trusted admin groups only.
 - Give the agent least-privilege credentials. Mount provider tokens read-only and avoid host-wide
@@ -108,4 +109,6 @@ If the feedback form is exposed to the public internet, use a queue plus human r
 `propose-only` by default. Do not let unauthenticated public comments trigger an autonomous agent with
 write access to a repo or credentials. The moderation primitives are the admin shell's `/queue` page
 and `curiator queue`: held feedback does not dispatch until an admin approves it (`held` → `new`), and
-rejected feedback closes as `rejected` with a ledger note.
+rejected feedback closes as `rejected` with a ledger note. Anonymous held intake is also throttled by
+`auth.anonymous_feedback_max` over `auth.anonymous_feedback_window_seconds`; this limits queue spam, it
+does not make public prompt input trusted.

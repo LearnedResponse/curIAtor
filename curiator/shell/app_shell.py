@@ -49,7 +49,7 @@ from pathlib import Path
 
 from dash import ALL, Dash, Input, Output, State, ctx, dcc, html, no_update
 from dash.dependencies import ClientsideFunction
-from flask import send_from_directory
+from flask import has_request_context, request, send_from_directory
 from werkzeug.middleware.dispatcher import DispatcherMiddleware  # noqa: F401 (kept for reference)
 
 HERE = Path(__file__).resolve().parent
@@ -514,13 +514,22 @@ def record_action(key, value, reply_to=None, user=None, status: str = "new"):
     return save_entry(key, None, str(value), None, user=user, reply_to=[reply_to] if reply_to else None, status=status)
 
 
-def _feedback_user_and_status() -> tuple[dict | None, str, str | None]:
+def _client_key() -> str:
+    return (request.remote_addr or "?") if has_request_context() else "cli"
+
+
+def _feedback_user_and_status(rate_limit_key: str | None = None) -> tuple[dict | None, str, str | None, int]:
     u = _current_user()
     if auth.login_required(REG.AUTH_CFG) and not u:
         if not auth.allow_anonymous_feedback(REG.AUTH_CFG):
-            return None, "new", "Sign in to leave feedback."
-        return auth.anonymous_user(), "held", None
-    return u, "new", None
+            return None, "new", "Sign in to leave feedback.", 401
+        key = rate_limit_key or _client_key()
+        blocked, retry = auth.anonymous_feedback_rate_limit_status(REG.AUTH_CFG, key)
+        if blocked:
+            return None, "new", f"Too many anonymous submissions. Try again in {retry}s.", 429
+        auth.record_anonymous_feedback(REG.AUTH_CFG, key)
+        return auth.anonymous_user(), "held", None, 0
+    return u, "new", None, 0
 
 
 def app_metrics(key):
@@ -1402,7 +1411,7 @@ def build_shell() -> Dash:
         hide = {"display": "none"}
         if not key:
             return "Select an app first.", errstyle, no_update, no_update, no_update, no_update, no_update, no_update, no_update
-        u, status, auth_error = _feedback_user_and_status()
+        u, status, auth_error, _code = _feedback_user_and_status()
         if auth_error:
             return (auth_error, errstyle, no_update, no_update, no_update,
                     no_update, no_update, no_update, no_update)
@@ -1505,7 +1514,7 @@ def build_shell() -> Dash:
         trig = ctx.triggered_id
         if not trig or not any(clicks or []):
             return no_update, no_update, no_update
-        u, status, auth_error = _feedback_user_and_status()
+        u, status, auth_error, _code = _feedback_user_and_status()
         if auth_error:
             return no_update, auth_error, {"fontSize": "11.5px", "color": "#c0392b"}
         entry = record_action(trig["key"], trig["value"], trig.get("reply_to"), user=u, status=status)
@@ -1520,9 +1529,9 @@ def build_shell() -> Dash:
         value = request.args.get("value")
         reply_to = request.args.get("reply_to")
         if key and value is not None:
-            u, status, auth_error = _feedback_user_and_status()
+            u, status, auth_error, code = _feedback_user_and_status()
             if auth_error:
-                return (auth_error, 401)
+                return (auth_error, code or 401)
             record_action(key, value, reply_to, user=u, status=status)
             return ("ok", 200)
         return ("missing key/value", 400)

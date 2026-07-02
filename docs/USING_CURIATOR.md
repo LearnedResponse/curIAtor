@@ -269,10 +269,15 @@ held anonymous intake:
 auth:
   mode: local          # or oidc
   allow_anonymous: true
+  anonymous_feedback_max: 20
+  anonymous_feedback_window_seconds: 86400
 ```
 
 Logged-out feedback is always saved as `held`; it will not wake the agent until an admin approves it
-from **Queue** or `curiator queue approve`. Logged-in users keep the normal `new` feedback path.
+from **Queue** or `curiator queue approve`. Logged-in users keep the normal `new` feedback path. The
+anonymous feedback limit is per client IP in the running shell process; set
+`anonymous_feedback_max: 0` only for a private, already-gated deployment where you intentionally want
+no anonymous submission throttle.
 
 ## 6. Run it in a container (one sandbox per collection)
 

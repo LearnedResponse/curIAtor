@@ -153,9 +153,10 @@ auth:
 
 
 def test_react_shell_allow_anonymous_feedback_is_held(collection, monkeypatch):
-    from curiator import ledger
+    from curiator import auth, ledger
     from curiator.config import load_config
 
+    auth.clear_anonymous_feedback("127.0.0.1")
     (collection / "gallery.yaml").write_text((collection / "gallery.yaml").read_text() + """
 auth:
   mode: local
@@ -184,6 +185,36 @@ auth:
 
     items = ledger.load(load_config())["sample"]
     assert [e["status"] for e in items if e.get("author") == "user"] == ["held", "held"]
+
+
+def test_react_shell_allow_anonymous_feedback_is_rate_limited(collection, monkeypatch):
+    from curiator import auth, ledger
+    from curiator.config import load_config
+
+    auth.clear_anonymous_feedback("127.0.0.1")
+    (collection / "gallery.yaml").write_text((collection / "gallery.yaml").read_text() + """
+auth:
+  mode: local
+  allow_anonymous: true
+  anonymous_feedback_max: 1
+  anonymous_feedback_window_seconds: 60
+  users_file: .curiator-users.json
+""")
+    mod = _load_web_mod(monkeypatch)
+    client = mod.build_flask_app().test_client()
+
+    first = client.post("/api/feedback/sample", json={"comment": "first public note"})
+    assert first.status_code == 200
+    assert first.get_json()["entry"]["status"] == "held"
+
+    second = client.post("/api/feedback/sample", json={"comment": "second public note"})
+    assert second.status_code == 429
+    assert "too many anonymous submissions" in second.get_json()["error"]
+
+    action = client.post("/api/action", json={"key": "sample", "value": "yes", "reply_to": first.get_json()["entry"]["id"]})
+    assert action.status_code == 429
+    items = ledger.load(load_config())["sample"]
+    assert [e["comment"] for e in items if e.get("author") == "user"] == ["first public note"]
 
 
 def test_react_shell_feedback_api_threads_replies(web_client):

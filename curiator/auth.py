@@ -102,6 +102,47 @@ def anonymous_user() -> dict:
     return _norm("anonymous", "", "anonymous", [])
 
 
+_ANON_FEEDBACK_HITS: dict = {}
+_ANON_FEEDBACK_LOCK = threading.Lock()
+
+
+def _anon_feedback_params(auth_cfg) -> tuple[int, float]:
+    a = auth_cfg or {}
+    maxn = int(a.get("anonymous_feedback_max", 20))
+    window = float(a.get("anonymous_feedback_window_seconds", 86400))
+    return maxn, window
+
+
+def anonymous_feedback_rate_limit_status(auth_cfg, key) -> tuple[bool, int]:
+    """(blocked, retry_after_seconds) for anonymous feedback submissions from a client key."""
+    maxn, window = _anon_feedback_params(auth_cfg)
+    if maxn <= 0 or window <= 0:
+        return False, 0
+    now = time.monotonic()
+    with _ANON_FEEDBACK_LOCK:
+        hits = [t for t in _ANON_FEEDBACK_HITS.get(key, []) if now - t < window]
+        _ANON_FEEDBACK_HITS[key] = hits
+        if len(hits) >= maxn:
+            return True, int(window - (now - hits[0])) + 1
+        return False, 0
+
+
+def record_anonymous_feedback(auth_cfg, key) -> None:
+    maxn, window = _anon_feedback_params(auth_cfg)
+    if maxn <= 0 or window <= 0:
+        return
+    now = time.monotonic()
+    with _ANON_FEEDBACK_LOCK:
+        hits = [t for t in _ANON_FEEDBACK_HITS.get(key, []) if now - t < window]
+        hits.append(now)
+        _ANON_FEEDBACK_HITS[key] = hits
+
+
+def clear_anonymous_feedback(key) -> None:
+    with _ANON_FEEDBACK_LOCK:
+        _ANON_FEEDBACK_HITS.pop(key, None)
+
+
 def is_admin(auth_cfg: dict, user: dict | None) -> bool:
     """May this user change gallery-wide settings (e.g. the agent provider / trust level)? In `none` mode
     there's no auth — it's your box, so yes. Otherwise the user's groups must intersect `auth.admin_groups`

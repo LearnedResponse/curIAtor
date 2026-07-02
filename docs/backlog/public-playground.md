@@ -2,7 +2,7 @@
 
 > **Status:** scoped 2026-07-01; phase-2 moderation primitive partly landed (`held` status,
 > `auth.allow_anonymous` held intake for `local`/`oidc`, admin `/queue` shell view, and
-> `curiator queue list|approve|reject` CLI). Sequences AFTER
+> `curiator queue list|approve|reject` CLI, with per-IP anonymous submission limits). Sequences AFTER
 > [public-release](public-release.md): the
 > static example repos are the pitch; this is the live complement — **a hosted public collection where
 > anyone can leave feedback and watch the curator work**, without handing an autonomous agent to the
@@ -49,7 +49,8 @@ OIDC mode — identity dedupe plus a free reputation prior), and the quota knobs
 **Phase 2 — anonymous + the held pool.** The full ladder below: anonymous browsing + feedback that is
 **always held** for human review, the moderation queue in the shell + `curiator queue` CLI, per-IP
 submission limits. Core moderation status, hosted anonymous-held intake for `local`/`oidc`, shell
-review view, and CLI are now present; per-IP limits and quota degradation still remain.
+review view, CLI, and per-IP anonymous submission limits are now present; account/global quota
+degradation still remains.
 
 ## Design (each piece lands on an existing seam)
 
@@ -75,9 +76,8 @@ review view, and CLI are now present; per-IP limits and quota degradation still 
    distinct from the existing `awaiting_approval` (which is the *agent* asking a human about a *plan*).
 4. **Admin operations** — `curiator revert` already exists (git-as-memory makes every run one
    revertible commit). `curiator user disable <email>` / `enable` now toggles a `disabled` flag in the
-   local store; header/OIDC revocation belongs to the IdP. Still to add for later anonymous phases:
-   per-IP submission rate limiting for anonymous feedback (same sliding-window pattern as the login
-   limiter).
+   local store; header/OIDC revocation belongs to the IdP. Per-IP submission rate limiting for
+   anonymous feedback is landed with the same in-memory sliding-window pattern as the login limiter.
 5. **Trust promotion** — v1 is manual: an admin adds an account to the trusted group
    (`curiator user add <email> --groups trusted` is already an upsert). v2 can *derive* "established"
    from the ledger — account age + accepted-fix count, which `curiator stats` already computes the
@@ -105,8 +105,8 @@ in phase 2 gets built until phase 0 has run with real invitees.
 ## Honest risks
 
 - **Moderation labor is the real cost.** The pool needs humans; for anonymous users the reply latency
-  *is* the reviewer, not the agent — say so in the UI ("queued for review"). Per-IP rate limits keep
-  the pool small enough to review daily.
+  *is* the reviewer, not the agent — say so in the UI ("queued for review"). Per-IP rate limits help
+  keep the pool reviewable, but a public deployment still needs monitoring and queue cleanup.
 - **Prompt injection doesn't vanish above the anonymous tier** — account feedback still reaches the
   agent. Quotas bound the blast rate; `auto-small`/`propose-only` + deny-lists bound the blast radius;
   the container bounds the box. Keep SECURITY.md's "mitigations, not a solved problem" framing.
