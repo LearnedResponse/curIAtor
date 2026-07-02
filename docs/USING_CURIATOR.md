@@ -183,8 +183,10 @@ curiator serve
 
 Open the gallery, **★ / 💬 / 📷** an app, optionally mark up the screenshot with boxes, arrows, pins,
 or redaction blocks, and the curator reads the note + screenshot + source, makes the fix (auto-small)
-or proposes a plan (propose-only), smoke-tests, reloads the app, and replies in the panel. Edits land
-**uncommitted** in your working tree for review — the curator never commits.
+or proposes a plan (propose-only), smoke-tests, reloads the app, and replies in the panel. By default,
+edits land **uncommitted** in your working tree for review. When `git.commit: true` is set, each
+accepted agent run becomes one git-as-memory commit that captures the source change, ledger update,
+and provenance trailers.
 The current screenshot path uses same-origin `html2canvas` with upload as the fallback; see
 [`SCREENSHOT_CAPTURE.md`](SCREENSHOT_CAPTURE.md) for fidelity, privacy, and native-capture options.
 Signed-in reviewers can also use the **Native** capture button for browser screen capture when

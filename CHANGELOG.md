@@ -147,6 +147,8 @@ All notable changes to curIAtor are documented here. The format follows
   `--strict-launch` rejects `TODO(release)` placeholders before publication.
 
 ### Fixed
+- `docs/USING_CURIATOR.md` no longer says the curator never commits; it now describes the current
+  default-uncommitted behavior plus `git.commit: true` git-as-memory commits.
 - `curiator commands install` now writes the Codex repo skill to `.agents/skills/curiator/SKILL.md`,
   matching current Codex skill discovery, while keeping Claude's `.claude/commands/curiator.md`;
   generated legacy `.codex/skills/curiator/SKILL.md` shims are cleaned up on reinstall.

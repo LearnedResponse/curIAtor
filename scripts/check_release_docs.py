@@ -82,6 +82,10 @@ def check_release_docs(root: Path = ROOT, *, strict_launch: bool = False) -> lis
 
     if "TODO(draft)" in paper_text:
         failures.append("docs/paper/curiator-paper.md still has TODO(draft) placeholders")
+    using = root / "docs" / "USING_CURIATOR.md"
+    using_text = using.read_text(encoding="utf-8") if using.exists() else ""
+    if "curator never commits" in using_text.lower():
+        failures.append("docs/USING_CURIATOR.md still says the curator never commits")
 
     if not demo_gif.exists():
         failures.append("docs/demo.gif missing; run make demo-gif or record the real browser demo before release")

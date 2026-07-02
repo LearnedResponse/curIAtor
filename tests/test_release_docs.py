@@ -66,6 +66,18 @@ def test_release_docs_detect_draft_paper_placeholders(tmp_path):
     assert "docs/paper/curiator-paper.md still has TODO(draft) placeholders" in failures
 
 
+def test_release_docs_rejects_stale_never_commits_claim(tmp_path):
+    module = _load_script()
+    _copy_release_doc_fixture(tmp_path)
+    (tmp_path / "docs" / "USING_CURIATOR.md").write_text(
+        "Edits land uncommitted in your working tree; the curator never commits.\n"
+    )
+
+    failures = module.check_release_docs(tmp_path)
+
+    assert "docs/USING_CURIATOR.md still says the curator never commits" in failures
+
+
 def test_release_docs_default_allows_release_paper_placeholders(tmp_path):
     module = _load_script()
     _copy_release_doc_fixture(tmp_path)
