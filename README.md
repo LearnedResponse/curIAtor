@@ -75,7 +75,7 @@ Coding agents can fix this stuff in seconds now — but they're wired to your *e
 
 ```bash
 pip install curiator
-curiator init my-collection      # scaffold a collection repo (gallery.yaml + apps/ + a sample app)
+curiator init my-collection --git # scaffold a collection repo (gallery.yaml + apps/ + a sample app)
 cd my-collection
 curiator app create orange_picker --template dash --title "Orange Picker"
 ```

@@ -16,7 +16,7 @@
     curiator demo-up    # reset-demo, then serve — one command, record-ready
     curiator demo       # print the demo walkthrough
     curiator stats      # summarize ledger + git-as-memory case-study numbers
-    curiator init <dir> # scaffold a fresh collection repo
+    curiator init <dir> # scaffold a fresh collection repo; add --git for a nested subrepo
 
 `up` and `watch` are two processes — run them in two terminals, or use `curiator serve` / `make demo`.
 """
@@ -1417,11 +1417,28 @@ def cmd_init(args) -> int:
             p.write_text(content)
             created.append(rel)
     (dest / "feedback" / "shots").mkdir(parents=True, exist_ok=True)
+
+    git_status = None
+    if args.git:
+        if (dest / ".git").exists():
+            git_status = "exists"
+        else:
+            result = subprocess.run(["git", "init", "-q"], cwd=dest, capture_output=True, text=True)
+            if result.returncode != 0:
+                detail = (result.stderr or result.stdout or f"git init exited {result.returncode}").strip()
+                print(f"curiator: git init failed for {dest}: {detail}")
+                return result.returncode or 1
+            git_status = "created"
+
     print(f"curiator: scaffolded a collection in {dest}")
     for f in created:
         print(f"  + {f}")
     for f in skipped:
         print(f"  · {f} (exists — left as-is)")
+    if git_status == "created":
+        print("  + .git/ (initialized)")
+    elif git_status == "exists":
+        print("  · .git/ (exists — left as-is)")
     print(f"\nnext:\n  cd {dest}\n  pip install -r requirements.txt\n"
           f"  curiator up        # gallery (then `curiator watch` in a second terminal, or `curiator serve`)")
     return 0
@@ -1645,7 +1662,9 @@ def main(argv=None) -> int:
     demo_up.add_argument("--legacy-dash-shell", action="store_true", help="serve the old Dash overlay shell")
     demo_up.set_defaults(func=cmd_demo_up)
     ip = sub.add_parser("init", help="scaffold a new collection repo in <dir>")
-    ip.add_argument("dir"); ip.set_defaults(func=cmd_init)
+    ip.add_argument("dir")
+    ip.add_argument("--git", action="store_true", help="initialize <dir> as its own git repository")
+    ip.set_defaults(func=cmd_init)
     lk = sub.add_parser("link", help="link this app repo/directory to a gallery app")
     lk.add_argument("--gallery", help="path to gallery.yaml")
     lk.add_argument("--app", help="app key in the gallery")

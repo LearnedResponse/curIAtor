@@ -23,7 +23,7 @@ feedback" is a pitch the OT crowd feels in their bones.
 
 ## Work-order
 
-1. **Scaffold `curiator-ot`** via `curiator init` — done: standalone collection, `runner.mode: pinned`
+1. **Scaffold `galleries/curiator-ot`** via `curiator init galleries/curiator-ot --git` — done: standalone collection, `runner.mode: pinned`
    for public-clone portability, **`git: {commit: true}`** (the build story is the deliverable),
    `auth:` set so operator feedback is
    attributed, and repo-local `.agents/skills/curiator/SKILL.md` / `.claude/commands/curiator.md`

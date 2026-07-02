@@ -55,7 +55,7 @@ feedback ledger has 12 apps with at least one 4+ star rating:
 
 ## Work-order
 
-1. `curiator init galleries/curiator-geometry` — done.
+1. `curiator init galleries/curiator-geometry --git` — done.
 2. Write the apps — numpy/plotly only, deterministic, no data files beyond generated ones — done for
    the first seven-app seed.
 3. `seed/feedback.yaml` authored as a mathematician-reviewer — done; the feedback must read like a colleague

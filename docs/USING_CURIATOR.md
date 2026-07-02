@@ -11,7 +11,7 @@ Your apps live in a separate **collection** repo: a `gallery.yaml` + an `apps/` 
 
 ```bash
 pip install curiator
-curiator init my-collection      # scaffolds gallery.yaml + apps/sample.py + requirements.txt + feedback/
+curiator init my-collection --git # scaffolds gallery.yaml + apps/sample.py + requirements.txt + feedback/
 cd my-collection
 ```
 
@@ -29,14 +29,24 @@ my-collection/
   README.md
 ```
 
-For dogfooding multiple collections next to the runner checkout, keep each collection as an
-independent nested repo under `galleries/`:
+For dogfooding multiple collections from a runner checkout, keep each collection as an independent
+nested repo under `galleries/`. This is the canonical local workspace shape: each collection keeps
+its own `.git/`, while the parent runner repo ignores `galleries/curiator-*/`, so agents launched
+from the runner checkout can edit collection code without needing write access outside the checkout.
 
 ```
 curiator/
   galleries/
     curiator-aviato/      # independent git repo, ignored by the parent runner repo
     curiator-ot/          # independent git repo
+```
+
+Create new dogfood collections in that shape from the start:
+
+```bash
+curiator init galleries/curiator-my-topic --git
+git -C galleries/curiator-my-topic add -A
+git -C galleries/curiator-my-topic commit -m "chore: initialize collection"
 ```
 
 From a nested gallery, use `runner: { mode: checkout, path: ../.. }` when ◆ General feedback should
@@ -148,7 +158,7 @@ curiator stats                 # human-readable ledger + git-as-memory summary
 curiator stats --json --app revenue
 curiator stats --markdown      # paper/release-note tables
 curiator stats --csv           # app-level spreadsheet/plotting rows
-curiator stats compare ../curiator-aviato ../curiator-ot ../curiator-geometry --markdown
+curiator stats compare galleries/curiator-aviato galleries/curiator-ot galleries/curiator-geometry --markdown
 ```
 
 Before moving or publishing a collection, run the portability preflight:
@@ -237,7 +247,7 @@ The curator **auto-edits and runs** your code, so the safety unit is **one conta
 that's the blast-radius boundary.
 
 ```bash
-curiator init collection         # scaffold the mounted collection (apps + gallery.yaml + ledger)
+curiator init collection --git   # scaffold the mounted collection (apps + gallery.yaml + ledger)
 docker compose up                # gallery at http://127.0.0.1:8300, watcher armed
 ```
 

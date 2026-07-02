@@ -48,8 +48,8 @@ server, no re-implementation.
 
 ## Work-order
 
-1. **Scaffold `curiator-phylogenetics`** via `curiator init` — standalone, **public-first**
-   collection, `runner.mode: checkout`, **`git: {commit: true}`** (the build story is
+1. **Scaffold `galleries/curiator-phylogenetics`** via `curiator init galleries/curiator-phylogenetics --git` —
+   standalone, **public-first** collection, `runner.mode: checkout`, **`git: {commit: true}`** (the build story is
    the deliverable), `auth:` set so a reviewer's feedback is attributed. Linked from the
    curiator README as the **public interactive-companion** demo. `LICENSE`: Apache-2.0.
 2. **Mount strategy (mixed).** Serve the Pyodide static panels via the already-proven
