@@ -2326,8 +2326,11 @@ def cmd_playground_preflight(args) -> int:
         print("curiator: playground-preflight --http-smoke requires smoke checks; remove --no-smoke")
         return 2
     payload = _playground_preflight_payload(args)
+    if args.output:
+        _write_json_artifact(payload, args.output)
     if args.json:
-        print(json.dumps(payload, indent=2))
+        if not args.output:
+            print(json.dumps(payload, indent=2))
         return 0 if payload["ok"] else 1
 
     status = "OK" if payload["ok"] else "FAILED"
@@ -3293,6 +3296,7 @@ def main(argv=None) -> int:
     pp.add_argument("--http-smoke", "--http", action="store_true", dest="http_smoke",
                     help="also start proxy apps briefly and verify configured HTTP smoke paths")
     pp.add_argument("--strict", action="store_true", help="fail when posture or doctor warnings are present")
+    pp.add_argument("--output", help="write the JSON preflight payload to a file")
     pp.add_argument("--json", action="store_true", help="emit machine-readable diagnostics")
     pp.set_defaults(func=cmd_playground_preflight)
     cx = sub.add_parser("context", help="print app context and recent feedback for interactive agents")

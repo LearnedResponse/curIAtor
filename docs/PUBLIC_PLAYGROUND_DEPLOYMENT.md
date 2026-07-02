@@ -29,6 +29,7 @@ curiator smoke
 curiator playground-preflight
 curiator playground-preflight --strict
 curiator playground-preflight --http-smoke
+curiator playground-preflight --strict --json --output release-evidence/playground-preflight.json
 ```
 
 For release collections from the runner checkout:
@@ -43,7 +44,8 @@ policy, dispatch quotas, and the current held queue count. It does not replace a
 backup-restore test. Use `--strict` for CI or the final pre-pilot check; it keeps warnings visible as
 warnings but makes any posture or doctor warning fail the command. Use `--http-smoke` when app
 dependencies are installed in the mounted collection and you want the gate to start proxy apps briefly
-and poll their configured HTTP smoke paths or default app URLs.
+and poll their configured HTTP smoke paths or default app URLs. Use `--output` to write the full JSON
+posture report under gitignored `release-evidence/` for pre-pilot review notes.
 
 ## 2. Gate feedback behind sign-in
 

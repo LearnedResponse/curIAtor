@@ -138,6 +138,7 @@ All notable changes to curIAtor are documented here. The format follows
   to a named artifact, so paper/release evidence snapshots do not depend on shell redirection.
 - `curiator release-preflight --output <path>` writes the JSON preflight payload to a named artifact,
   giving release and paper evidence a stable command-backed snapshot.
+- `curiator playground-preflight --output <path>` does the same for hosted-pilot posture checks.
 - `.zenodo.json` provides GitHub-Zenodo archive metadata, and
   `make release-prepare VERSION=... DATE=...` cuts release metadata by updating `pyproject.toml`,
   `CITATION.cff`, `.zenodo.json`, and the Keep-a-Changelog links in one tested step.

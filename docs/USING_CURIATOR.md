@@ -281,6 +281,7 @@ curiator release-preflight --include-optional --fresh-clone --strict  # add fina
 curiator playground-preflight  # hosted pilot posture: auth, quotas, queue, doctor, smoke
 curiator playground-preflight --http-smoke  # also start proxy apps when deps are installed
 curiator playground-preflight --strict  # fail on warnings for CI/final pre-pilot gates
+curiator playground-preflight --strict --json --output release-evidence/playground-preflight.json
 make release-prepare VERSION=0.2.0 DATE=2026-07-02  # updates package, citation, Zenodo, changelog
 ```
 

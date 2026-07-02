@@ -75,6 +75,87 @@ def test_playground_preflight_accepts_phase0_local_auth_config(collection, capsy
     assert payload["checks"] == {"smoke": True, "http_smoke": False}
 
 
+def test_playground_preflight_json_output_writes_evidence_file(collection, capsys, tmp_path):
+    from curiator import auth, cli
+
+    (collection / "gallery.yaml").write_text(textwrap.dedent("""\
+        apps:
+          - name: sample
+            title: Sample
+            mount: { kind: dash-inproc, module: sample }
+            source: apps/sample.py
+        runner:
+          mode: pinned
+        git:
+          commit: true
+        auth:
+          mode: local
+          users_file: .curiator-users.json
+          admin_groups: [admin]
+        agent:
+          autonomy: propose-only
+          dispatch:
+            trusted_groups: [trusted]
+          quotas:
+            per_user_daily: 3
+            global_daily: 25
+    """))
+    auth.save_users_file(
+        str(collection / ".curiator-users.json"),
+        {"admin@example.com": {"name": "Admin", "groups": ["admin"], "password_hash": "test-hash"}},
+    )
+    out_path = tmp_path / "evidence" / "playground-preflight.json"
+
+    assert cli.main(["playground-preflight", "--no-smoke", "--json", "--output", str(out_path)]) == 0
+
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert f"curiator: wrote {out_path}" in captured.err
+    payload = json.loads(out_path.read_text(encoding="utf-8"))
+    assert payload["ok"] is True
+    assert payload["checks"]["smoke"] is False
+    assert payload["auth"]["mode"] == "local"
+
+
+def test_playground_preflight_output_keeps_human_summary(collection, capsys, tmp_path):
+    from curiator import auth, cli
+
+    (collection / "gallery.yaml").write_text(textwrap.dedent("""\
+        apps:
+          - name: sample
+            title: Sample
+            mount: { kind: dash-inproc, module: sample }
+            source: apps/sample.py
+        runner:
+          mode: pinned
+        git:
+          commit: true
+        auth:
+          mode: local
+          users_file: .curiator-users.json
+          admin_groups: [admin]
+        agent:
+          autonomy: propose-only
+          dispatch:
+            trusted_groups: [trusted]
+          quotas:
+            per_user_daily: 3
+            global_daily: 25
+    """))
+    auth.save_users_file(
+        str(collection / ".curiator-users.json"),
+        {"admin@example.com": {"name": "Admin", "groups": ["admin"], "password_hash": "test-hash"}},
+    )
+    out_path = tmp_path / "evidence" / "playground-preflight.json"
+
+    assert cli.main(["playground-preflight", "--no-smoke", "--output", str(out_path)]) == 0
+
+    captured = capsys.readouterr()
+    assert "curiator: playground preflight OK" in captured.out
+    assert f"curiator: wrote {out_path}" in captured.err
+    assert json.loads(out_path.read_text(encoding="utf-8"))["user_store"]["admins"] == 1
+
+
 def test_playground_preflight_can_run_http_smoke(collection, monkeypatch, capsys):
     from curiator import auth, cli
 
