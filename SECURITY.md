@@ -121,4 +121,5 @@ does not make public prompt input trusted. For account-based public feedback, se
 `agent.quotas.per_user_daily` and `agent.quotas.global_daily`; the watcher degrades over-budget items
 to `held` before launching an agent. If you use `agent.dispatch.trusted_groups` for staff or sponsor
 accounts, treat it as a dispatch-budget setting only; elevated execution still belongs behind
-`agent.elevated.groups`.
+`agent.elevated.groups`. Before opening an invite-only hosted pilot, run `curiator playground-preflight`
+to check runner mode, auth, git-as-memory, quotas, held queue state, `doctor`, and `smoke` together.

@@ -76,6 +76,9 @@ All notable changes to curIAtor are documented here. The format follows
   dispatching it, `/queue` gives admins a shell review view, and
   `curiator queue list|approve|reject|sweep` lets headless admins review, release, close, or dry-run
   stale cleanup of held items with ledger audit notes.
+- `curiator playground-preflight` checks one collection's hosted public-playground posture by combining
+  doctor/smoke with runner/auth/git/user-store/anonymous-hold/quota/held-queue checks before an
+  invite-only pilot.
 - `auth.allow_anonymous: true` for `local`/`oidc` hosted galleries lets logged-out users leave feedback,
   but it is always recorded as `held`; logged-in users keep the normal dispatch path.
 - Anonymous hosted feedback is rate-limited per client IP with `auth.anonymous_feedback_max` and

@@ -1,0 +1,113 @@
+"""CLI playground preflight: hosted public-pilot posture checks."""
+from __future__ import annotations
+
+import json
+import textwrap
+
+
+def test_playground_preflight_fails_unsafe_collection_defaults(collection, capsys):
+    from curiator import cli
+
+    assert cli.main(["playground-preflight", "--no-smoke", "--json"]) == 1
+    payload = json.loads(capsys.readouterr().out)
+    messages = "\n".join(issue["message"] for issue in payload["issues"])
+    assert payload["ok"] is False
+    assert payload["runner"]["mode"] == "checkout"
+    assert "runner.mode: pinned" in messages
+    assert "auth.mode: local, header, or oidc" in messages
+    assert payload["smoke"]["ok"] is None
+
+
+def test_playground_preflight_accepts_phase0_local_auth_config(collection, capsys):
+    from curiator import auth, cli
+
+    (collection / "gallery.yaml").write_text(textwrap.dedent("""\
+        apps:
+          - name: sample
+            title: Sample
+            mount: { kind: dash-inproc, module: sample }
+            source: apps/sample.py
+            tags: [demo]
+        runner:
+          mode: pinned
+        git:
+          commit: true
+        auth:
+          mode: local
+          users_file: .curiator-users.json
+          admin_groups: [admin]
+          allow_anonymous: true
+        agent:
+          adapter: headless-cc
+          autonomy: propose-only
+          dispatch:
+            anonymous: hold
+            user: auto
+            trusted_groups: [trusted]
+          quotas:
+            per_user_daily: 3
+            global_daily: 25
+        feedback:
+          dir: feedback
+        shell:
+          port: 8399
+    """))
+    auth.save_users_file(
+        str(collection / ".curiator-users.json"),
+        {
+            "admin@example.com": {
+                "name": "Admin",
+                "groups": ["admin", "trusted"],
+                "password_hash": "test-hash",
+            }
+        },
+    )
+
+    assert cli.main(["playground-preflight", "--json"]) == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["ok"] is True
+    assert payload["auth"]["mode"] == "local"
+    assert payload["auth"]["allow_anonymous"] is True
+    assert payload["user_store"]["active"] == 1
+    assert payload["user_store"]["admins"] == 1
+    assert payload["doctor"]["ok"] is True
+    assert payload["smoke"]["ok"] is True
+
+
+def test_playground_preflight_rejects_anonymous_auto_dispatch(collection, capsys):
+    from curiator import auth, cli
+
+    (collection / "gallery.yaml").write_text(textwrap.dedent("""\
+        apps:
+          - name: sample
+            title: Sample
+            mount: { kind: dash-inproc, module: sample }
+            source: apps/sample.py
+        runner:
+          mode: pinned
+        git:
+          commit: true
+        auth:
+          mode: local
+          users_file: .curiator-users.json
+          admin_groups: [admin]
+          allow_anonymous: true
+        agent:
+          autonomy: propose-only
+          dispatch:
+            anonymous: auto
+            trusted_groups: [trusted]
+          quotas:
+            per_user_daily: 3
+            global_daily: 25
+    """))
+    auth.save_users_file(
+        str(collection / ".curiator-users.json"),
+        {"admin@example.com": {"name": "Admin", "groups": ["admin"], "password_hash": "test-hash"}},
+    )
+
+    assert cli.main(["playground-preflight", "--no-smoke", "--json"]) == 1
+    payload = json.loads(capsys.readouterr().out)
+    messages = "\n".join(issue["message"] for issue in payload["issues"])
+    assert payload["ok"] is False
+    assert "agent.dispatch.anonymous: hold" in messages

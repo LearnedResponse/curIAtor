@@ -15,6 +15,7 @@
     curiator galleries  # list nested curiator-* collection repos under ./galleries
     curiator galleries adopt ../curiator-demo # move an existing collection repo under ./galleries
     curiator release-preflight # run doctor/smoke/path checks across release galleries or fresh clones
+    curiator playground-preflight # check hosted public-playground posture
     curiator reset-demo # rewind the demo: re-break aviato, clear the ledger
     curiator demo-up    # reset-demo, then serve — one command, record-ready
     curiator demo       # print the demo walkthrough
@@ -1840,6 +1841,207 @@ def cmd_queue(args) -> int:
     return 0
 
 
+def _playground_issue(severity: str, where: str, message: str) -> dict:
+    return {"severity": severity, "where": where, "message": message}
+
+
+def _playground_int_value(raw) -> int | None:
+    if raw is None or raw == "":
+        return None
+    try:
+        value = int(raw)
+    except (TypeError, ValueError):
+        return None
+    return value if value >= 0 else None
+
+
+def _playground_user_summary(cfg: dict) -> dict:
+    from . import auth
+
+    auth_cfg = cfg.get("auth") or {}
+    users: dict = {}
+    if auth_cfg.get("mode") == "local":
+        users.update(auth.load_users_file(auth_cfg.get("users_file")))
+        for user in auth_cfg.get("users") or []:
+            email = user.get("email")
+            if email:
+                users[email] = user
+    admin_groups = set(auth_cfg.get("admin_groups") or ["admin"])
+    active = [u for u in users.values() if not u.get("disabled")]
+    return {
+        "users_file": auth_cfg.get("users_file"),
+        "total": len(users),
+        "active": len(active),
+        "disabled": sum(1 for u in users.values() if u.get("disabled")),
+        "admins": sum(1 for u in active if set(u.get("groups") or []) & admin_groups),
+    }
+
+
+def _playground_preflight_issues(cfg: dict, user_summary: dict) -> list[dict]:
+    issues: list[dict] = []
+    runner = cfg.get("runner") or {}
+    git = cfg.get("git") or {}
+    auth_cfg = cfg.get("auth") or {}
+    agent = cfg.get("agent") or {}
+    dispatch = agent.get("dispatch") or {}
+    quotas = agent.get("quotas") or {}
+
+    if runner.get("mode") != "pinned":
+        issues.append(_playground_issue(
+            "error",
+            "runner.mode",
+            "hosted playgrounds should run the released runner with runner.mode: pinned",
+        ))
+    if not git.get("commit"):
+        issues.append(_playground_issue(
+            "error",
+            "git.commit",
+            "hosted playgrounds need git.commit: true so every agent run has a revert handle",
+        ))
+
+    auth_mode = auth_cfg.get("mode", "none")
+    if auth_mode not in {"local", "header", "oidc"}:
+        issues.append(_playground_issue(
+            "error",
+            "auth.mode",
+            "hosted playgrounds must require sign-in with auth.mode: local, header, or oidc",
+        ))
+    if auth_mode == "local":
+        if user_summary["active"] == 0:
+            issues.append(_playground_issue(
+                "error",
+                "auth.users",
+                "local-auth playgrounds need at least one active invited user",
+            ))
+        if user_summary["admins"] == 0:
+            issues.append(_playground_issue(
+                "error",
+                "auth.admin_groups",
+                "local-auth playgrounds need at least one active user in auth.admin_groups",
+            ))
+
+    if auth_cfg.get("allow_anonymous"):
+        if auth_mode not in {"local", "oidc"}:
+            issues.append(_playground_issue(
+                "error",
+                "auth.allow_anonymous",
+                "anonymous held feedback is only supported with auth.mode: local or oidc",
+            ))
+        if dispatch.get("anonymous") != "hold":
+            issues.append(_playground_issue(
+                "error",
+                "agent.dispatch.anonymous",
+                "anonymous public feedback must be explicitly held with agent.dispatch.anonymous: hold",
+            ))
+        maxn = _playground_int_value(auth_cfg.get("anonymous_feedback_max"))
+        window = _playground_int_value(auth_cfg.get("anonymous_feedback_window_seconds"))
+        if maxn is None or maxn <= 0 or window is None or window <= 0:
+            issues.append(_playground_issue(
+                "error",
+                "auth.anonymous_feedback_max",
+                "anonymous feedback rate limits must stay enabled for public intake",
+            ))
+
+    if agent.get("autonomy") != "propose-only":
+        issues.append(_playground_issue(
+            "warning",
+            "agent.autonomy",
+            "first hosted pilots should prefer agent.autonomy: propose-only unless the collection is intentionally low-risk",
+        ))
+    if _playground_int_value(quotas.get("per_user_daily")) is None:
+        issues.append(_playground_issue(
+            "warning",
+            "agent.quotas.per_user_daily",
+            "set a per-user daily dispatch quota before widening the invite list",
+        ))
+    if _playground_int_value(quotas.get("global_daily")) is None:
+        issues.append(_playground_issue(
+            "warning",
+            "agent.quotas.global_daily",
+            "set a global daily dispatch quota as the hosted cost ceiling",
+        ))
+    if not dispatch.get("trusted_groups"):
+        issues.append(_playground_issue(
+            "warning",
+            "agent.dispatch.trusted_groups",
+            "declare trusted_groups explicitly if any accounts should bypass per-user quotas",
+        ))
+    return issues
+
+
+def _playground_preflight_payload(args) -> dict:
+    cfg = load_config()
+    user_summary = _playground_user_summary(cfg)
+    issues = _playground_preflight_issues(cfg, user_summary)
+    doctor_issues = _doctor_issues(cfg)
+    doctor_errors = [i for i in doctor_issues if i.get("severity") == "error"]
+    doctor_warnings = [i for i in doctor_issues if i.get("severity") == "warning"]
+    smoke = {"ok": None, "results": []}
+    if not args.no_smoke:
+        results = _smoke_results(cfg)
+        smoke = {"ok": all(r["ok"] for r in results), "results": results}
+    held = [_queue_row_payload(key, entry) for key, entry in _queue_entries(cfg)]
+    errors = [i for i in issues if i.get("severity") == "error"]
+    return {
+        "ok": not errors and not doctor_errors and (args.no_smoke or smoke["ok"] is True),
+        "gallery": cfg.get("gallery_path"),
+        "auth": {
+            "mode": (cfg.get("auth") or {}).get("mode"),
+            "allow_anonymous": bool((cfg.get("auth") or {}).get("allow_anonymous")),
+            "admin_groups": (cfg.get("auth") or {}).get("admin_groups") or [],
+        },
+        "runner": {"mode": (cfg.get("runner") or {}).get("mode")},
+        "git": {"commit": bool((cfg.get("git") or {}).get("commit"))},
+        "agent": {
+            "autonomy": (cfg.get("agent") or {}).get("autonomy"),
+            "dispatch": (cfg.get("agent") or {}).get("dispatch") or {},
+            "quotas": (cfg.get("agent") or {}).get("quotas") or {},
+        },
+        "user_store": user_summary,
+        "held_queue": {"count": len(held), "rows": held},
+        "issues": issues,
+        "doctor": {
+            "ok": not doctor_errors,
+            "errors": len(doctor_errors),
+            "warnings": len(doctor_warnings),
+            "issues": doctor_issues,
+        },
+        "smoke": smoke,
+    }
+
+
+def cmd_playground_preflight(args) -> int:
+    """Check one collection's hosted public-playground posture before an invite-only pilot."""
+    payload = _playground_preflight_payload(args)
+    if args.json:
+        print(json.dumps(payload, indent=2))
+        return 0 if payload["ok"] else 1
+
+    status = "OK" if payload["ok"] else "FAILED"
+    smoke = payload["smoke"]
+    smoke_results = smoke.get("results") or []
+    smoke_label = "skipped" if smoke.get("ok") is None else f"{sum(1 for r in smoke_results if r['ok'])}/{len(smoke_results)}"
+    print(f"curiator: playground preflight {status}")
+    print(
+        f"  auth={payload['auth']['mode']} anonymous={payload['auth']['allow_anonymous']} "
+        f"runner={payload['runner']['mode']} git.commit={payload['git']['commit']} "
+        f"held={payload['held_queue']['count']}"
+    )
+    print(
+        f"  doctor={payload['doctor']['errors']}e/{payload['doctor']['warnings']}w "
+        f"smoke={smoke_label} users={payload['user_store']['active']} active/"
+        f"{payload['user_store']['admins']} admin"
+    )
+    for issue in payload["issues"]:
+        print(f"  {issue['severity'].upper()} {issue['where']}: {issue['message']}")
+    for issue in payload["doctor"]["issues"]:
+        print(f"  doctor {issue['severity'].upper()} {issue['where']}: {issue['message']}")
+    for r in smoke_results:
+        if not r["ok"]:
+            print(f"  smoke FAIL {r['app']}: {r['message']}")
+    return 0 if payload["ok"] else 1
+
+
 def _fmt_seconds(seconds) -> str:
     if seconds is None:
         return "n/a"
@@ -2509,6 +2711,10 @@ def main(argv=None) -> int:
     rp.add_argument("--no-smoke", action="store_true", help="skip per-app smoke checks")
     rp.add_argument("--json", action="store_true", help="emit machine-readable diagnostics")
     rp.set_defaults(func=cmd_release_preflight)
+    pp = sub.add_parser("playground-preflight", help="check hosted public-playground readiness")
+    pp.add_argument("--no-smoke", action="store_true", help="skip per-app smoke checks")
+    pp.add_argument("--json", action="store_true", help="emit machine-readable diagnostics")
+    pp.set_defaults(func=cmd_playground_preflight)
     cx = sub.add_parser("context", help="print app context and recent feedback for interactive agents")
     cx.add_argument("--app", help="override linked/current app")
     cx.add_argument("--limit", type=int, default=8)

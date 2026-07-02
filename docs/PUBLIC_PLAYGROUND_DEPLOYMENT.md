@@ -26,6 +26,7 @@ Before deployment:
 ```bash
 curiator doctor
 curiator smoke
+curiator playground-preflight
 ```
 
 For release collections from the runner checkout:
@@ -33,6 +34,11 @@ For release collections from the runner checkout:
 ```bash
 curiator release-preflight --gallery curiator-geometry --fresh-clone
 ```
+
+`curiator playground-preflight` is the hosted-posture gate: it combines `doctor`/`smoke` with checks
+for `runner.mode: pinned`, `git.commit: true`, sign-in, local invite/admin readiness, anonymous-held
+policy, dispatch quotas, and the current held queue count. It does not replace a real hosted pilot or
+backup-restore test.
 
 ## 2. Gate feedback behind sign-in
 
@@ -171,6 +177,7 @@ Weekly:
 ```bash
 CURIATOR_GALLERY=/collection/gallery.yaml curiator stats --markdown
 CURIATOR_GALLERY=/collection/gallery.yaml curiator smoke
+CURIATOR_GALLERY=/collection/gallery.yaml curiator playground-preflight
 CURIATOR_GALLERY=/collection/gallery.yaml curiator queue sweep --older-than 30
 ```
 

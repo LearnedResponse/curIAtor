@@ -12,7 +12,8 @@
 > review for unauthenticated feedback), now backed by the runner's held queue and dispatch quotas.
 > **Rollout starts velvet-gated (2026-07-01):** an invite-only hosted collection needs ~zero new runner
 > features — `auth.mode: local|oidc` already gates feedback behind login, and the invite list is both
-> the rate limit and the trust vetting. A phase-0 deployment runbook now exists in
+> the rate limit and the trust vetting. A phase-0 deployment runbook and `curiator playground-preflight`
+> posture gate now exist in
 > [`docs/PUBLIC_PLAYGROUND_DEPLOYMENT.md`](../PUBLIC_PLAYGROUND_DEPLOYMENT.md); the actual hosted pilot
 > remains to run. The anonymous tier + held pool is a later phase, built only after the velvet phase
 > teaches us what hosted moderation actually costs.
@@ -42,7 +43,8 @@ behind login (`auth.mode: local`, accounts created per invite with `curiator use
 password management). Everyone inside the rope is effectively the "account" tier; the invite list *is*
 the rate limit, the vetting, and the abuse policy. `curiator user disable|enable` now gives local-login
 deployments a non-destructive revocation lever, and the deployment runbook now spells out the container,
-TLS reverse proxy, mounted-state backups, and weekly `curiator stats` checks. Remaining phase-0 work is
+TLS reverse proxy, mounted-state backups, weekly `curiator stats` checks, and
+`curiator playground-preflight` for runner/auth/git/queue/quota posture. Remaining phase-0 work is
 actually running the hosted pilot. **What it answers before phase 1:** real hosting cost per
 feedback→fix cycle, how often reverts are actually needed, and whether strangers' feedback breaks the
 task-bundle assumptions.
