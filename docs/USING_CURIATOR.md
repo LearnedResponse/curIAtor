@@ -157,6 +157,12 @@ curiator release-preflight     # from a runner checkout: checks nested public ga
 curiator release-preflight --fresh-clone
 ```
 
+For the runner's own release gate, use the combined local check:
+
+```bash
+make release-check
+```
+
 ## 4. Two install profiles
 
 | profile | install | `gallery.yaml` | who |

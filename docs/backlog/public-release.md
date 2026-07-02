@@ -19,8 +19,10 @@ leave feedback → watch the fix land and the ⚙ reply arrive. Every item below
 1. **Ship v0.2.0** — cut the Unreleased CHANGELOG batch (overlay shell, SQLite ledger, proxy mounts,
    app scaffolds, run traces, the interactive `link`/`work`/`done` workflow) as a tagged GitHub
    release. The release workflow builds/attaches artifacts and has a PyPI trusted-publishing job with
-   a tag-vs-`pyproject.toml` version guard; remaining external setup is configuring the PyPI Trusted
-   Publisher, then bumping `pyproject.toml` / `CITATION.cff` and pushing the matching `v0.2.0` tag.
+   a tag-vs-`pyproject.toml` version guard; `make release-check` now runs the local gate (lint, tests,
+   public-gallery fresh-clone preflight, demo GIF regeneration, package build, and `twine check`).
+   Remaining external setup is configuring the PyPI Trusted Publisher, then bumping `pyproject.toml` /
+   `CITATION.cff` and pushing the matching `v0.2.0` tag.
 2. **The hero `docs/demo.gif`** (absorbs the old M3) — the README now has a committed generated
    storyboard at this path (`make demo-gif`), so the launch page no longer has a broken image.
    Before release, replace it with the real take per `docs/DEMO_SCRIPT.md`: feedback on the broken

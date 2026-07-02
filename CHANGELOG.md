@@ -53,6 +53,8 @@ All notable changes to curIAtor are documented here. The format follows
   whose `vX.Y.Z` does not match `pyproject.toml`.
 - CI now builds the sdist/wheel and runs `twine check`, so package metadata regressions are caught
   before a release tag is pushed.
+- `make release-check` runs the local release gate: lint, tests, public-gallery fresh-clone preflight,
+  demo GIF regeneration, package build, and `twine check`.
 
 ### Fixed
 - `curiator commands install` now writes the Codex repo skill to `.agents/skills/curiator/SKILL.md`,
