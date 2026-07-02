@@ -87,7 +87,7 @@ leave feedback → watch the fix land and the ⚙ reply arrive. Every item below
    minimum release set unless scope expands. On 2026-07-02,
    `curiator release-preflight --include-optional --fresh-clone --strict --require-public-remotes
    --require-published-head --require-runner-public-remote --require-runner-published-head --no-smoke`
-   passed for all five public-shaped galleries plus the runner at `955a488`: required
+   passed for all five public-shaped galleries plus the published runner branch: required
    `curiator-aviato@3719ac9`, `curiator-ot@36e21cf`, `curiator-geometry@30bb155`, plus optional
    `curiator-finance@d6270bd` and `curiator-phylogenetics@b1b3586`.
 5. **SECURITY.md — reviewed against current defaults; re-read once at release cut.** The product auto-runs a coding agent against
