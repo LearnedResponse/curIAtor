@@ -237,6 +237,8 @@ curiator records *who* gave each piece of feedback — it lands on the ledger en
 # gallery.yaml →  auth: { mode: local }
 curiator user add alice@example.com --name Alice    # prompts for a password (or pass --password)
 curiator user list
+curiator user disable alice@example.com             # revoke without deleting the account record
+curiator user enable alice@example.com
 curiator up        # click the account corner (top-right) → "Log in" → the built-in form
 ```
 

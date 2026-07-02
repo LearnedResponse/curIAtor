@@ -1372,10 +1372,20 @@ def cmd_user(args) -> int:
         if not users:
             print("curiator: no local users yet — `curiator user add <email>`")
         for email, u in sorted(users.items()):
-            print(f"  {email}  ·  {u.get('name') or '—'}  ·  groups={u.get('groups') or []}")
+            state = "disabled" if u.get("disabled") else "active"
+            print(f"  {email}  ·  {u.get('name') or '—'}  ·  groups={u.get('groups') or []}  ·  {state}")
         return 0
     if not args.email:
         print(f"curiator: `user {args.action}` needs an <email>"); return 1
+    if args.action in {"disable", "enable"}:
+        existing = users.get(args.email)
+        if not existing:
+            print(f"curiator: no such user {args.email}"); return 1
+        existing["disabled"] = args.action == "disable"
+        users[args.email] = existing
+        auth.save_users_file(users_file, users)
+        print(f"curiator: {args.action}d {args.email}")
+        return 0
     if args.action == "remove":
         if users.pop(args.email, None) is None:
             print(f"curiator: no such user {args.email}"); return 1
@@ -1402,6 +1412,8 @@ def cmd_user(args) -> int:
         groups = ([g.strip() for g in args.groups.split(",") if g.strip()]
                   if args.groups is not None else (existing.get("groups") or []))
         rec = {"name": name, "groups": groups, "password_hash": generate_password_hash(pw)}
+        if existing.get("disabled"):
+            rec["disabled"] = True
     users[args.email] = rec
     auth.save_users_file(users_file, users)
     verb = "changed password for" if args.action == "passwd" else ("updated" if existing else "added")
@@ -1849,8 +1861,8 @@ def main(argv=None) -> int:
     fb.add_argument("--limit", type=int, default=20)
     fb.set_defaults(func=cmd_feedback)
     us = sub.add_parser("user", help="manage local-login users (auth.mode: local)")
-    us.add_argument("action", choices=["add", "passwd", "list", "remove"],
-                    help="add (upsert, keeps name/groups) · passwd (change only the password) · list · remove")
+    us.add_argument("action", choices=["add", "passwd", "list", "disable", "enable", "remove"],
+                    help="add/upsert · passwd · list · disable · enable · remove")
     us.add_argument("email", nargs="?")
     us.add_argument("--name"); us.add_argument("--groups", help="comma-separated")
     us.add_argument("--password", help="non-interactive password (otherwise prompted)")

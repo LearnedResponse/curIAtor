@@ -32,9 +32,10 @@ runner today; what's missing is the bottom of the ladder (anonymous-but-held) an
 behind login (`auth.mode: local`, accounts created per invite with `curiator user add` — or
 `auth.mode: header` behind oauth2-proxy with an email/org allowlist, which is a velvet rope with zero
 password management). Everyone inside the rope is effectively the "account" tier; the invite list *is*
-the rate limit, the vetting, and the abuse policy. New work is deployment, not features: a container +
-TLS reverse proxy, ledger/shots backups, `curiator user disable` for revocation, and someone watching
-`curiator stats` weekly. **What it answers before phase 1:** real hosting cost per feedback→fix cycle,
+the rate limit, the vetting, and the abuse policy. `curiator user disable|enable` now gives local-login
+deployments a non-destructive revocation lever. Remaining phase-0 work is deployment: a container +
+TLS reverse proxy, ledger/shots backups, and someone watching `curiator stats` weekly. **What it
+answers before phase 1:** real hosting cost per feedback→fix cycle,
 how often reverts are actually needed, and whether strangers' feedback breaks the task-bundle
 assumptions.
 
@@ -70,9 +71,10 @@ submission limits. Only now does the runner need the `held` status and dispatch 
    works headless too. Approval is admission control, distinct from the existing `awaiting_approval`
    (which is the *agent* asking a human about a *plan*).
 4. **Admin operations** — `curiator revert` already exists (git-as-memory makes every run one
-   revertible commit). Add: `curiator user disable <email>` (a `disabled` flag in the local store;
-   header/OIDC revocation belongs to the IdP) and per-IP submission rate limiting for anonymous
-   feedback (same sliding-window pattern as the login limiter).
+   revertible commit). `curiator user disable <email>` / `enable` now toggles a `disabled` flag in the
+   local store; header/OIDC revocation belongs to the IdP. Still to add for later anonymous phases:
+   per-IP submission rate limiting for anonymous feedback (same sliding-window pattern as the login
+   limiter).
 5. **Trust promotion** — v1 is manual: an admin adds an account to the trusted group
    (`curiator user add <email> --groups trusted` is already an upsert). v2 can *derive* "established"
    from the ledger — account age + accepted-fix count, which `curiator stats` already computes the

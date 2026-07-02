@@ -52,6 +52,8 @@ All notable changes to curIAtor are documented here. The format follows
   `scripts/render_demo_gif.py` to regenerate it until the final live browser recording replaces it.
 - `SECURITY.md` documents the prompt-injection caveat, collection-level containment boundary, autonomy
   defaults, elevated-run risks, and data-handling expectations for ledgers/screenshots/traces.
+- Local-login accounts can be disabled and re-enabled without deleting the account record, giving
+  velvet-gated hosted collections a revocation lever.
 - `docs/SCREENSHOT_CAPTURE.md` documents the current same-origin `html2canvas` capture path, upload
   fallback, and native/server-side capture tradeoffs.
 - `CITATION.cff` provides machine-readable software citation metadata for GitHub and Zenodo.

@@ -123,6 +123,23 @@ def test_local_users_file_roundtrip(tmp_path):
     assert auth.verify_local(a, "u@x.io", "wrong") is None
 
 
+def test_local_disabled_user_cannot_login_or_keep_session(tmp_path):
+    from werkzeug.security import generate_password_hash
+
+    f = tmp_path / "users.json"
+    auth.save_users_file(str(f), {"u@x.io": {"name": "U", "groups": ["trusted"],
+                                             "password_hash": generate_password_hash("s3cret"),
+                                             "disabled": True}})
+    a = {"mode": "local", "users_file": str(f)}
+    assert auth.verify_local(a, "u@x.io", "s3cret") is None
+
+    app = flask.Flask(__name__); app.secret_key = "t"
+    with app.test_request_context():
+        flask.session[auth.SESSION_KEY] = {"id": "u@x.io", "email": "u@x.io", "name": "U", "groups": ["trusted"]}
+        assert auth.current_user(a) is None
+        assert auth.SESSION_KEY not in flask.session
+
+
 def test_cmd_user_add_hashes_and_verifies(cfg):
     import argparse
 
@@ -164,6 +181,26 @@ def test_cmd_user_passwd_changes_only_password(cfg):
     # passwd on a non-existent user fails (doesn't create one)
     assert cmd_user(argparse.Namespace(action="passwd", email="ghost@x.io",
                                        name=None, groups=None, password="x")) == 1
+
+
+def test_cmd_user_disable_enable_preserves_record(cfg, capsys):
+    import argparse
+
+    from curiator.cli import cmd_user
+    a = {"mode": "local", "users_file": cfg["auth"]["users_file"]}
+    cmd_user(argparse.Namespace(action="add", email="cy@x.io", name="Cy", groups="trusted", password="pw"))
+
+    assert cmd_user(argparse.Namespace(action="disable", email="cy@x.io",
+                                       name=None, groups=None, password=None)) == 0
+    assert auth.verify_local(a, "cy@x.io", "pw") is None
+    cmd_user(argparse.Namespace(action="list", email=None, name=None, groups=None, password=None))
+    out = capsys.readouterr().out
+    assert "cy@x.io" in out and "disabled" in out
+
+    assert cmd_user(argparse.Namespace(action="enable", email="cy@x.io",
+                                       name=None, groups=None, password=None)) == 0
+    u = auth.verify_local(a, "cy@x.io", "pw")
+    assert u and u["name"] == "Cy" and u["groups"] == ["trusted"]
 
 
 def test_login_rate_limit_locks_then_clears():

@@ -65,8 +65,17 @@ def current_user(auth_cfg: dict) -> dict | None:
         return None
     if mode == "header":
         return _from_headers(a)
-    if mode in ("oidc", "local"):
-        return session.get(SESSION_KEY)                   # set on a successful login (OIDC callback / local form)
+    if mode == "oidc":
+        return session.get(SESSION_KEY)                   # set on a successful OIDC callback
+    if mode == "local":
+        u = session.get(SESSION_KEY)                      # set on a successful local form login
+        if not u:
+            return None
+        rec = _local_users(a).get(u.get("email") or u.get("id"))
+        if not rec or rec.get("disabled"):
+            session.pop(SESSION_KEY, None)
+            return None
+        return u
     return None
 
 
@@ -98,7 +107,7 @@ def stamp(user: dict | None) -> dict | None:
 
 # ─────────────────────────── local login (built-in, for self-hosted installs) ───────────────────────────
 def load_users_file(path: str | None) -> dict:
-    """The local user store: {email: {name, password_hash, groups}}. Empty if absent/unreadable."""
+    """The local user store: {email: {name, password_hash, groups, disabled?}}. Empty if absent/unreadable."""
     if not path or not Path(path).exists():
         return {}
     try:
@@ -131,6 +140,8 @@ def verify_local(auth_cfg: dict, email: str, password: str) -> dict | None:
     """Check email + password against the local store. Returns the user (no hash), or None."""
     from werkzeug.security import check_password_hash
     rec = _local_users(auth_cfg).get((email or "").strip())
+    if rec and rec.get("disabled"):
+        return None
     if not (rec and rec.get("password_hash") and password):
         return None
     if not check_password_hash(rec["password_hash"], password):
