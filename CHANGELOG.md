@@ -69,6 +69,9 @@ All notable changes to curIAtor are documented here. The format follows
   those checks from temporary clones of the committed gallery histories.
 - `curiator galleries` lists nested `galleries/curiator-*` collection repos with git head, dirty state,
   and the `CURIATOR_GALLERY=...` command for targeting one from the runner checkout.
+- `curiator galleries clone <repo>` clones public/example collection repos directly into the nested
+  `galleries/` workspace, refusing non-gallery clones and preserving each collection's independent git
+  history.
 - `curiator galleries adopt <repo>` moves or copies an existing sibling collection repo under
   `galleries/` while preserving its `.git` history and rewriting the safe checkout-runner path to the
   nested `../..` form.

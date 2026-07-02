@@ -156,3 +156,78 @@ def test_galleries_adopt_refuses_existing_destination(tmp_path, monkeypatch, cap
     assert payload["ok"] is False
     assert "destination already exists" in payload["error"]
     assert source.exists()
+
+
+def test_galleries_clone_git_url_into_nested_workspace(tmp_path, monkeypatch, capsys):
+    from curiator import cli
+
+    source = _make_gallery(tmp_path / "remote", name="curiator-remote")
+    project = tmp_path / "curiator"
+    project.mkdir()
+    monkeypatch.chdir(project)
+    monkeypatch.delenv("CURIATOR_GALLERY", raising=False)
+
+    assert cli.main(["galleries", "clone", source.as_uri(), "--json"]) == 0
+    payload = json.loads(capsys.readouterr().out)
+
+    dest = project / "galleries" / "curiator-remote"
+    assert payload["ok"] is True
+    assert payload["action"] == "clone"
+    assert payload["destination"] == str(dest.resolve())
+    assert payload["runner_rewrites"] == []
+    assert source.exists()
+    assert (dest / ".git").exists()
+    assert (dest / "gallery.yaml").exists()
+
+    assert cli.main(["galleries", "--json"]) == 0
+    listed = json.loads(capsys.readouterr().out)
+    assert [g["name"] for g in listed["galleries"]] == ["curiator-remote"]
+
+
+def test_galleries_clone_local_repo_can_rewrite_runner_path(tmp_path, monkeypatch, capsys):
+    from curiator import cli
+
+    project = tmp_path / "curiator"
+    project.mkdir()
+    source = _make_sibling_gallery(tmp_path, project)
+    monkeypatch.chdir(project)
+    monkeypatch.delenv("CURIATOR_GALLERY", raising=False)
+
+    assert cli.main(["galleries", "clone", str(source), "--json"]) == 0
+    payload = json.loads(capsys.readouterr().out)
+
+    dest = project / "galleries" / "curiator-demo"
+    assert payload["ok"] is True
+    assert payload["runner_rewrites"] == [{
+        "field": "runner.path",
+        "from": f"../{project.name}",
+        "to": "../..",
+        "reason": "source runner.path resolved to this curIAtor checkout before adoption",
+    }]
+    assert source.exists()
+    assert yaml.safe_load((source / "gallery.yaml").read_text())["runner"]["path"] == f"../{project.name}"
+    assert yaml.safe_load((dest / "gallery.yaml").read_text())["runner"] == {"mode": "checkout", "path": "../.."}
+
+
+def test_galleries_clone_rejects_non_gallery_and_cleans_destination(tmp_path, monkeypatch, capsys):
+    from curiator import cli
+
+    source = tmp_path / "not-gallery"
+    source.mkdir()
+    (source / "README.md").write_text("# not a curIAtor gallery\n")
+    _git(source, "init", "-q")
+    _git(source, "config", "user.name", "Test Curator")
+    _git(source, "config", "user.email", "curator@test.local")
+    _git(source, "add", "-A")
+    _git(source, "commit", "-q", "-m", "init")
+    project = tmp_path / "curiator"
+    project.mkdir()
+    monkeypatch.chdir(project)
+    monkeypatch.delenv("CURIATOR_GALLERY", raising=False)
+
+    assert cli.main(["galleries", "clone", source.as_uri(), "--name", "broken", "--json"]) == 1
+    payload = json.loads(capsys.readouterr().out)
+
+    assert payload["ok"] is False
+    assert "missing gallery.yaml" in payload["error"]
+    assert not (project / "galleries" / "curiator-broken").exists()

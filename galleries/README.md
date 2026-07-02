@@ -41,15 +41,22 @@ git -C galleries/curiator-my-topic add -A
 git -C galleries/curiator-my-topic commit -m "chore: initialize collection"
 ```
 
+Clone an existing collection repo into this workspace with:
+
+```bash
+curiator galleries clone https://github.com/LearnedResponse/curiator-geometry.git
+```
+
 Adopt an existing sibling collection repo into this workspace with:
 
 ```bash
 curiator galleries adopt ../curiator-my-topic
 ```
 
-This moves the repo under `galleries/` while preserving its `.git` history and rewrites the safe
-sibling-checkout runner path (`../curiator`) to the nested checkout path (`../..`). Use `--copy` for a
-trial migration that leaves the sibling repo in place.
+`galleries clone` uses `git clone` and refuses clones that do not contain `gallery.yaml`. `galleries
+adopt` moves the repo under `galleries/` while preserving its `.git` history and rewrites the safe
+sibling-checkout runner path (`../curiator`) to the nested checkout path (`../..`). Use `adopt --copy`
+for a trial migration that leaves the sibling repo in place.
 
 Before publishing or moving the public examples, run:
 
