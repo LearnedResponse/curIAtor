@@ -46,6 +46,13 @@ def replace_project_version(text: str, version: str) -> str:
     raise ReleasePrepareError("pyproject.toml is missing [project] version")
 
 
+def replace_init_version(text: str, version: str) -> str:
+    text, count = re.subn(r'^__version__ = ".*"$', f'__version__ = "{version}"', text, count=1, flags=re.MULTILINE)
+    if count != 1:
+        raise ReleasePrepareError("curiator/__init__.py is missing __version__")
+    return text
+
+
 def replace_citation_metadata(text: str, version: str, release_date: str) -> str:
     text, version_count = re.subn(r'^version: ".*"$', f'version: "{version}"', text, count=1, flags=re.MULTILINE)
     text, date_count = re.subn(
@@ -107,13 +114,15 @@ def prepare_release(root: Path, version: str, release_date: str, *, write: bool 
     release_date = validate_date(release_date)
     paths = [
         root / "pyproject.toml",
+        root / "curiator" / "__init__.py",
         root / "CITATION.cff",
         root / ".zenodo.json",
         root / "CHANGELOG.md",
     ]
-    pyproject, citation, zenodo, changelog = paths
+    pyproject, init_py, citation, zenodo, changelog = paths
     updates = {
         pyproject: replace_project_version(pyproject.read_text(encoding="utf-8"), version),
+        init_py: replace_init_version(init_py.read_text(encoding="utf-8"), version),
         citation: replace_citation_metadata(citation.read_text(encoding="utf-8"), version, release_date),
         zenodo: replace_zenodo_metadata(zenodo.read_text(encoding="utf-8"), version, release_date),
         changelog: cut_changelog(changelog.read_text(encoding="utf-8"), version, release_date),

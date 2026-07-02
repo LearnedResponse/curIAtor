@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+import tomllib
 
 import yaml
 
@@ -27,6 +28,19 @@ def test_zenodo_json_has_archive_metadata():
     assert data["version"] == citation["version"]
     assert data["publication_date"] == citation["date-released"]
     assert data["creators"][0]["name"] == "Guetz, Adam"
+
+
+def test_runtime_version_matches_release_metadata():
+    import curiator
+
+    project = tomllib.loads(Path("pyproject.toml").read_text())
+    citation = yaml.safe_load(Path("CITATION.cff").read_text())
+    zenodo = json.loads(Path(".zenodo.json").read_text())
+
+    version = project["project"]["version"]
+    assert curiator.__version__ == version
+    assert citation["version"] == version
+    assert zenodo["version"] == version
 
 
 def test_issue_templates_are_valid_yaml():

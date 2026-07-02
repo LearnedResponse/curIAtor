@@ -20,6 +20,10 @@ def _load_script():
 
 
 def _write_release_fixture(root: Path, *, existing_release: bool = False) -> None:
+    (root / "curiator").mkdir()
+    (root / "curiator" / "__init__.py").write_text(
+        '"""curIAtor."""\n__version__ = "0.1.0"\n'
+    )
     (root / "pyproject.toml").write_text(textwrap.dedent("""\
         [build-system]
         requires = ["setuptools>=77"]
@@ -65,8 +69,15 @@ def test_prepare_release_updates_version_citation_and_changelog(tmp_path):
 
     changed = module.prepare_release(tmp_path, "0.2.0", "2026-07-02")
 
-    assert [path.name for path in changed] == ["pyproject.toml", "CITATION.cff", ".zenodo.json", "CHANGELOG.md"]
+    assert [str(path.relative_to(tmp_path)) for path in changed] == [
+        "pyproject.toml",
+        "curiator/__init__.py",
+        "CITATION.cff",
+        ".zenodo.json",
+        "CHANGELOG.md",
+    ]
     assert 'version = "0.2.0"' in (tmp_path / "pyproject.toml").read_text()
+    assert '__version__ = "0.2.0"' in (tmp_path / "curiator" / "__init__.py").read_text()
     citation = (tmp_path / "CITATION.cff").read_text()
     assert 'version: "0.2.0"' in citation
     assert 'date-released: "2026-07-02"' in citation
@@ -87,8 +98,9 @@ def test_prepare_release_dry_run_validates_without_writing(tmp_path):
 
     changed = module.prepare_release(tmp_path, "0.2.0", "2026-07-02", write=False)
 
-    assert len(changed) == 4
+    assert len(changed) == 5
     assert 'version = "0.1.0"' in (tmp_path / "pyproject.toml").read_text()
+    assert '__version__ = "0.1.0"' in (tmp_path / "curiator" / "__init__.py").read_text()
     assert '"version": "0.1.0"' in (tmp_path / ".zenodo.json").read_text()
     assert "## [0.2.0]" not in (tmp_path / "CHANGELOG.md").read_text()
 
