@@ -3,6 +3,10 @@
 Scoped-but-not-started ideas and work-orders. Each is a candidate, not a commitment; sequencing is
 deliberate (ship, let the example demos surface what to prioritize).
 
+When a work-order is **fully delivered and verified**, retire it: move its file to
+[`completed/`](completed/) and its index line to the **## Shipped** list below. Retiring is a
+deliberate act — the mechanism that keeps done work from sitting next to unstarted work forever.
+
 ## The release track (in order)
 
 - [**public-release**](public-release.md) — release curIAtor externally on GitHub as v0.2.x with three
@@ -61,8 +65,14 @@ deliberate (ship, let the example demos surface what to prioritize).
 
 ## Engineering / health
 
-- [**cli-modularization**](cli-modularization.md) — shrink the **5,388-line `curiator/cli.py`** one
+- [**cli-modularization**](cli-modularization.md) — shrink the **5,259-line `curiator/cli.py`** one
   command group at a time. First seams landed by moving `curiator voice` into
-  `curiator/voice/cli.py` and `curiator user|auth` into `curiator/auth_cli.py`; the rest stays
-  incremental, behavior-preserving, and `test_cli_*`-gated until a final `curiator/cli/` package
-  cut-over is safe.
+  `curiator/voice/cli.py`, `curiator user|auth` into `curiator/auth_cli.py`, and `curiator stats` into
+  `curiator/stats_cli.py`; the rest stays incremental, behavior-preserving, and `test_cli_*`-gated
+  until a final `curiator/cli/` package cut-over is safe.
+
+## Shipped
+
+Fully-delivered work-orders, retired to [`completed/`](completed/) for provenance. See that folder's
+README for the retirement convention. _(None yet — items above are in-flight or "core landed" with open
+follow-ons.)_

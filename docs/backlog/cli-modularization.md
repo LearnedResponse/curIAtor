@@ -3,16 +3,17 @@
 > **Status:** started 2026-07-02. A **maintainability** item surfaced by the git-history audit, not a
 > product feature. Shape: **incremental, seam-by-seam, behavior-preserving** — the CLI surface
 > (`curiator <cmd> …`) and the test suite are frozen contracts. First seams landed: `curiator voice`
-> moved to `curiator/voice/cli.py`, and `curiator user|auth` moved to `curiator/auth_cli.py`, leaving
-> `curiator.cli:main` and parser wiring stable. The real constraint isn't the refactor, it's **timing
-> it around the live feedback loop**, which edits `cli.py` constantly. Captured 2026-07-02.
+> moved to `curiator/voice/cli.py`, `curiator user|auth` moved to `curiator/auth_cli.py`, and
+> `curiator stats` moved to `curiator/stats_cli.py`, leaving `curiator.cli:main` and parser wiring
+> stable. The real constraint isn't the refactor, it's **timing it around the live feedback loop**,
+> which edits `cli.py` constantly. Captured 2026-07-02.
 
 ## The problem
 
-`curiator/cli.py` is **5,388 lines / ~200KB** after the first two command-group extractions — still the
-single largest source file, ~27% of all tracked Python (5,388 of 19,947). The git audit found it
+`curiator/cli.py` is **5,259 lines / ~200KB** after the first three command-group extractions — still the
+single largest source file, ~26% of all tracked Python (5,259 of 19,955). The git audit found it
 appears **~8× in the ten largest blobs in history**:
-it's been rewritten so often it dominates the repo's history weight. It holds **153 top-level
+it's been rewritten so often it dominates the repo's history weight. It holds **148 top-level
 defs/classes** and **~40 subcommands**, and carries a structural tell — **four repeated
 `import argparse` blocks deep in the file** (lines 4758 / 4982 / 5120 / 5465), the signature of sections
 appended over time rather than composed.
@@ -70,11 +71,11 @@ reviewed cut-over commit.
 
 ## Work-order (incremental — one seam per commit)
 
-1. **Extract the most independent groups first** — landed for `voice` and `auth/user`: handlers moved
-   to `curiator/voice/cli.py` and `curiator/auth_cli.py`; `cli.py` imports `cmd_voice`, `cmd_user`, and
-   `cmd_auth` while keeping the existing parser wiring. This is the template while `curiator.cli`
-   remains a module.
-2. **Then the rest, one group per commit**, easiest→hardest: `stats` → `release` → `galleries`
+1. **Extract the most independent groups first** — landed for `voice`, `auth/user`, and `stats`:
+   handlers moved to `curiator/voice/cli.py`, `curiator/auth_cli.py`, and `curiator/stats_cli.py`;
+   `cli.py` imports the command handlers while keeping the existing parser wiring. This is the
+   template while `curiator.cli` remains a module.
+2. **Then the rest, one group per commit**, easiest→hardest: `release` → `galleries`
    → `collection` → `serve` → `workflow` (biggest, do last). Each commit is a pure move + green tests.
 3. **Collapse the appended blocks** — fold the four stray `import argparse` sections into their target
    modules as you go; the file shrinks to the dispatcher.
