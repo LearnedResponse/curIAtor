@@ -85,6 +85,7 @@ def check_release_docs(root: Path = ROOT, *, strict_launch: bool = False) -> lis
         "git tag v",
         "docs/DEMO_SCRIPT.md",
         "release-evidence/release-preflight.json",
+        "release-evidence/release-preflight-optional.json",
         "release-evidence/case-study-stats.json",
     ]:
         if phrase not in release_text:

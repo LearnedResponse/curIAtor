@@ -140,7 +140,7 @@ All notable changes to curIAtor are documented here. The format follows
   giving release and paper evidence a stable command-backed snapshot.
 - `curiator playground-preflight --output <path>` does the same for hosted-pilot posture checks.
 - `make release-evidence` refreshes the standard gitignored release/paper evidence bundle under
-  `release-evidence/`.
+  `release-evidence/`, including both required-gallery and optional-public fresh-clone preflight JSON.
 - `curiator context` now gives a collection-level context summary when no app is selected in a
   multi-app gallery, so repo-local Claude/Codex shims can run status+context from the runner root.
 - The obsolete live-session `curiator/loop/feedback_watch.sh` prototype watcher has been removed; the

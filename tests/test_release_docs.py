@@ -91,6 +91,23 @@ def test_release_docs_requires_standard_release_evidence_commands(tmp_path):
     ) in failures
 
 
+def test_release_docs_requires_optional_preflight_artifact_in_runbook(tmp_path):
+    module = _load_script()
+    _copy_release_doc_fixture(tmp_path)
+    release = tmp_path / "docs" / "RELEASE.md"
+    release.write_text(release.read_text().replace(
+        "release-evidence/release-preflight-optional.json",
+        "release-evidence/optional.json",
+    ))
+
+    failures = module.check_release_docs(tmp_path)
+
+    assert (
+        "docs/RELEASE.md missing required phrase: "
+        "release-evidence/release-preflight-optional.json"
+    ) in failures
+
+
 def test_release_docs_rejects_tracked_raw_paper_evidence(tmp_path):
     module = _load_script()
     _copy_release_doc_fixture(tmp_path)

@@ -50,7 +50,8 @@ Use the `--output` form when you need a durable release or paper evidence artifa
 JSON payload, including runner checks, gallery heads, doctor issues, smoke results, path hits, and
 publish-artifact hits. Keep raw JSON evidence under the gitignored `release-evidence/` directory
 because it records local clone/source paths. `make release-evidence` refreshes the standard local
-bundle: required-gallery preflight JSON, optional-gallery preflight JSON, and the three-collection
+bundle: required-gallery preflight JSON (`release-evidence/release-preflight.json`), optional-gallery
+preflight JSON (`release-evidence/release-preflight-optional.json`), and the three-collection
 case-study stats in `release-evidence/case-study-stats.md` and
 `release-evidence/case-study-stats.json`.
 
