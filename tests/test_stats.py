@@ -156,6 +156,8 @@ def test_summarize_git_counts_curator_commits(cfg):
 
     summary = stats.summarize(cfg, include_git=True)
     assert summary["git"]["available"] is True
+    assert summary["git"]["head"]
+    assert summary["git"]["branch"] in {"main", "master"}
     assert summary["git"]["curator_commits"] == 1
     assert summary["git"]["feedback_ids"] == 1
     assert summary["git"]["apps"] == {"sample": 1}
@@ -181,14 +183,20 @@ def test_stats_compare_combines_collection_rows(tmp_path, capsys):
     assert report["totals"]["replied_cycles"] == 2
     assert report["totals"]["curator_commits"] == 2
     rows = {row["collection"]: row for row in report["collections"]}
+    assert rows["alpha"]["git_head"]
+    assert rows["alpha"]["git_branch"] in {"main", "master"}
+    assert rows["beta"]["git_head"]
     assert rows["alpha"]["reply_rate_percent"] == 50.0
     assert rows["alpha"]["curator_commits"] == 1
     assert rows["beta"]["reply_rate_percent"] == 100.0
     assert rows["beta"]["median_reply_seconds"] == 60
 
     markdown = stats.format_compare_markdown(report)
-    assert "| alpha | 2 | 1 (50.0%) | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) | 1 | 50.0% | 5m 30s | 1 | 1 |" in markdown
-    assert "| beta | 1 | 1 (100.0%) | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) | 1 | 100.0% | 1m | 1 | 1 |" in markdown
+    alpha_ref = f"{rows['alpha']['git_branch']}@{rows['alpha']['git_head']}"
+    beta_ref = f"{rows['beta']['git_branch']}@{rows['beta']['git_head']}"
+    assert "| Collection | Git head | Cycles |" in markdown
+    assert f"| alpha | {alpha_ref} | 2 | 1 (50.0%) | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) | 1 | 50.0% | 5m 30s | 1 | 1 |" in markdown
+    assert f"| beta | {beta_ref} | 1 | 1 (100.0%) | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) | 1 | 100.0% | 1m | 1 | 1 |" in markdown
 
     assert cli.main([
         "stats",
@@ -200,6 +208,7 @@ def test_stats_compare_combines_collection_rows(tmp_path, capsys):
     payload = json.loads(capsys.readouterr().out)
     assert payload["totals"]["cycles"] == 3
     assert [row["collection"] for row in payload["collections"]] == ["alpha", "beta"]
+    assert payload["collections"][0]["git_head"] == rows["alpha"]["git_head"]
 
 
 def test_stats_compare_csv_keeps_single_collection_csv_unchanged(tmp_path):
@@ -208,6 +217,7 @@ def test_stats_compare_csv_keeps_single_collection_csv_unchanged(tmp_path):
 
     rows = list(csv.DictReader(io.StringIO(stats.format_compare_csv(stats.compare([alpha], include_git=False)))))
     assert rows[0]["collection"] == "alpha"
+    assert rows[0]["git_head"] == ""
     assert rows[0]["curator_commits"] == ""
 
     app_rows = list(csv.DictReader(io.StringIO(stats.format_csv(stats.summarize(alpha, include_git=False)))))

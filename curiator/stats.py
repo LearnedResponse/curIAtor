@@ -208,6 +208,11 @@ def _git(cwd: Path, *args: str) -> subprocess.CompletedProcess[str]:
     return subprocess.run(["git", *args], cwd=cwd, capture_output=True, text=True)
 
 
+def _git_text(cwd: Path, *args: str) -> str | None:
+    result = _git(cwd, *args)
+    return result.stdout.strip() if result.returncode == 0 else None
+
+
 def summarize_git(cfg: dict) -> dict[str, Any]:
     """Summarize git-as-memory commits. Returns unavailable when cfg repo is not git."""
     root = Path(cfg.get("repo_root", "."))
@@ -244,6 +249,8 @@ def summarize_git(cfg: dict) -> dict[str, Any]:
             latest = {"sha": sha[:7], "subject": subject}
     return {
         "available": True,
+        "branch": _git_text(root, "branch", "--show-current") or "detached",
+        "head": _git_text(root, "rev-parse", "--short", "HEAD"),
         "curator_commits": commits,
         "revert_commits": reverts,
         "feedback_ids": len(feedback_ids),
@@ -297,6 +304,8 @@ def _compare_row(summary: dict[str, Any]) -> dict[str, Any]:
         "median_reply_seconds": latency["median_seconds"],
         "avg_reply_seconds": latency["avg_seconds"],
         "git_available": git_available,
+        "git_branch": git.get("branch") if git_available else None,
+        "git_head": git.get("head") if git_available else None,
         "curator_commits": git["curator_commits"] if git_available else None,
         "revert_commits": git["revert_commits"] if git_available else None,
     }
@@ -338,17 +347,25 @@ def _fmt_optional_int(value) -> str:
     return "n/a" if value is None else str(value)
 
 
+def _fmt_git_ref(row: dict[str, Any]) -> str:
+    head = row.get("git_head")
+    if not head:
+        return "n/a"
+    branch = row.get("git_branch")
+    return f"{branch}@{head}" if branch else str(head)
+
+
 def format_compare_markdown(report: dict[str, Any]) -> str:
     """Render collection-level comparison rows for papers and release notes."""
     lines = [
         "# curIAtor Stats Compare",
         "",
-        "| Collection | Cycles | Direct fixes | Proposals | No dispatch | Human intervention | Replied | Reply rate | Median reply | Agent notes | Curator commits |",
-        "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
+        "| Collection | Git head | Cycles | Direct fixes | Proposals | No dispatch | Human intervention | Replied | Reply rate | Median reply | Agent notes | Curator commits |",
+        "|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
     ]
     for row in report["collections"]:
         lines.append(
-            f"| {_md(row['collection'])} | {row['cycles']} | "
+            f"| {_md(row['collection'])} | {_md(_fmt_git_ref(row))} | {row['cycles']} | "
             f"{row['direct_fix_cycles']} ({row['direct_fix_rate_percent']}%) | "
             f"{row['proposal_cycles']} ({row['proposal_rate_percent']}%) | "
             f"{row['no_dispatch_cycles']} ({row['no_dispatch_rate_percent']}%) | "
@@ -391,6 +408,8 @@ def format_compare_csv(report: dict[str, Any]) -> str:
         "median_reply_seconds",
         "avg_reply_seconds",
         "git_available",
+        "git_branch",
+        "git_head",
         "curator_commits",
         "revert_commits",
     ]
@@ -451,6 +470,8 @@ def format_markdown(summary: dict[str, Any]) -> str:
         lines.extend(["", "## Git", "", "| Metric | Value |", "|---|---:|"])
         if git.get("available"):
             lines.extend([
+                f"| Branch | {_md(git.get('branch') or 'detached')} |",
+                f"| Head | {_md(git.get('head') or 'unknown')} |",
                 f"| Curator commits | {git['curator_commits']} |",
                 f"| Revert commits | {git['revert_commits']} |",
                 f"| Feedback ids | {git['feedback_ids']} |",
