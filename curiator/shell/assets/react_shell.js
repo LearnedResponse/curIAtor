@@ -159,6 +159,15 @@
     return (clamp01(value) * 100) + "%";
   }
 
+  function copyAnnotations(marks) {
+    return (marks || []).map((mark) => {
+      const copy = Object.assign({}, mark);
+      if (mark.target) copy.target = Object.assign({}, mark.target);
+      if (Array.isArray(mark.target && mark.target.classes)) copy.target.classes = mark.target.classes.slice();
+      return copy;
+    });
+  }
+
   function AnnotationReplayOverlay({marks}) {
     const shapes = [];
     const pins = [];
@@ -198,26 +207,43 @@
       h(AnnotationRows, {marks}));
   }
 
-  function AnnotationPreview({entry, onClose}) {
+  function AnnotationPreview({entry, onClose, onUseDraft}) {
     const marks = (entry && entry.annotations) || [];
+    const [editing, setEditing] = useState(false);
+    const [draftMarks, setDraftMarks] = useState(copyAnnotations(marks));
+    useEffect(() => {
+      setEditing(false);
+      setDraftMarks(copyAnnotations(marks));
+    }, [entry]);
     if (!entry || !marks.length) return null;
+    const preview = h("div", {className: "rshell-annotation-replay-frame"},
+      h("img", {src: entry.shot_url, alt: "annotated screenshot"}),
+      h(AnnotationReplayOverlay, {marks}));
+    const editor = entry.shot_url ? h(AnnotationEditor, {
+      image: entry.shot_url,
+      annotations: draftMarks,
+      setAnnotations: setDraftMarks
+    }) : null;
     return h("div", {className: "rshell-modal-backdrop", onClick: onClose},
       h("div", {className: "rshell-annotation-modal", role: "dialog", "aria-modal": "true",
           onClick: (e) => e.stopPropagation()},
         h("div", {className: "rshell-modal-head"},
-          h("b", null, "Annotations"),
+          h("b", null, editing ? "Edit annotation copy" : "Annotations"),
+          h("div", {className: "rshell-modal-actions"},
+            h("button", {className: "rshell-button secondary", onClick: () => setEditing(!editing)},
+              editing ? "Preview" : "Edit copy"),
+            editing && onUseDraft ? h("button", {className: "rshell-button secondary",
+              disabled: !draftMarks.length, onClick: () => onUseDraft(entry, draftMarks)}, "Use as reply draft") : null),
           h("button", {className: "rshell-modal-close", title: "Close", onClick: onClose}, "×")),
         h("div", {className: "rshell-annotation-modal-body"},
           entry.shot_url ? h("div", {className: "rshell-annotation-replay-shot"},
-            h("div", {className: "rshell-annotation-replay-frame"},
-              h("img", {src: entry.shot_url, alt: "annotated screenshot"}),
-              h(AnnotationReplayOverlay, {marks}))) : null,
+            editing ? editor : preview) : null,
           h("div", {className: "rshell-annotation-replay-list"},
-            h(AnnotationRows, {marks})))));
+            h(AnnotationRows, {marks: editing ? draftMarks : marks})))));
   }
 
   function composeShot(dataUrl, annotations) {
-    if (!dataUrl || !annotations.length) return Promise.resolve(dataUrl);
+    if (!dataUrl || (!annotations.length && String(dataUrl).startsWith("data:image"))) return Promise.resolve(dataUrl);
     return new Promise((resolve) => {
       const img = new Image();
       img.onload = () => {
@@ -233,7 +259,11 @@
         }
         ctx.drawImage(img, 0, 0, width, height);
         annotations.forEach((mark) => drawAnnotation(ctx, mark, width, height));
-        resolve(canvas.toDataURL("image/png"));
+        try {
+          resolve(canvas.toDataURL("image/png"));
+        } catch (e) {
+          resolve(dataUrl);
+        }
       };
       img.onerror = () => resolve(dataUrl);
       img.src = dataUrl;
@@ -602,6 +632,16 @@
       }
     }
 
+    function useAnnotationDraft(entry, marks) {
+      if (!entry || !entry.shot_url) return;
+      setShot(entry.shot_url);
+      setShotSource("replay");
+      setAnnotations(copyAnnotations(marks));
+      setReplyTo({key: selected, id: entry.id});
+      setPreviewEntry(null);
+      setMsg("Loaded annotated screenshot as a reply draft.");
+    }
+
     function action(value, replyToId) {
       api("/api/action", {method: "POST", body: JSON.stringify({key: selected, value, reply_to: replyToId})})
         .then((data) => {
@@ -614,7 +654,7 @@
     }
 
     return h("aside", {className: "rshell-feedback" + (open ? " open" : "") + (collapsed ? " collapsed" : "")},
-      h(AnnotationPreview, {entry: previewEntry, onClose: () => setPreviewEntry(null)}),
+      h(AnnotationPreview, {entry: previewEntry, onClose: () => setPreviewEntry(null), onUseDraft: useAnnotationDraft}),
       h(AccountMenu, {boot}),
       h("div", {className: "rshell-feedback-head"},
         h("h4", null, "Feedback"),

@@ -557,6 +557,14 @@ body {
   background: #fcfcfc;
 }
 
+.rshell-modal-actions {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  flex: 1;
+}
+
 .rshell-modal-close {
   width: 26px;
   height: 26px;
@@ -585,6 +593,16 @@ body {
   overflow: auto;
   background: #f1f1f1;
   border-right: 1px solid #e5e5e5;
+}
+
+.rshell-annotation-replay-shot .rshell-annotator {
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+}
+
+.rshell-annotation-replay-shot .rshell-annotation-stage {
+  max-height: none;
 }
 
 .rshell-annotation-replay-shot img {
