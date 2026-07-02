@@ -82,6 +82,69 @@ def test_doctor_warns_for_hmr_dev_server_proxy_without_failing(collection, capsy
     assert "WebSocket/HMR" in messages
 
 
+def test_doctor_warns_for_framework_base_path_misconfiguration(collection, capsys, monkeypatch):
+    from curiator import cli
+
+    monkeypatch.setattr(cli.shutil, "which", lambda exe: f"/usr/bin/{exe}")
+    (collection / "apps" / "vite_bad").mkdir()
+    (collection / "apps" / "vite_bad" / "package.json").write_text('{"dependencies":{"vite":"^5.4.0"}}\n')
+    (collection / "apps" / "vite_bad" / "vite.config.js").write_text("export default { plugins: [] };\n")
+    (collection / "apps" / "next_bad").mkdir()
+    (collection / "apps" / "next_bad" / "package.json").write_text('{"dependencies":{"next":"^14.2.0"}}\n')
+    (collection / "apps" / "next_bad" / "next.config.mjs").write_text("export default {};\n")
+    (collection / "apps" / "fastapi_bad").mkdir()
+    (collection / "apps" / "fastapi_bad" / "main.py").write_text("from fastapi import FastAPI\napp = FastAPI()\n")
+    (collection / "apps" / "fastapi_bad" / "requirements.txt").write_text("fastapi>=0.115\n")
+    (collection / "apps" / "gradio_bad").mkdir()
+    (collection / "apps" / "gradio_bad" / "app.py").write_text("import gradio as gr\n")
+    (collection / "apps" / "gradio_bad" / "requirements.txt").write_text("gradio>=4.44\n")
+    (collection / "apps" / "streamlit_bad").mkdir()
+    (collection / "apps" / "streamlit_bad" / "app.py").write_text("import streamlit as st\n")
+    (collection / "apps" / "streamlit_bad" / "requirements.txt").write_text("streamlit>=1.36\n")
+    (collection / "gallery.yaml").write_text(textwrap.dedent("""\
+        apps:
+          - name: vite_bad
+            root: apps/vite_bad
+            source: .
+            smoke: npm run build
+            mount: { kind: proxy, cmd: "npm run dev -- --host 127.0.0.1 --port 8800", port: 8800 }
+          - name: next_bad
+            root: apps/next_bad
+            source: .
+            smoke: npm run build
+            mount: { kind: proxy, cmd: "npm run dev -- -H 127.0.0.1 -p 8801", port: 8801 }
+          - name: fastapi_bad
+            root: apps/fastapi_bad
+            source: .
+            smoke: python -m py_compile main.py
+            mount: { kind: proxy, cmd: "python main.py --port 8802", port: 8802 }
+          - name: gradio_bad
+            root: apps/gradio_bad
+            source: .
+            smoke: python -m py_compile app.py
+            mount: { kind: proxy, cmd: "python app.py --port 8803", port: 8803 }
+          - name: streamlit_bad
+            root: apps/streamlit_bad
+            source: .
+            smoke: python -m py_compile app.py
+            mount: { kind: proxy, cmd: "streamlit run app.py --server.port 8804", port: 8804 }
+    """))
+
+    assert cli.main(["doctor", "--json"]) == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["ok"] is True
+    assert payload["errors"] == 0
+    messages = "\n".join(issue["message"] for issue in payload["issues"])
+    assert "Vite config does not appear to set an /app/<name>/ base path from CURIATOR_APP" in messages
+    assert "Next.js proxy mount should set preserve_prefix: true" in messages
+    assert "Next.js config does not appear to set basePath from CURIATOR_APP" in messages
+    assert "FastAPI app does not appear to configure root_path for /app/<name>/" in messages
+    assert "Gradio proxy mount should set preserve_prefix: true" in messages
+    assert "Gradio app does not appear to configure root_path for /app/<name>/" in messages
+    assert "Streamlit proxy mount should set preserve_prefix: true" in messages
+    assert "Streamlit command does not set --server.baseUrlPath app/{app}" in messages
+
+
 def test_doctor_warns_for_missing_smoke_executable_without_failing(collection, capsys, monkeypatch):
     from curiator import cli
 

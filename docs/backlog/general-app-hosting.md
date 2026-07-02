@@ -134,9 +134,10 @@ mount, opinionated only at scaffold time.
    diagnostic page with command/cwd/port/target/process state plus recent stdout/stderr. WebSocket/HMR
    upgrade requests now get an explicit lightweight-proxy diagnostic instead of falling through the
    HTTP proxy path, and `curiator doctor` warns when proxy commands look like HMR-oriented framework dev
-   servers. Doctor also warns when optional Python framework apps such as FastAPI, Gradio, or Streamlit
-   lack a dependency manifest, which keeps proxy scaffolds portable before publication. Full live-HMR
-   reverse proxying remains demand-paced per framework.
+   servers or when Vite/Next/FastAPI/Gradio/Streamlit mounts are missing the base-path/root-path config
+   needed under `/app/<name>/`. Doctor also warns when optional Python framework apps such as FastAPI,
+   Gradio, or Streamlit lack a dependency manifest, which keeps proxy scaffolds portable before
+   publication. Full live-HMR reverse proxying remains demand-paced per framework.
 
 Dash-first is the *launch wedge* (ship fast, own the data/HMI audience), **not the identity** — the
 overlay stayed framework-agnostic and the non-Dash proof now runs (`curiator-aviato`: React SSR + Rust +

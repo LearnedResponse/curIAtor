@@ -52,7 +52,8 @@ All notable changes to curIAtor are documented here. The format follows
   that do not mention their configured port, likely HMR dev-server proxy commands, missing command
   executables, and common missing dependency manifests such as `package.json`, `requirements.txt`, and
   `Cargo.toml`; it now also detects missing Python dependency manifests for FastAPI, Gradio, and
-  Streamlit apps from top-level imports.
+  Streamlit apps from top-level imports, plus missing Vite/Next/FastAPI/Gradio/Streamlit base-path or
+  root-path configuration for `/app/<name>/` proxy mounts.
 - `curiator smoke` runs each app's configured smoke command or fallback import check across a collection,
   with `--app`, `--jobs`, `--json`, and configurable `smoke_timeout` / `smoke.timeout` limits for
   release preflight automation.

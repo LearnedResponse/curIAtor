@@ -650,13 +650,43 @@ def _python_import_roots(path: Path) -> set[str]:
     return roots
 
 
-def _python_framework_manifest_expectations(root: Path) -> dict[str, list[str]]:
-    """Return optional Python framework dependency manifests implied by top-level app imports."""
+def _python_project_imports(root: Path) -> set[str]:
     if not root.exists() or not root.is_dir():
-        return {}
+        return set()
     imports: set[str] = set()
     for path in sorted(root.glob("*.py")):
         imports.update(_python_import_roots(path))
+    return imports
+
+
+def _project_text(root: Path, patterns: tuple[str, ...]) -> str:
+    if not root.exists() or not root.is_dir():
+        return ""
+    chunks: list[str] = []
+    for pattern in patterns:
+        for path in sorted(root.glob(pattern)):
+            try:
+                chunks.append(path.read_text(encoding="utf-8", errors="replace"))
+            except OSError:
+                continue
+    return "\n".join(chunks)
+
+
+def _first_config_text(root: Path, names: tuple[str, ...]) -> str:
+    for name in names:
+        path = root / name
+        if not path.exists():
+            continue
+        try:
+            return path.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            return ""
+    return ""
+
+
+def _python_framework_manifest_expectations(root: Path) -> dict[str, list[str]]:
+    """Return optional Python framework dependency manifests implied by top-level app imports."""
+    imports = _python_project_imports(root)
     return {
         label: _PYTHON_DEP_MANIFESTS
         for module, label in _OPTIONAL_PYTHON_FRAMEWORKS.items()
@@ -719,6 +749,84 @@ def _doctor_warn_missing_manifests(
                 "where": f"app {name} dependencies",
                 "message": f"{label} is missing dependency manifest ({' or '.join(filenames)}) in {root}",
             })
+
+
+def _doctor_warn_proxy_base_path(issues: list[dict], *, name: str, root: Path, mount: dict) -> None:
+    """Warn when a known framework proxy app is missing the path-prefix config curIAtor needs."""
+    cmd = str(mount.get("cmd") or "")
+    command_text = cmd.lower()
+    package_text = _first_config_text(root, ("package.json",)).lower()
+    python_imports = _python_project_imports(root)
+    python_text = _project_text(root, ("*.py",)).lower()
+
+    vite_config = _first_config_text(root, ("vite.config.js", "vite.config.mjs", "vite.config.ts"))
+    is_vite = bool(vite_config) or "vite" in package_text or "vite" in command_text
+    if is_vite:
+        compact = vite_config.lower().replace(" ", "")
+        if not vite_config:
+            issues.append({
+                "severity": "warning",
+                "where": f"app {name} proxy",
+                "message": "Vite app has no vite.config.*; set base from CURIATOR_APP so assets resolve under /app/<name>/",
+            })
+        elif "base" not in compact or ("curiator_app" not in compact and "/app/${" not in compact and "/app/" not in compact):
+            issues.append({
+                "severity": "warning",
+                "where": f"app {name} proxy",
+                "message": "Vite config does not appear to set an /app/<name>/ base path from CURIATOR_APP",
+            })
+
+    next_config = _first_config_text(root, ("next.config.mjs", "next.config.js", "next.config.ts"))
+    is_next = bool(next_config) or '"next"' in package_text or "next dev" in command_text or "next start" in command_text
+    if is_next:
+        if not mount.get("preserve_prefix"):
+            issues.append({
+                "severity": "warning",
+                "where": f"app {name} proxy",
+                "message": "Next.js proxy mount should set preserve_prefix: true so its basePath routes reach the app",
+            })
+        compact = next_config.lower().replace(" ", "")
+        if not next_config or "basepath" not in compact or ("curiator_app" not in compact and "/app/" not in compact):
+            issues.append({
+                "severity": "warning",
+                "where": f"app {name} proxy",
+                "message": "Next.js config does not appear to set basePath from CURIATOR_APP for /app/<name>/",
+            })
+
+    if "streamlit" in python_imports or "streamlit run" in command_text:
+        if not mount.get("preserve_prefix"):
+            issues.append({
+                "severity": "warning",
+                "where": f"app {name} proxy",
+                "message": "Streamlit proxy mount should set preserve_prefix: true with server.baseUrlPath",
+            })
+        if "--server.baseurlpath" not in command_text:
+            issues.append({
+                "severity": "warning",
+                "where": f"app {name} proxy",
+                "message": "Streamlit command does not set --server.baseUrlPath app/{app}",
+            })
+
+    if "gradio" in python_imports:
+        if not mount.get("preserve_prefix"):
+            issues.append({
+                "severity": "warning",
+                "where": f"app {name} proxy",
+                "message": "Gradio proxy mount should set preserve_prefix: true with a root_path",
+            })
+        if "--root-path" not in command_text and "root_path" not in python_text:
+            issues.append({
+                "severity": "warning",
+                "where": f"app {name} proxy",
+                "message": "Gradio app does not appear to configure root_path for /app/<name>/",
+            })
+
+    if "fastapi" in python_imports and "--root-path" not in command_text and "root_path" not in python_text:
+        issues.append({
+            "severity": "warning",
+            "where": f"app {name} proxy",
+            "message": "FastAPI app does not appear to configure root_path for /app/<name>/",
+        })
 
 
 def _doctor_issues(cfg: dict) -> list[dict]:
@@ -802,6 +910,7 @@ def _doctor_issues(cfg: dict) -> list[dict]:
                         "commands.preview or a full reverse proxy when live HMR is required"
                     ),
                 })
+            _doctor_warn_proxy_base_path(issues, name=name, root=root_path, mount=mount)
         _doctor_warn_missing_manifests(
             issues,
             name=name,
