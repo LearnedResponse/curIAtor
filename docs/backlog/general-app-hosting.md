@@ -151,7 +151,9 @@ only at scaffold/import time.
    Gradio, or Streamlit lack a dependency manifest, which keeps proxy scaffolds portable before
    publication. `curiator smoke` now reports and runs cheap inferred fallback checks for no-smoke
    proxy directories when an obvious `server.py`/`app.py`/`main.py`, Node server file, or `Cargo.toml`
-   is present, and `curiator smoke --http` adds an opt-in proxy process + HTTP response check.
+   is present, `curiator smoke --http` adds an opt-in proxy process + HTTP response check, and
+   `curiator release-preflight --http-smoke` carries that check across nested or dependency-prepared
+   publication candidates.
    `curiator app import` now surfaces the same visible warnings immediately after registering an
    existing repo, before the user first loads a broken mount. Full live-HMR reverse proxying remains
    demand-paced per framework.

@@ -1353,6 +1353,7 @@ def _release_preflight_one(
     gallery: Path,
     *,
     run_smoke: bool,
+    http_smoke: bool,
     allow_dirty: bool,
     needles: tuple[str, ...],
     strict: bool,
@@ -1384,7 +1385,7 @@ def _release_preflight_one(
             "issues": issues,
         }
         if run_smoke:
-            smoke = _smoke_results(cfg)
+            smoke = _smoke_results(cfg, http=http_smoke)
             result["smoke"] = {"ok": all(r["ok"] for r in smoke), "results": smoke}
     except Exception as exc:  # noqa: BLE001
         result["error"] = f"{type(exc).__name__}: {exc}"
@@ -1451,6 +1452,7 @@ def _release_preflight_payload_for_root(args) -> dict:
         _release_preflight_one(
             (root / name / "gallery.yaml").resolve(),
             run_smoke=not args.no_smoke,
+            http_smoke=args.http_smoke,
             allow_dirty=args.allow_dirty,
             needles=needles,
             strict=args.strict,
@@ -1463,6 +1465,7 @@ def _release_preflight_payload_for_root(args) -> dict:
         "galleries": galleries,
         "checks": {
             "smoke": not args.no_smoke,
+            "http_smoke": bool(args.http_smoke),
             "allow_dirty": args.allow_dirty,
             "strict": args.strict,
             "path_needles": list(needles),
@@ -1498,6 +1501,7 @@ def _release_preflight_payload_for_clones(args, clone_base: Path) -> dict:
         result = _release_preflight_one(
             clone_gallery.resolve(),
             run_smoke=not args.no_smoke,
+            http_smoke=args.http_smoke,
             allow_dirty=False,
             needles=needles,
             strict=args.strict,
@@ -1516,6 +1520,7 @@ def _release_preflight_payload_for_clones(args, clone_base: Path) -> dict:
         "galleries": galleries,
         "checks": {
             "smoke": not args.no_smoke,
+            "http_smoke": bool(args.http_smoke),
             "allow_dirty": args.allow_dirty,
             "strict": args.strict,
             "fresh_clone": True,
@@ -1547,6 +1552,9 @@ def _release_preflight_payload(args) -> dict:
 
 
 def cmd_release_preflight(args) -> int:
+    if args.no_smoke and args.http_smoke:
+        print("curiator: release-preflight --http-smoke requires smoke checks; remove --no-smoke")
+        return 2
     payload = _release_preflight_payload(args)
     if args.json:
         print(json.dumps(payload, indent=2))
@@ -3248,6 +3256,8 @@ def main(argv=None) -> int:
     rp.add_argument("--clone-root", help="directory for fresh-clone runs; a unique run-* directory is created inside")
     rp.add_argument("--keep-clones", action="store_true", help="do not delete fresh-clone run directories")
     rp.add_argument("--no-smoke", action="store_true", help="skip per-app smoke checks")
+    rp.add_argument("--http-smoke", "--http", action="store_true", dest="http_smoke",
+                    help="also start proxy apps briefly and verify configured HTTP smoke paths")
     rp.add_argument("--strict", action="store_true", help="fail when doctor warnings are present")
     rp.add_argument("--json", action="store_true", help="emit machine-readable diagnostics")
     rp.set_defaults(func=cmd_release_preflight)

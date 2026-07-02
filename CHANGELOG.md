@@ -83,8 +83,9 @@ All notable changes to curIAtor are documented here. The format follows
   virtualenvs, `node_modules`, and local editable/path dependency pins in requirements files; `--fresh-clone` repeats
   those checks from temporary clones of the committed gallery histories; `--strict` makes doctor
   warnings fail release publication gates; `--include-optional` adds the finance and phylogenetics
-  public-shaped galleries to the default release set; `make release-check` uses strict fresh-clone mode;
-  and `make release-launch-check` rejects final-launch placeholders plus optional-gallery drift.
+  public-shaped galleries to the default release set; `--http-smoke` also runs the proxy HTTP response
+  check during nested or dependency-prepared preflight; `make release-check` uses strict fresh-clone mode; and
+  `make release-launch-check` rejects final-launch placeholders plus optional-gallery drift.
 - `curiator galleries` lists nested `galleries/curiator-*` collection repos with git head, dirty state,
   and the `CURIATOR_GALLERY=...` command for targeting one from the runner checkout; it now also reports
   legacy sibling `curiator-*` checkouts or aliases next to the runner so they can be adopted or archived.

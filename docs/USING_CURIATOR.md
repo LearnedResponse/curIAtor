@@ -274,6 +274,7 @@ curiator smoke --jobs 4 --json # run independent app checks concurrently, preser
 curiator release-preflight     # nested public galleries + publish-unsafe artifacts/local deps
 curiator release-preflight --fresh-clone
 curiator release-preflight --fresh-clone --strict  # fail on doctor warnings for publication gates
+curiator release-preflight --http-smoke  # also start proxy apps and poll HTTP when deps are installed
 curiator release-preflight --include-optional --fresh-clone --strict  # add finance + phylogenetics
 curiator playground-preflight  # hosted pilot posture: auth, quotas, queue, doctor, smoke
 curiator playground-preflight --strict  # fail on warnings for CI/final pre-pilot gates
@@ -300,6 +301,8 @@ smoke_http: /healthz
 Then run `curiator smoke --http`. The command starts the app with `commands.preview` when available
 (otherwise `mount.cmd`), exports `PORT` and `CURIATOR_APP`, polls `http://127.0.0.1:<port><path>`, and
 tears the process down. This is a lightweight server-response check, not a full browser/HMR test.
+For publication gates, `curiator release-preflight --http-smoke` applies the same HTTP pass across the
+selected nested galleries, or across fresh clones after app dependencies are installed there.
 
 ## 4. Two install profiles
 

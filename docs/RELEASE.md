@@ -33,11 +33,15 @@ Run the full gate from the runner checkout:
 ```bash
 make release-check
 curiator release-preflight --include-optional --fresh-clone --strict
+curiator release-preflight --gallery curiator-aviato --http-smoke
 ```
 
 `make release-check` runs lint, the full pytest suite, release-doc checks, strict fresh-clone preflight
 for the three required public collections, `docs/demo.gif` regeneration, package build, and
-`twine check`. The optional preflight adds finance and phylogenetics.
+`twine check`. The optional preflight adds finance and phylogenetics. The HTTP-smoke variant starts
+proxy apps briefly and polls configured `smoke_http` paths or default app URLs; it expects app
+dependencies to be installed in the tree being checked, so use it against the nested workspace or a
+fresh clone after dependency installation.
 
 Clean local build artifacts after inspection if needed:
 

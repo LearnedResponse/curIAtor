@@ -94,7 +94,7 @@ def test_smoke_http_starts_proxy_and_checks_configured_path(collection, capsys, 
             smoke: python -m py_compile server.py
             smoke_http: /healthz
             commands:
-              preview: "{sys.executable} server.py --port {port}"
+              preview: "{sys.executable} server.py --port {{port}}"
             mount: {{ kind: proxy, cmd: "{sys.executable} server.py --port {{port}}", port: {port} }}
     """))
 

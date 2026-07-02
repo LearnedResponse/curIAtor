@@ -253,7 +253,14 @@ def inferred_smoke_command(cfg: dict, spec: dict) -> str | None:
 def _render_smoke_template(cfg: dict, spec: dict, app: str, src: str | None, command: str) -> str:
     root = spec.get("root") or Path(cfg["repo_root"])
     source = spec.get("source") or (Path(cfg["repo_root"]) / src if src else root)
-    return str(command).format(root=str(root), source=str(source), app=app)
+    mount = spec.get("mount") if isinstance(spec.get("mount"), dict) else {}
+    values = {
+        "root": str(root),
+        "source": str(source),
+        "app": app,
+        "port": spec.get("port") or mount.get("port") or "",
+    }
+    return str(command).format(**values)
 
 
 def smoke_command(cfg: dict, spec: dict, app: str, src: str | None) -> str | None:
