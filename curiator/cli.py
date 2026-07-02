@@ -501,6 +501,38 @@ def _manifest_expectations(command: str | None) -> dict[str, list[str]]:
     return {}
 
 
+def _command_tokens(command: str | None) -> list[str]:
+    if not command:
+        return []
+    try:
+        parts = shlex.split(str(command))
+    except ValueError:
+        parts = str(command).split()
+    if parts and parts[0] == "env":
+        parts = parts[1:]
+    while parts and "=" in parts[0] and not parts[0].startswith(("/", "./", "../")):
+        key, _, _ = parts[0].partition("=")
+        if not key.replace("_", "").isalnum():
+            break
+        parts = parts[1:]
+    return [p.lower() for p in parts]
+
+
+def _looks_like_hmr_dev_server(command: str | None) -> bool:
+    parts = _command_tokens(command)
+    if not parts:
+        return False
+    text = " ".join(parts)
+    if parts[0] == "vite" or (parts[0] == "npx" and len(parts) > 1 and parts[1] == "vite"):
+        return True
+    if text.startswith(("next dev", "npx next dev", "webpack serve", "npx webpack serve")):
+        return True
+    for manager in ("npm", "pnpm", "yarn", "bun"):
+        if text.startswith((f"{manager} run dev", f"{manager} dev")):
+            return True
+    return False
+
+
 def _doctor_warn_missing_manifests(
     issues: list[dict],
     *,
@@ -594,6 +626,16 @@ def _doctor_issues(cfg: dict) -> list[dict]:
                     "severity": "warning",
                     "where": f"app {name} proxy",
                     "message": f"proxy command does not mention configured port {port}",
+                })
+            if _looks_like_hmr_dev_server(cmd):
+                issues.append({
+                    "severity": "warning",
+                    "where": f"app {name} proxy",
+                    "message": (
+                        "proxy command looks like a framework dev server that may use WebSocket/HMR; "
+                        "curIAtor's built-in proxy will show a diagnostic for upgrade requests, so use "
+                        "commands.preview or a full reverse proxy when live HMR is required"
+                    ),
                 })
         _doctor_warn_missing_manifests(
             issues,

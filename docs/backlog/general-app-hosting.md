@@ -130,7 +130,8 @@ svelte / vue / streamlit / gradio), each emitting a directory + the right `mount
    gallery entries and appears in `curiator status` / `curiator context`; proxy failures now render a
    diagnostic page with command/cwd/port/target/process state plus recent stdout/stderr. WebSocket/HMR
    upgrade requests now get an explicit lightweight-proxy diagnostic instead of falling through the
-   HTTP proxy path; full live-HMR reverse proxying remains demand-paced per framework.
+   HTTP proxy path, and `curiator doctor` warns when proxy commands look like HMR-oriented framework dev
+   servers; full live-HMR reverse proxying remains demand-paced per framework.
 
 Dash-first is the *launch wedge* (ship fast, own the data/HMI audience), **not the identity** — the
 overlay stayed framework-agnostic and the non-Dash proof now runs (`curiator-aviato`: React SSR + Rust +

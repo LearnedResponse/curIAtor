@@ -58,6 +58,30 @@ def test_doctor_warns_without_failing_for_weak_release_smoke(collection, capsys)
     assert "does not mention configured port 8800" in messages
 
 
+def test_doctor_warns_for_hmr_dev_server_proxy_without_failing(collection, capsys, monkeypatch):
+    from curiator import cli
+
+    monkeypatch.setattr(cli.shutil, "which", lambda exe: f"/usr/bin/{exe}")
+    (collection / "apps" / "react_panel").mkdir()
+    (collection / "apps" / "react_panel" / "package.json").write_text('{"scripts":{"dev":"vite"}}\n')
+    (collection / "gallery.yaml").write_text(textwrap.dedent("""\
+        apps:
+          - name: react_panel
+            root: apps/react_panel
+            source: .
+            smoke: npm run build
+            mount: { kind: proxy, cmd: "npm run dev -- --host 127.0.0.1 --port 8800", port: 8800 }
+    """))
+
+    assert cli.main(["doctor", "--json"]) == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["ok"] is True
+    assert payload["errors"] == 0
+    messages = "\n".join(issue["message"] for issue in payload["issues"])
+    assert "framework dev server" in messages
+    assert "WebSocket/HMR" in messages
+
+
 def test_doctor_warns_for_missing_smoke_executable_without_failing(collection, capsys, monkeypatch):
     from curiator import cli
 
