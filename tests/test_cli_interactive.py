@@ -157,6 +157,69 @@ def test_feedback_add_rejects_unknown_app(collection, monkeypatch):
         cli.main(["feedback", "add", "great app", "--stars", "5"])
 
 
+def test_queue_reviews_held_feedback_without_dispatching_it(collection, monkeypatch, capsys):
+    import json
+    import pytest
+
+    from curiator import cli, ledger
+    from curiator.config import load_config
+
+    monkeypatch.chdir(collection)
+    assert cli.main(["feedback", "add", "sample", "anonymous suggestion", "--status", "held", "--stars", "4"]) == 0
+    cfg = load_config()
+    held_id = ledger.load(cfg)["sample"][-1]["id"]
+    capsys.readouterr()
+
+    with pytest.raises(SystemExit, match="no open feedback"):
+        cli.main(["work", "--app", "sample", "--no-print"])
+
+    assert cli.main(["queue", "list", "--json"]) == 0
+    out = capsys.readouterr().out
+    rows = json.loads(out)
+    assert rows == [{
+        "app": "sample",
+        "id": held_id,
+        "ts": ledger.load(cfg)["sample"][-1]["ts"],
+        "author": "anonymous@local",
+        "stars": 4,
+        "comment": "anonymous suggestion",
+    }]
+
+    assert cli.main(["queue", "approve", held_id]) == 0
+    items = ledger.load(load_config())["sample"]
+    assert next(e for e in items if e["id"] == held_id)["status"] == "new"
+    assert any(e.get("kind") == "system" and held_id in (e.get("reply_to") or [])
+               and "approved by curator@test.local" in e.get("comment", "")
+               for e in items)
+
+    assert cli.main(["feedback", "add", "sample", "duplicate public comment", "--status", "held"]) == 0
+    reject_id = ledger.load(load_config())["sample"][-1]["id"]
+    assert cli.main(["queue", "reject", reject_id, "duplicate"]) == 0
+    items = ledger.load(load_config())["sample"]
+    assert next(e for e in items if e["id"] == reject_id)["status"] == "rejected"
+    assert any(e.get("kind") == "system" and reject_id in (e.get("reply_to") or [])
+               and "Reason: duplicate" in e.get("comment", "")
+               for e in items)
+
+
+def test_queue_refuses_non_held_and_system_notes(collection, monkeypatch):
+    import pytest
+
+    from curiator import cli, ledger
+    from curiator.config import load_config
+
+    monkeypatch.chdir(collection)
+    assert cli.main(["feedback", "add", "sample", "normal dispatchable feedback"]) == 0
+    cfg = load_config()
+    fid = ledger.load(cfg)["sample"][-1]["id"]
+    note_id = ledger.add_system_note(cfg, "sample", "internal note", reply_to=[fid])
+
+    with pytest.raises(SystemExit, match="not held"):
+        cli.main(["queue", "approve", fid])
+    with pytest.raises(SystemExit, match="system note"):
+        cli.main(["queue", "reject", note_id])
+
+
 def test_work_refuses_a_system_note(collection, monkeypatch):
     import pytest
     from curiator import cli, ledger

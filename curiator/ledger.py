@@ -7,7 +7,8 @@ Public shape is unchanged:
 
     { "<app_key>": [ {id, author, kind, comment, stars, status, ts, screenshot, reply_to?}, ... ] }
 
-Statuses: "new" → "working" → "awaiting_approval" → "done" (+ system notes use status "update").
+Statuses: "new" → "working" → "awaiting_approval" → "done"; public/moderation flows may hold
+feedback as "held" or close it as "rejected" (+ system notes use status "update").
 A system/agent note has author="claude", kind="system".
 """
 from __future__ import annotations

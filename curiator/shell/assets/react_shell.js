@@ -5,7 +5,9 @@
     new: "#cc7a00",
     working: "#8e44ad",
     done: "#1f9d55",
-    awaiting_approval: "#2980b9"
+    awaiting_approval: "#2980b9",
+    held: "#6f42c1",
+    rejected: "#555"
   };
 
   function api(path, opts) {

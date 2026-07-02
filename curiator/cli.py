@@ -10,6 +10,7 @@
     curiator link       # link an app repo/directory to a gallery app
     curiator work       # open a feedback item for interactive CLI work
     curiator done       # finish interactive work via the same reply/reload/git path
+    curiator queue      # review held feedback before dispatch
     curiator smoke      # run configured app smoke checks across the collection
     curiator release-preflight # run doctor/smoke/path checks across release galleries or fresh clones
     curiator reset-demo # rewind the demo: re-break aviato, clear the ledger
@@ -218,6 +219,9 @@ def _find_feedback(cfg: dict, feedback_id: str, app: str | None = None) -> tuple
     return found
 
 
+OPEN_FEEDBACK_STATUSES = {"new", "working", "awaiting_approval", "held"}
+
+
 def _choose_feedback(cfg: dict, app: str, statuses: tuple[str, ...] = ("new", "awaiting_approval", "working")) -> dict | None:
     items = ledger.load(cfg).get(app, [])
     for entry in reversed(items):
@@ -228,8 +232,7 @@ def _choose_feedback(cfg: dict, app: str, statuses: tuple[str, ...] = ("new", "a
 
 def _feedback_counts(cfg: dict, app: str) -> tuple[int, int]:
     items = ledger.load(cfg).get(app, [])
-    open_statuses = {"new", "working", "awaiting_approval"}
-    return len(items), sum(1 for e in items if e.get("kind") != "system" and e.get("status") in open_statuses)
+    return len(items), sum(1 for e in items if e.get("kind") != "system" and e.get("status") in OPEN_FEEDBACK_STATUSES)
 
 
 def _shell_url(cfg: dict, app: str | None = None) -> str:
@@ -1222,9 +1225,13 @@ def cmd_feedback(args) -> int:
         comment = (args.comment_text or " ".join(args.comment or [])).strip()
         if not comment and not args.stars:
             raise SystemExit("curIAtor: feedback add needs a comment and/or --stars.")
-        reply_to = [args.reply_to] if args.reply_to else []
+        extra = {}
+        if args.reply_to:
+            extra["reply_to"] = [args.reply_to]
+        if args.status and args.status != "new":
+            extra["status"] = args.status
         eid = ledger.save_entry(cfg, app, stars=args.stars, comment=comment, user=_cli_user(cfg),
-                                extra={"reply_to": reply_to} if reply_to else None)
+                                extra=extra or None)
         print(f"curiator: added feedback {app}/{eid}")
         return 0
     data = ledger.load(cfg)
@@ -1236,6 +1243,108 @@ def cmd_feedback(args) -> int:
     for app, items in data.items():
         if items:
             _print_feedback_items(cfg, app, args.limit)
+    return 0
+
+
+def _queue_actor(cfg: dict) -> str:
+    root = Path(cfg["repo_root"])
+    git_email = _git_output(root, "config", "user.email")
+    if git_email:
+        return git_email
+    user = _cli_user(cfg) or {}
+    return user.get("email") or user.get("name") or user.get("id") or "local CLI"
+
+
+def _queue_entries(cfg: dict, app: str | None = None) -> list[tuple[str, dict]]:
+    data = ledger.load(cfg)
+    keys = [app] if app else list(data)
+    rows: list[tuple[str, dict]] = []
+    for key in keys:
+        for entry in data.get(key, []):
+            if entry.get("kind") != "system" and entry.get("status") == "held":
+                rows.append((key, entry))
+    return rows
+
+
+def _queue_row_payload(app: str, entry: dict) -> dict:
+    user = entry.get("user") or {}
+    comment = " ".join((entry.get("comment") or "").split())
+    return {
+        "app": app,
+        "id": entry.get("id"),
+        "ts": entry.get("ts"),
+        "author": user.get("email") or user.get("name") or entry.get("author"),
+        "stars": entry.get("stars"),
+        "comment": comment,
+    }
+
+
+def _print_queue_rows(rows: list[tuple[str, dict]]) -> None:
+    if not rows:
+        print("curiator: held queue is empty")
+        return
+    print(f"curiator: {len(rows)} held feedback item(s)")
+    for app, entry in rows:
+        payload = _queue_row_payload(app, entry)
+        stars = f" ★{payload['stars']}" if payload.get("stars") else ""
+        author = payload.get("author") or "user"
+        comment = payload.get("comment") or "(no comment)"
+        print(f"  {payload['id']} {app}{stars} {payload.get('ts') or '-'} {author}: {comment[:160]}")
+
+
+def cmd_queue(args) -> int:
+    """Review feedback held out of agent dispatch.
+
+    `held` is admission control for anonymous/over-quota/public submissions. The watcher only dispatches
+    status:new entries, so approve is a narrow held→new transition and reject closes the thread as
+    rejected with a ledger note.
+    """
+    cfg = load_config()
+    if args.action == "list":
+        app = _resolve_app(cfg, args.app) if args.app else None
+        rows = _queue_entries(cfg, app)
+        if args.limit:
+            rows = rows[:args.limit]
+        if args.json:
+            print(json.dumps([_queue_row_payload(key, entry) for key, entry in rows], indent=2))
+        else:
+            _print_queue_rows(rows)
+        return 0
+
+    app, entry = _find_feedback(cfg, args.feedback_id, args.app)
+    if entry.get("kind") == "system":
+        raise SystemExit(f"curIAtor: {args.feedback_id} is a system note, not a held feedback item.")
+    if entry.get("status") != "held":
+        raise SystemExit(f"curIAtor: {args.feedback_id} is status={entry.get('status')!r}, not held.")
+
+    actor = _queue_actor(cfg)
+    if args.action == "approve":
+        ledger.add_system_note(
+            cfg,
+            app,
+            f"Moderation queue: approved by {actor}; dispatching to the agent.",
+            reply_to=[entry["id"]],
+            agent="curiator queue",
+        )
+        ledger.set_status(cfg, app, [entry["id"]], "new")
+        result = {"app": app, "id": entry["id"], "status": "new", "action": "approved"}
+        if args.json:
+            print(json.dumps(result, indent=2))
+        else:
+            print(f"curiator: approved {app}/{entry['id']} → new")
+        return 0
+
+    reason = " ".join(args.reason or []).strip()
+    text = f"Moderation queue: rejected by {actor}; closed without agent dispatch."
+    if reason:
+        text += f" Reason: {reason}"
+    ledger.add_system_note(cfg, app, text, reply_to=[entry["id"]], agent="curiator queue")
+    ledger.set_status(cfg, app, [entry["id"]], "rejected")
+    result = {"app": app, "id": entry["id"], "status": "rejected", "action": "rejected", "reason": reason}
+    if args.json:
+        print(json.dumps(result, indent=2))
+    else:
+        print(f"curiator: rejected {app}/{entry['id']} → rejected")
     return 0
 
 
@@ -1801,6 +1910,24 @@ def main(argv=None) -> int:
     dn.add_argument("text", nargs="*", help="summary text")
     dn.add_argument("--app", help="override linked/current app")
     dn.set_defaults(func=cmd_done)
+    qu = sub.add_parser("queue", help="review held feedback before it reaches the agent")
+    qu_sub = qu.add_subparsers(dest="action", required=True)
+    ql = qu_sub.add_parser("list", help="list held feedback items")
+    ql.add_argument("--app", help="limit to one app")
+    ql.add_argument("--limit", type=int, default=50, help="maximum held items to show (0 = all)")
+    ql.add_argument("--json", action="store_true", help="emit machine-readable held queue rows")
+    ql.set_defaults(func=cmd_queue)
+    qa = qu_sub.add_parser("approve", help="approve a held item and dispatch it as status:new")
+    qa.add_argument("feedback_id")
+    qa.add_argument("--app", help="disambiguate the feedback id")
+    qa.add_argument("--json", action="store_true", help="emit machine-readable result")
+    qa.set_defaults(func=cmd_queue)
+    qr = qu_sub.add_parser("reject", help="close a held item without agent dispatch")
+    qr.add_argument("feedback_id")
+    qr.add_argument("reason", nargs="*", help="optional reason recorded in the thread")
+    qr.add_argument("--app", help="disambiguate the feedback id")
+    qr.add_argument("--json", action="store_true", help="emit machine-readable result")
+    qr.set_defaults(func=cmd_queue)
     op = sub.add_parser("open", help="print the gallery/app URL")
     op.add_argument("--app", help="override linked/current app")
     op.set_defaults(func=cmd_open)
@@ -1834,7 +1961,7 @@ def main(argv=None) -> int:
     ia.set_defaults(func=cmd_app_create)
     r = sub.add_parser("reply", help="(agent) post a ⚙ note + set status")
     r.add_argument("app"); r.add_argument("feedback_id"); r.add_argument("text")
-    r.add_argument("--status", choices=["done", "awaiting_approval", "working", "new"])
+    r.add_argument("--status", choices=["done", "awaiting_approval", "working", "new", "held", "rejected"])
     r.add_argument("--actions", help="quick-approval buttons, e.g. \"A,B,C\" or \"Yes:yes,No:no\"")
     r.set_defaults(func=cmd_reply)
     rl = sub.add_parser("reload", help="drop a running shell's cached build of an app (make an edit live)")
@@ -1858,6 +1985,8 @@ def main(argv=None) -> int:
     fb.add_argument("--comment", dest="comment_text")
     fb.add_argument("--stars", type=int, choices=range(1, 6))
     fb.add_argument("--reply-to")
+    fb.add_argument("--status", choices=["new", "held"], default="new",
+                    help="initial feedback status; held items wait for `curiator queue approve`")
     fb.add_argument("--limit", type=int, default=20)
     fb.set_defaults(func=cmd_feedback)
     us = sub.add_parser("user", help="manage local-login users (auth.mode: local)")

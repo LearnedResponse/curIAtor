@@ -54,6 +54,9 @@ All notable changes to curIAtor are documented here. The format follows
   defaults, elevated-run risks, and data-handling expectations for ledgers/screenshots/traces.
 - Local-login accounts can be disabled and re-enabled without deleting the account record, giving
   velvet-gated hosted collections a revocation lever.
+- A held-feedback moderation queue: `curiator feedback add --status held` records feedback without
+  dispatching it, and `curiator queue list|approve|reject` lets admins review, release, or close held
+  items with ledger audit notes.
 - `docs/SCREENSHOT_CAPTURE.md` documents the current same-origin `html2canvas` capture path, upload
   fallback, and native/server-side capture tradeoffs.
 - `CITATION.cff` provides machine-readable software citation metadata for GitHub and Zenodo.

@@ -153,6 +153,19 @@ You can also add feedback from the terminal:
 curiator feedback add revenue "the filter panel needs a reset button"
 ```
 
+For feedback that should not wake an agent yet, add or review it through the held queue:
+
+```bash
+curiator feedback add revenue "anonymous/public suggestion" --status held
+curiator queue list
+curiator queue approve <feedback_id>         # held -> new; the watcher can dispatch it
+curiator queue reject <feedback_id> "spam"   # held -> rejected; records a thread note
+```
+
+`held` is admission control for public or over-quota feedback. It is distinct from
+`awaiting_approval`, which means the agent has already looked at a task and is asking a human to
+approve a plan.
+
 And summarize the collection's feedback history for release notes or case studies:
 
 ```bash

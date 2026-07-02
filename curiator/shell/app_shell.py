@@ -93,7 +93,8 @@ REPLIES = FEEDBACK_DIR / "replies"
 SHOTS.mkdir(parents=True, exist_ok=True)
 REPLIES.mkdir(parents=True, exist_ok=True)
 BLUE, GREEN, AMBER, GREY, PURPLE = "#2980b9", "#1f9d55", "#cc7a00", "#777", "#8e44ad"
-OPEN_STATUSES = {"new", "working", "awaiting_approval"}
+HELD, REJECTED = "#6f42c1", "#555"
+OPEN_STATUSES = {"new", "working", "awaiting_approval", "held"}
 
 
 def _sync_shell_config() -> None:
@@ -669,7 +670,8 @@ def render_history(range_key=None):
             else:
                 st = e.get("status", "new")
                 stc = {"new": "#cc7a00", "working": "#8e44ad", "done": "#1f9d55",
-                       "awaiting_approval": "#2980b9"}.get(st, "#777")
+                       "awaiting_approval": "#2980b9", "held": HELD,
+                       "rejected": REJECTED}.get(st, "#777")
                 stars = ("★" * (e.get("stars") or 0)) if e.get("stars") else ""
                 shot = (f"<br><img src='/feedback-shot/{Path(e['screenshot']).name}' "
                         f"style='max-width:320px;border:1px solid #ddd;border-radius:4px;margin-top:4px'>"
@@ -726,7 +728,8 @@ def feedback_list(key):
                        "marginLeft": f"{indent}px", "background": "#eef5fb", "borderRadius": "3px"})
         else:
             st = e.get("status", "new")
-            st_col = {"new": AMBER, "working": PURPLE, "done": GREEN, "awaiting_approval": BLUE}.get(st, GREY)
+            st_col = {"new": AMBER, "working": PURPLE, "done": GREEN, "awaiting_approval": BLUE,
+                      "held": HELD, "rejected": REJECTED}.get(st, GREY)
             stars = ("★" * (e.get("stars") or 0) + "✩" * (5 - (e.get("stars") or 0))) if e.get("stars") else ""
             head = [html.Span(stars, style={"color": AMBER, "fontSize": "13px", "marginRight": "6px"}),
                     _status_badge(e, st, st_col),
