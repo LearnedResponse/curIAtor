@@ -2684,6 +2684,37 @@ def _gallery_entry(
     )
 
 
+def _app_import_postcheck_issues(gallery: Path, name: str) -> list[dict]:
+    """Doctor-style warnings for an imported app, scoped to issues import can reveal immediately."""
+    try:
+        spec = app_spec(load_config_at(gallery), name) or {}
+    except SystemExit:
+        return []
+    root = Path(spec.get("root") or gallery.parent)
+    mount = spec.get("mount") or {}
+    issues: list[dict] = []
+    if mount.get("kind") == "proxy":
+        cmd = str(mount.get("cmd") or "")
+        if _looks_like_hmr_dev_server(cmd):
+            issues.append({
+                "severity": "warning",
+                "where": f"app {name} proxy",
+                "message": (
+                    "proxy command looks like a framework dev server that may use WebSocket/HMR; "
+                    "curIAtor's built-in proxy will show a diagnostic for upgrade requests, so use "
+                    "commands.preview or a full reverse proxy when live HMR is required"
+                ),
+            })
+        _doctor_warn_proxy_base_path(issues, name=name, root=root, mount=mount)
+    _doctor_warn_missing_manifests(
+        issues,
+        name=name,
+        root=root,
+        commands=[spec.get("smoke"), mount.get("cmd")],
+    )
+    return issues
+
+
 def _app_template_files(name: str, template: str, title: str, package_manager: str = "npm") -> dict[str, str]:
     js_smoke = _js_run_command(package_manager, "build")
     if template == "dash":
@@ -2808,6 +2839,8 @@ def cmd_app_import(args) -> int:
     print(f"curiator: {action} app source '{source}' into {root.relative_to(repo)}")
     print(f"  + {root.relative_to(repo)}/")
     print(f"  + {gallery.relative_to(repo)}")
+    for issue in _app_import_postcheck_issues(gallery, name):
+        print(f"  ! {issue['severity'].upper()} {issue['where']}: {issue['message']}")
     print("next:")
     print(f"  curiator reload {name}   # if the shell is already running")
     print(f"  open /app/{name}/")

@@ -26,7 +26,8 @@ All notable changes to curIAtor are documented here. The format follows
   prefix-preserving proxy mount with `basePath`.
 - `curiator app import <source> <name> --template ...` copies a local app directory or clones a git URL
   into `apps/<name>` while preserving the app repo's own `.git/`, then registers the same template-driven
-  mount, smoke, and preview metadata in `gallery.yaml`.
+  mount, smoke, and preview metadata in `gallery.yaml`, with immediate doctor-style warnings for visible
+  HMR, dependency-manifest, and framework base/root-path issues.
 - Per-feedback run artifacts: task bundles live under `feedback/tasks/<id>.md`, agent stdout/stderr
   streams live to `feedback/replies/<id>.md`, and feedback status badges link to a scrollable trace view.
 - Screenshot feedback can be annotated in-browser with boxes, arrows, numbered pins, and redaction

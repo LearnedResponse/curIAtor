@@ -43,6 +43,24 @@ def _node_app_repo(path, *, pnpm_lock: bool = False):
     return path
 
 
+def _next_app_repo(path):
+    path.mkdir()
+    (path / "package.json").write_text(
+        '{\n'
+        '  "scripts": {"dev": "next dev", "build": "next build", "start": "next start"},\n'
+        '  "dependencies": {"next": "^14.2.0", "react": "^18.3.1", "react-dom": "^18.3.1"}\n'
+        "}\n"
+    )
+    (path / "app").mkdir()
+    (path / "app" / "page.jsx").write_text('export default function Page() { return "ok"; }\n')
+    _git(path, "init", "-q")
+    _git(path, "config", "user.name", "Test Curator")
+    _git(path, "config", "user.email", "curator@test.local")
+    _git(path, "add", "-A")
+    _git(path, "commit", "-q", "-m", "init next app")
+    return path
+
+
 def test_app_create_dash_directory_updates_gallery(collection):
     from curiator import cli
 
@@ -443,7 +461,7 @@ def test_app_import_copies_local_repo_and_registers_proxy(collection, tmp_path):
     assert app_spec(load_config(), "imported_node")["commands"]["preview"] == "node server.js --port 8788"
 
 
-def test_app_import_clones_git_url_and_detects_package_manager(collection, tmp_path):
+def test_app_import_clones_git_url_and_detects_package_manager(collection, tmp_path, capsys):
     from curiator import cli
 
     source = _node_app_repo(tmp_path / "external_vite", pnpm_lock=True)
@@ -465,3 +483,24 @@ def test_app_import_clones_git_url_and_detects_package_manager(collection, tmp_p
     assert app["mount"] == {"kind": "proxy", "cmd": "pnpm run dev -- --host 127.0.0.1 --port 8790", "port": 8790}
     assert app["commands"]["preview"] == "pnpm run preview -- --host 127.0.0.1 --port 8790"
     assert app["tags"] == ["react"]
+    out = capsys.readouterr().out
+    assert "framework dev server" in out
+    assert "WebSocket/HMR" in out
+
+
+def test_app_import_warns_for_framework_prefix_mismatch(collection, tmp_path, capsys):
+    from curiator import cli
+
+    source = _next_app_repo(tmp_path / "external_next")
+
+    assert cli.main([
+        "app", "import", str(source), "imported_next",
+        "--template", "next",
+        "--port", "8791",
+    ]) == 0
+
+    data = _gallery(collection)
+    app = next(a for a in data["apps"] if a["name"] == "imported_next")
+    assert app["mount"]["preserve_prefix"] is True
+    out = capsys.readouterr().out
+    assert "Next.js config does not appear to set basePath from CURIATOR_APP" in out

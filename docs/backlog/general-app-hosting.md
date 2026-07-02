@@ -140,7 +140,9 @@ mount, opinionated only at scaffold/import time.
    servers or when Vite/Next/FastAPI/Gradio/Streamlit mounts are missing the base-path/root-path config
    needed under `/app/<name>/`. Doctor also warns when optional Python framework apps such as FastAPI,
    Gradio, or Streamlit lack a dependency manifest, which keeps proxy scaffolds portable before
-   publication. Full live-HMR reverse proxying remains demand-paced per framework.
+   publication. `curiator app import` now surfaces the same visible warnings immediately after
+   registering an existing repo, before the user first loads a broken mount. Full live-HMR reverse
+   proxying remains demand-paced per framework.
 
 Dash-first is the *launch wedge* (ship fast, own the data/HMI audience), **not the identity** — the
 overlay stayed framework-agnostic and the non-Dash proof now runs (`curiator-aviato`: React SSR + Rust +

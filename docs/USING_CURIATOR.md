@@ -96,7 +96,10 @@ curiator app import https://github.com/me/lab-viewer.git lab_viewer --template n
 
 `app import` copies local directories or runs `git clone` for URL-shaped sources, preserving the
 imported app's `.git/` directory inside `apps/<name>`. It does not scaffold or rewrite the app source;
-the template only chooses the `gallery.yaml` mount, smoke, preview command, tags, and proxy port.
+the template only chooses the `gallery.yaml` mount, smoke, preview command, tags, and proxy port. After
+registration, import prints doctor-style warnings for issues it can see immediately, such as framework
+dev-server/HMR commands, missing dependency manifests, or Vite/Next/FastAPI/Gradio/Streamlit base-path
+settings that need source changes before the app will behave correctly under `/app/<name>/`.
 
 Templates today: `dash` (in-process Dash), `static` (same-origin proxy using `http.server`), `python`
 (tiny proxy-served Python HTTP app), `node` (dependency-light Node HTTP server), `flask`
