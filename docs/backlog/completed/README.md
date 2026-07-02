@@ -24,4 +24,4 @@ actually done.
 
 An item that's "core landed" but still has open follow-ons stays in the live backlog with its status
 updated. Examples as of 2026-07-02: `annotated-feedback` and `voice-feedback` have shipped cores but
-open follow-ons; `cli-modularization` is started (3 of 8 seams). None retire yet.
+open follow-ons; `cli-modularization` is started (4 of 8 seams). None retire yet.
