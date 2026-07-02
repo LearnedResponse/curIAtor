@@ -2,10 +2,10 @@
 
 > **Status: core landed & proven in the wild (2026-07-01) — what's left is ergonomics + visibility.**
 > App directories, multi-endpoint `mounts:`, the same-origin `proxy` mount, and `curiator app create`
-> scaffolds (dash/static/python/react/svelte/streamlit) are in the runner, and the **non-Dash proof now exists**:
+> scaffolds (dash/static/python/react/svelte/vue/streamlit) are in the runner, and the **non-Dash proof now exists**:
 > `curiator-aviato` runs a React/Node SSR app and a Rust HTTP server through `proxy` mounts next to
 > Dash, with per-root smoke commands — the loop closed on all of them. Remaining backlog: framework
-> template hardening beyond the first React/Svelte/Streamlit scaffolds, heavier Docker/Compose
+> template hardening beyond the first React/Svelte/Vue/Streamlit scaffolds, heavier Docker/Compose
 > orchestration — and **surfacing the proof**, which is now the cheapest highest-leverage step: the
 > proof is private/local until [public-release](public-release.md) publishes `curiator-aviato` and links
 > it from the README. **Reframed 2026-06-29 — this is *not* an expansion past Dash; it *realizes* what
@@ -78,7 +78,7 @@ curiator app create pnl-board --template dash     # scaffolds apps/pnl-board/ + 
 ```
 
 i.e. a thin `create-vite`-style scaffolder per framework (currently dash / static / python / react /
-svelte / streamlit; later gradio), each emitting a directory + the right `mount` block. Plugins = lock-in + maintenance; templates
+svelte / vue / streamlit; later gradio), each emitting a directory + the right `mount` block. Plugins = lock-in + maintenance; templates
 + the generic proxy = leverage. Stay generic at the mount, opinionated only at scaffold time.
 
 ## Honest scoping & sequencing
@@ -120,7 +120,7 @@ svelte / streamlit; later gradio), each emitting a directory + the right `mount`
 1. **Directories-per-app first** (landed).
 2. **The `proxy` mount + same-origin reverse-proxy** (landed as a lightweight localhost proxy; still needs
    framework-specific templates/build ergonomics).
-3. **Scaffold templates** (`curiator init-app --template …`) — first pass landed for React/Svelte via
+3. **Scaffold templates** (`curiator init-app --template …`) — first pass landed for React/Svelte/Vue via
    Vite proxy mounts, including build smoke hooks, `CURIATOR_APP` base-path config, and npm/pnpm/yarn/bun
    package-manager detection/override.
    Streamlit also has a first scaffold using `server.baseUrlPath`, a prefix-preserving proxy mount,

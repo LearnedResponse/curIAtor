@@ -1792,7 +1792,7 @@ def _gallery_entry(
             f"    mount: {{ kind: proxy, cmd: \"python -m http.server {port} --bind 127.0.0.1\", port: {port} }}\n"
             f"    tags: {_yaml_list(tags)}\n"
         )
-    if template in {"react", "svelte"}:
+    if template in {"react", "svelte", "vue"}:
         smoke = _js_run_command(package_manager, "build")
         serve = _js_run_command(package_manager, "dev", f"--host 127.0.0.1 --port {port}")
         return (
@@ -1839,6 +1839,9 @@ def _app_template_files(name: str, template: str, title: str, package_manager: s
     if template == "svelte":
         return {rel: content.format(name=name, title=title, title_json=json.dumps(title), js_smoke=js_smoke)
                 for rel, content in _APP_SVELTE_TEMPLATE.items()}
+    if template == "vue":
+        return {rel: content.format(name=name, title=title, title_json=json.dumps(title), js_smoke=js_smoke)
+                for rel, content in _APP_VUE_TEMPLATE.items()}
     if template == "streamlit":
         return {rel: content.format(name=name, title=title, title_json=json.dumps(title))
                 for rel, content in _APP_STREAMLIT_TEMPLATE.items()}
@@ -1863,9 +1866,9 @@ def cmd_app_create(args) -> int:
         return 1
     title = args.title or _title_from_name(name)
     tags = _tags_arg(args.tags, template)
-    proxy_templates = {"static", "python", "react", "svelte", "streamlit"}
+    proxy_templates = {"static", "python", "react", "svelte", "vue", "streamlit"}
     port = args.port if args.port is not None else (_next_proxy_port(cfg) if template in proxy_templates else None)
-    package_manager = _resolve_package_manager(repo, args.package_manager) if template in {"react", "svelte"} else "npm"
+    package_manager = _resolve_package_manager(repo, args.package_manager) if template in {"react", "svelte", "vue"} else "npm"
 
     created, skipped = [], []
     root.mkdir(parents=True, exist_ok=True)
@@ -2005,24 +2008,24 @@ def main(argv=None) -> int:
     app_sub = app.add_subparsers(dest="action", required=True)
     ac = app_sub.add_parser("create", help="scaffold an app directory and add it to gallery.yaml")
     ac.add_argument("name", help="app key, e.g. orange_picker")
-    ac.add_argument("--template", choices=["dash", "static", "python", "react", "svelte", "streamlit"], default="dash",
+    ac.add_argument("--template", choices=["dash", "static", "python", "react", "svelte", "vue", "streamlit"], default="dash",
                     help="scaffold template (default: dash)")
     ac.add_argument("--title", help="display title")
     ac.add_argument("--tags", help="comma-separated tags; default is the template name")
-    ac.add_argument("--port", type=int, help="proxy port for static/python/react/svelte/streamlit templates")
+    ac.add_argument("--port", type=int, help="proxy port for static/python/react/svelte/vue/streamlit templates")
     ac.add_argument("--package-manager", choices=["auto", *_JS_PACKAGE_MANAGERS], default="auto",
-                    help="JS package manager for react/svelte templates (default: auto)")
+                    help="JS package manager for react/svelte/vue templates (default: auto)")
     ac.add_argument("--force", action="store_true", help="allow an existing apps/<name> directory")
     ac.set_defaults(func=cmd_app_create)
     ia = sub.add_parser("init-app", help="alias for `curiator app create`")
     ia.add_argument("name", help="app key, e.g. orange_picker")
-    ia.add_argument("--template", choices=["dash", "static", "python", "react", "svelte", "streamlit"], default="dash",
+    ia.add_argument("--template", choices=["dash", "static", "python", "react", "svelte", "vue", "streamlit"], default="dash",
                     help="scaffold template (default: dash)")
     ia.add_argument("--title", help="display title")
     ia.add_argument("--tags", help="comma-separated tags; default is the template name")
-    ia.add_argument("--port", type=int, help="proxy port for static/python/react/svelte/streamlit templates")
+    ia.add_argument("--port", type=int, help="proxy port for static/python/react/svelte/vue/streamlit templates")
     ia.add_argument("--package-manager", choices=["auto", *_JS_PACKAGE_MANAGERS], default="auto",
-                    help="JS package manager for react/svelte templates (default: auto)")
+                    help="JS package manager for react/svelte/vue templates (default: auto)")
     ia.add_argument("--force", action="store_true", help="allow an existing apps/<name> directory")
     ia.set_defaults(func=cmd_app_create)
     r = sub.add_parser("reply", help="(agent) post a ⚙ note + set status")
@@ -2178,7 +2181,7 @@ Use the scaffold command; it creates `apps/<name>/` and updates `gallery.yaml`:
 
     curiator app create revenue --template dash --title "Revenue dashboard"
 
-Templates: `dash`, `static`, `python`, `react`, `svelte`, `streamlit`. React/Svelte use Vite behind a
+Templates: `dash`, `static`, `python`, `react`, `svelte`, `vue`, `streamlit`. React/Svelte/Vue use Vite behind a
 same-origin proxy mount and can auto-detect npm/pnpm/yarn/bun; Streamlit uses its `baseUrlPath` option
 plus a prefix-preserving proxy mount.
 You can still edit `gallery.yaml` manually for existing apps.
@@ -2564,6 +2567,148 @@ export default app;
     font-size: 13px;
   }}
 </style>
+""",
+}
+
+_APP_VUE_TEMPLATE = {
+    "package.json": """\
+{{
+  "name": "{name}",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {{
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  }},
+  "dependencies": {{
+    "@vitejs/plugin-vue": "^5.1.0",
+    "vite": "^5.4.0",
+    "vue": "^3.5.0"
+  }},
+  "devDependencies": {{}}
+}}
+""",
+    "index.html": """\
+<!doctype html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>{title}</title>
+  </head>
+  <body>
+    <div id="app"></div>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
+""",
+    "vite.config.js": """\
+import {{ defineConfig }} from "vite";
+import vue from "@vitejs/plugin-vue";
+
+const app = process.env.CURIATOR_APP || "";
+const base = app ? `/app/${{app}}/` : "/";
+
+export default defineConfig({{
+  base,
+  plugins: [vue()],
+  server: {{
+    host: "127.0.0.1",
+  }},
+}});
+""",
+    "src/main.js": """\
+import {{ createApp }} from "vue";
+import App from "./App.vue";
+import "./style.css";
+
+createApp(App).mount("#app");
+""",
+    "src/App.vue": """\
+<script setup>
+const title = {title_json};
+const metrics = [
+  ["5", "views"],
+  ["9m", "review"],
+  ["14", "signals"],
+];
+</script>
+
+<template>
+  <main class="surface">
+    <p class="eyebrow">curIAtor Vue scaffold</p>
+    <h1>{{{{ title }}}}</h1>
+    <p>
+      This Vue app is served through a same-origin proxy mount. Use the feedback rail to shape the
+      interface; the curator edits files in this directory and smoke-tests with <code>{js_smoke}</code>.
+    </p>
+    <section class="metricGrid" aria-label="demo metrics">
+      <div v-for="metric in metrics" :key="metric[1]">
+        <b>{{{{ metric[0] }}}}</b><span>{{{{ metric[1] }}}}</span>
+      </div>
+    </section>
+  </main>
+</template>
+""",
+    "src/style.css": """\
+:root {{
+  color: #22272e;
+  background: #f6f7f8;
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}}
+
+body {{
+  margin: 0;
+}}
+
+.surface {{
+  max-width: 880px;
+  padding: 32px;
+}}
+
+.eyebrow {{
+  margin: 0 0 8px;
+  color: #8e44ad;
+  font-size: 13px;
+  font-weight: 700;
+}}
+
+h1 {{
+  margin: 0 0 12px;
+  font-size: 32px;
+}}
+
+p {{
+  color: #5e6670;
+  line-height: 1.55;
+}}
+
+.metricGrid {{
+  display: grid;
+  grid-template-columns: repeat(3, minmax(120px, 1fr));
+  gap: 12px;
+  margin-top: 24px;
+  max-width: 620px;
+}}
+
+.metricGrid div {{
+  border: 1px solid #d9dde2;
+  border-radius: 8px;
+  background: white;
+  padding: 14px;
+}}
+
+.metricGrid b {{
+  display: block;
+  font-size: 24px;
+}}
+
+.metricGrid span {{
+  color: #6c747d;
+  font-size: 13px;
+}}
 """,
 }
 
