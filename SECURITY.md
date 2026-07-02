@@ -33,7 +33,9 @@ injection.
 - It does not sandbox arbitrary app code by itself. Use a container, VM, or other host boundary.
 - It does not prevent a fully trusted/elevated agent profile from doing whatever that agent CLI can do.
 - It does not make same-origin app content safe; same-origin is used so screenshots and feedback work.
-- It does not redact sensitive information from screenshots, comments, logs, traces, or ledgers.
+- It does not automatically redact sensitive information from screenshots, comments, logs, traces, or
+  ledgers. Browser-side screenshot redaction is available before save, but it is a manual review step,
+  not a guarantee.
 
 ## Recommended Deployment Defaults
 
@@ -90,6 +92,10 @@ bundles, agent traces, and commit metadata. Before publishing an example collect
 
 Runtime-only files such as local users, task traces, screenshots, and SQLite sidecars should normally
 be gitignored unless you deliberately intend to publish them as part of a sanitized demo.
+
+Screenshot annotation redaction is client-side and burns opaque blocks into the PNG before upload. Use
+it when collecting feedback, but still audit `feedback/shots/` before sharing a ledger or publishing an
+example collection.
 
 For the three release example collections, run `curiator release-preflight --fresh-clone` from the
 runner checkout before publishing. It catches dirty source repos, missing app paths, weak smoke
