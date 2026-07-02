@@ -271,6 +271,43 @@ def test_release_preflight_published_head_gate_checks_fresh_clone_source(tmp_pat
     assert "refs/heads/main" in gallery["published_head"]["matching_refs"]
 
 
+def test_release_preflight_fresh_clone_rechecks_published_head_after_clone(tmp_path, monkeypatch, capsys):
+    from curiator import cli
+
+    repo = _make_gallery(tmp_path)
+    remote = tmp_path / "remote.git"
+    _git(tmp_path, "init", "--bare", "-q", str(remote))
+    _git(repo, "remote", "add", "origin", str(remote))
+    _git(repo, "push", "-q", "origin", "HEAD:refs/heads/main")
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("CURIATOR_GALLERY", raising=False)
+    real_clone_gallery = cli._clone_gallery
+
+    def clone_then_unpublish(source, clone_parent):
+        cloned = real_clone_gallery(source, clone_parent)
+        _git(remote, "update-ref", "-d", "refs/heads/main")
+        return cloned
+
+    monkeypatch.setattr(cli, "_clone_gallery", clone_then_unpublish)
+
+    assert cli.main([
+        "release-preflight",
+        "--gallery", "curiator-demo",
+        "--fresh-clone",
+        "--clone-root", "clones",
+        "--keep-clones",
+        "--no-smoke",
+        "--require-published-head",
+        "--json",
+    ]) == 1
+    payload = json.loads(capsys.readouterr().out)
+    gallery = payload["galleries"][0]
+    assert payload["ok"] is False
+    assert gallery["mode"] == "fresh-clone"
+    assert gallery["published_head"]["ok"] is False
+    assert "does not contain HEAD" in gallery["published_head"]["message"]
+
+
 def test_release_preflight_can_run_http_smoke(tmp_path, monkeypatch, capsys):
     from curiator import cli
 

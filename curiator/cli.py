@@ -1653,6 +1653,10 @@ def _release_preflight_payload_for_clones(args, clone_base: Path) -> dict:
             result["public_remote"] = _public_remote_result(source_repo, source_repo.name, args.public_remote_owner)
         if args.require_published_head:
             result["published_head"] = _published_head_result(source_repo)
+        if args.require_public_remotes and not (result.get("public_remote") or {}).get("ok"):
+            result["ok"] = False
+        if args.require_published_head and not (result.get("published_head") or {}).get("ok"):
+            result["ok"] = False
         result.update({
             "mode": "fresh-clone",
             "source_path": str(source_repo),
