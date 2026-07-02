@@ -175,7 +175,11 @@ def _post_reply(cfg: dict, app: str, feedback_id: str, text: str, status: str | 
             for app_commit in res.get("app_commits") or []:
                 repo = Path(app_commit.get("repo", "")).name or "app repo"
                 print(f"curiator: committed nested app {repo}@{app_commit['sha']} on {app_commit.get('branch','')}")
-            print(f"curiator: committed {res['sha']} on {res.get('branch','')}")
+            for memory_commit in res.get("memory_commits") or []:
+                memory = memory_commit.get("memory") or Path(memory_commit.get("repo", "")).name or "memory"
+                print(f"curiator: committed memory {memory}@{memory_commit['sha']} on {memory_commit.get('branch','')}")
+            if res.get("sha"):
+                print(f"curiator: committed {res['sha']} on {res.get('branch','')}")
         else:
             print(f"curiator: not committed ({res.get('reason')})")
     # On `done`, the agent has just edited the app — make the fix live in a running shell.

@@ -178,6 +178,65 @@ def _names_at_head(collection: Path) -> list[str]:
                           cwd=collection, capture_output=True, text=True).stdout.split()
 
 
+def _init_planning_memory(collection: Path) -> Path:
+    (collection / ".gitignore").write_text(".planning/\n")
+    subprocess.run(["git", "add", ".gitignore"], cwd=collection, check=True, capture_output=True)
+    subprocess.run(["git", "commit", "-q", "-m", "ignore planning memory"],
+                   cwd=collection, check=True, capture_output=True)
+
+    planning = collection / ".planning"
+    (planning / "backlog").mkdir(parents=True)
+    (planning / "backlog" / "README.md").write_text("# Planning\n\n- before\n")
+    subprocess.run(["git", "init", "-q"], cwd=planning, check=True, capture_output=True)
+    subprocess.run(["git", "config", "user.name", "Test Curator"], cwd=planning, check=True, capture_output=True)
+    subprocess.run(["git", "config", "user.email", "curator@test.local"], cwd=planning, check=True, capture_output=True)
+    subprocess.run(["git", "add", "-A"], cwd=planning, check=True, capture_output=True)
+    subprocess.run(["git", "commit", "-q", "-m", "seed planning memory"], cwd=planning, check=True, capture_output=True)
+    return planning
+
+
+def test_commit_run_commits_nested_planning_memory_separately(cfg, collection):
+    planning = _init_planning_memory(collection)
+    src = collection / "apps" / "sample.py"
+    src.write_text(src.read_text().replace('"sample"', '"sample (memory)"'))
+    (planning / "backlog" / "README.md").write_text("# Planning\n\n- after\n")
+    fid = ledger.save_entry(cfg, "sample", comment="fix and record why", ts="t0")
+    ledger.add_system_note(cfg, "sample", "Fixed and documented.", reply_to=[fid], ts="t1")
+    ledger.set_status(cfg, "sample", [fid], "done")
+
+    res = gitmem.commit_run(cfg, "sample", fid, status="done", note_text="Fixed and documented.")
+
+    assert res["committed"], res
+    assert res.get("sha")
+    assert res["memory_commits"][0]["memory"] == "planning"
+    assert res["memory_commits"][0]["repo"] == str(planning)
+    assert "apps/sample.py" in _names_at_head(collection)
+    planning_files = subprocess.run(["git", "show", "--name-only", "--format=", "HEAD"],
+                                    cwd=planning, capture_output=True, text=True).stdout.split()
+    assert planning_files == ["backlog/README.md"]
+    assert f"Curiator-Feedback: {fid}" in _log(planning, "-1", "--format=%B")
+    assert "Curiator-Memory: planning" in _log(planning, "-1", "--format=%B")
+    assert not subprocess.run(["git", "status", "--porcelain"], cwd=planning,
+                              capture_output=True, text=True).stdout.strip()
+
+
+def test_commit_run_can_commit_only_nested_memory(cfg, collection):
+    planning = _init_planning_memory(collection)
+    cfg["git"]["include_ledger"] = False
+    (planning / "backlog" / "README.md").write_text("# Planning\n\n- memory only\n")
+    fid = ledger.save_entry(cfg, "sample", comment="just update planning", ts="t0")
+    ledger.add_system_note(cfg, "sample", "Recorded planning.", reply_to=[fid], ts="t1")
+    ledger.set_status(cfg, "sample", [fid], "done")
+
+    res = gitmem.commit_run(cfg, "sample", fid, status="done", note_text="Recorded planning.")
+
+    assert res["committed"], res
+    assert "sha" not in res
+    assert res["memory_commits"][0]["memory"] == "planning"
+    assert "backlog/README.md" in subprocess.run(["git", "show", "--name-only", "--format=", "HEAD"],
+                                                 cwd=planning, capture_output=True, text=True).stdout.split()
+
+
 def test_commit_includes_dependency_manifest(cfg, collection):
     """An elevated run that adds a dependency: requirements.txt rides in the SAME atomic commit as the
     source + ledger — not left dangling in the working tree (the M2/elevated re-run regression)."""

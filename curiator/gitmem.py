@@ -35,6 +35,7 @@ from . import ledger
 
 _FEEDBACK_TRAILER = "Curiator-Feedback"
 _APP_TRAILER = "Curiator-App"
+_MEMORY_TRAILER = "Curiator-Memory"
 _GENERAL_KEY = "__general__"
 
 # Files that ride in the SAME atomic commit as a source edit when an agent changed them — dependency
@@ -431,6 +432,19 @@ def _dirty_paths_in(repo: Path) -> list[str]:
     return out
 
 
+def _dirty_tracked_paths_in(repo: Path) -> list[str]:
+    """Modified/deleted tracked paths only; excludes untracked runtime files by construction."""
+    out = []
+    for line in _git_in(repo, "status", "--porcelain", "--untracked-files=no", check=False).stdout.splitlines():
+        rel = line[3:]
+        if " -> " in rel:
+            rel = rel.split(" -> ", 1)[1]
+        rel = rel.strip().strip('"')
+        if rel:
+            out.append(rel)
+    return out
+
+
 def _dirty_paths(cfg: dict) -> list[str]:
     return _dirty_paths_in(Path(cfg["repo_root"]))
 
@@ -481,6 +495,103 @@ def _trailers(cfg: dict, sha: str) -> dict:
 def _agent_label(cfg: dict) -> str:
     agent = cfg.get("agent", {}) or {}
     return str(agent.get("model") or agent.get("adapter") or "headless-cc")
+
+
+def _nested_memory_repos(root: Path) -> list[Path]:
+    """Independent git repos nested under the current memory, deepest first for gitlink parents."""
+    repos: list[Path] = []
+    for dirpath, dirnames, _filenames in os.walk(root):
+        path = Path(dirpath)
+        if path == root:
+            dirnames[:] = [d for d in dirnames if d != ".git"]
+            continue
+        if ".git" in dirnames and _is_git_toplevel(path):
+            repos.append(path.resolve())
+            dirnames[:] = [d for d in dirnames if d != ".git"]
+            continue
+        if ".git" in dirnames:
+            dirnames.remove(".git")
+    return sorted(set(repos), key=lambda p: len(p.relative_to(root).parts), reverse=True)
+
+
+def _memory_label(root: Path, repo: Path) -> str:
+    rel = repo.resolve().relative_to(root.resolve()).as_posix()
+    if rel == ".planning":
+        return "planning"
+    return rel
+
+
+def _commit_nested_memory_repo(
+    cfg: dict,
+    app: str,
+    feedback_id: str,
+    *,
+    repo: Path,
+    summary: str,
+    comment: str,
+    stars,
+    status: str,
+) -> dict:
+    root = Path(cfg["repo_root"]).resolve()
+    label = _memory_label(root, repo)
+    paths = _dirty_tracked_paths_in(repo)
+    if not paths:
+        return {"committed": False, "reason": "no tracked changes", "repo": str(repo)}
+
+    _git_in(repo, "add", "-u", "--", *paths)
+    if _git_in(repo, "diff", "--cached", "--quiet", check=False).returncode == 0:
+        return {"committed": False, "reason": "nothing staged in nested memory", "repo": str(repo)}
+
+    changed_desc = f"updated tracked paths in {label}: {', '.join(paths[:8])}"
+    if len(paths) > 8:
+        changed_desc += f", ... ({len(paths) - 8} more)"
+    if status == "awaiting_approval":
+        changed_desc = f"planning note in {label}: {', '.join(paths[:8])}"
+
+    msg = _build_message(label, summary, comment, stars, changed_desc, "n/a (memory-only)").replace("{fid}", feedback_id)
+    msg += f"{_MEMORY_TRAILER}: {label}\n"
+    msg += f"Co-Authored-By: curiator[{_agent_label(cfg)}] <noreply@curiator.dev>\n"
+    git = cfg.get("git", {}) or {}
+    commit_args = ["commit", "-m", msg] + (["-s"] if git.get("signoff", True) else [])
+    _git_in(repo, *commit_args)
+    sha = _git_in(repo, "rev-parse", "--short", "HEAD").stdout.strip()
+    branch = _git_in(repo, "rev-parse", "--abbrev-ref", "HEAD").stdout.strip()
+    return {
+        "committed": True,
+        "sha": sha,
+        "branch": branch,
+        "repo": str(repo),
+        "memory": label,
+        "paths": paths,
+    }
+
+
+def _commit_nested_memories(
+    cfg: dict,
+    app: str,
+    feedback_id: str,
+    *,
+    summary: str,
+    comment: str,
+    stars,
+    status: str,
+) -> list[dict]:
+    root = Path(cfg["repo_root"]).resolve()
+    commits = []
+    for repo in _nested_memory_repos(root):
+        res = _commit_nested_memory_repo(
+            cfg,
+            app,
+            feedback_id,
+            repo=repo,
+            summary=summary,
+            comment=comment,
+            stars=stars,
+            status=status,
+        )
+        if res.get("committed"):
+            commits.append(res)
+    return commits
 
 
 def _build_message(app, summary, comment, stars, changed_desc, smoke) -> str:
@@ -623,20 +734,34 @@ def commit_run(cfg: dict, app: str, feedback_id: str, *, status: str, note_text:
         ) + extra
         if paths:
             _add_paths(cfg, paths, ledger_rel)
-        if _git(cfg, "diff", "--cached", "--quiet", check=False).returncode == 0:
-            return {"committed": False, "reason": "nothing staged to commit"}
-
-        msg = _build_message(app, summary, comment, stars, changed_desc, smoke).replace("{fid}", feedback_id)
-        from_email = ((fb or {}).get("user") or {}).get("email")
-        if from_email:
-            msg += f"Feedback-From: {from_email}\n"       # provenance → the git record (reputation substrate)
-        msg += f"Co-Authored-By: curiator[{_agent_label(cfg)}] <noreply@curiator.dev>\n"
-        commit_args = ["commit", "-m", msg] + (["-s"] if git.get("signoff", True) else [])
-        _git(cfg, *commit_args)
-        sha = _git(cfg, "rev-parse", "--short", "HEAD").stdout.strip()
-        result = {"committed": True, "sha": sha, "branch": current_branch(cfg)}
+        root_committed = _git(cfg, "diff", "--cached", "--quiet", check=False).returncode != 0
+        result: dict = {"committed": False}
+        if root_committed:
+            msg = _build_message(app, summary, comment, stars, changed_desc, smoke).replace("{fid}", feedback_id)
+            from_email = ((fb or {}).get("user") or {}).get("email")
+            if from_email:
+                msg += f"Feedback-From: {from_email}\n"       # provenance → the git record (reputation substrate)
+            msg += f"Co-Authored-By: curiator[{_agent_label(cfg)}] <noreply@curiator.dev>\n"
+            commit_args = ["commit", "-m", msg] + (["-s"] if git.get("signoff", True) else [])
+            _git(cfg, *commit_args)
+            sha = _git(cfg, "rev-parse", "--short", "HEAD").stdout.strip()
+            result.update({"committed": True, "sha": sha, "branch": current_branch(cfg)})
         if nested_commit:
             result["app_commits"] = [nested_commit]
+        memory_commits = _commit_nested_memories(
+            cfg,
+            app,
+            feedback_id,
+            summary=summary,
+            comment=comment,
+            stars=stars,
+            status=status,
+        )
+        if memory_commits:
+            result["committed"] = True
+            result["memory_commits"] = memory_commits
+        if not result["committed"]:
+            result["reason"] = "nothing staged to commit"
         return result
 
 
