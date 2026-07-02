@@ -1,8 +1,9 @@
 # Backlog — curiator-phylogenetics collection (public interactive companion)
 
-> **Status:** scoped, not started. A **public-first** collection seeded from an
-> already-built displayed-trees viz suite (Dash explorer + a working Pyodide
-> static port). Captured 2026-06-30.
+> **Status:** scaffolded 2026-07-02 in nested repo `galleries/curiator-phylogenetics`.
+> Seed commit `713b39e` carries a **public-first** collection seeded from an already-built
+> displayed-trees viz suite: a Pyodide static proxy app (`tinnik_static`) and a Dash local
+> explorer (`tinnik_dash`). Captured 2026-06-30; first scaffold landed 2026-07-02.
 
 ## The pitch
 
@@ -49,15 +50,17 @@ server, no re-implementation.
 ## Work-order
 
 1. **Scaffold `galleries/curiator-phylogenetics`** via `curiator init galleries/curiator-phylogenetics --git` —
-   standalone, **public-first** collection, `runner.mode: checkout`, **`git: {commit: true}`** (the build story is
-   the deliverable), `auth:` set so a reviewer's feedback is attributed. Linked from the
-   curiator README as the **public interactive-companion** demo. `LICENSE`: Apache-2.0.
+   done: standalone, **public-first** collection, `runner.mode: pinned`, **`git: {commit: true}`** (the build story is
+   the deliverable), `auth:` set so a reviewer's feedback is attributed. README links wait for a public
+   repository / deploy URL. `LICENSE`: Apache-2.0.
 2. **Mount strategy (mixed).** Serve the Pyodide static panels via the already-proven
    **`proxy` mount** (point it at a static file server — e.g. `python3 -m http.server` — so
    the browser-WASM page loads same-origin under the overlay); the rich Dash explorer via
-   `dash-inproc` for local iteration. **Wire the static/proxy path first** — it is the public
+   `dash-inproc` for local iteration. First pass landed as `tinnik_static` (`python -m http.server`
+   on port 8751) and `tinnik_dash` (Dash module `app`). **Wire the static/proxy path first** — it is the public
    path and the more interesting integration (a computational page, not a live app process).
-3. **Seed the gallery.** Split the explorer's six panels into **focused apps** the curator
+3. **Seed the gallery.** First pass landed two source-preserving apps: the browser/Pyodide
+   static explorer and the full Dash explorer. Follow-on: split the explorer's six panels into **focused apps** the curator
    can iterate independently (CF-ternary, quartet-tripod, NC-integration, Lemma-9, NC = D,
    continuous-walls-3D), plus the displayed-trees → tree-of-blobs viewers
    (`viz_displayed_trees`), BHV geodesics, and `walls_3d`. Tag each **instrument** (paper
@@ -70,12 +73,24 @@ server, no re-implementation.
    own quartet CFs," "add a species-tree toggle," "collapse trivial blobs," "make the
    TINNiK inference (CFs → tree-of-blobs) interactive," "explain why it's structure not
    weights," "show the min-plus envelope over displayed trees as the reticulation mixture."*
+   First seed file landed with eight reviewer items.
 6. **Run the loop** — `curiator seed && curiator watch`: the curator evolves each app
    fix-by-fix, committing per fix with `Feedback-From` trailers → the git log *is* the
    gallery growing from paper-figures into an explorable public companion.
 7. **Verify by running** (not asserting): the static apps load in-browser (Pyodide boots,
    panels compute, clicks work); the Dash explorer mounts; the seeded feedback actually
    transforms them (diff before → after); a fresh public deploy serves the improved gallery.
+
+## Scaffold verification
+
+- `CURIATOR_GALLERY=galleries/curiator-phylogenetics/gallery.yaml curiator doctor`: passing, no
+  errors or warnings.
+- `CURIATOR_GALLERY=galleries/curiator-phylogenetics/gallery.yaml curiator smoke`: passing for both
+  apps (`tinnik_static`, `tinnik_dash`).
+- Static app checks: `python -m py_compile ...` and `node --check app.js` passed; a temporary
+  `python -m http.server` on port 8751 returned HTTP 200 for `/`.
+- Dash app check: `python -m compileall -q apps/tinnik_dash_explorer` passed.
+- `galleries/curiator-phylogenetics` is initialized as its own git repo with seed commit `713b39e`.
 
 ## Expansion apps (beyond the seed)
 

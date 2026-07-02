@@ -33,9 +33,10 @@ deliberate (ship, let the example demos surface what to prioritize).
 - [**general-app-hosting**](general-app-hosting.md) — host *any* framework and *multi-file* apps.
   **Core landed & proven** (`curiator-aviato` runs React SSR + Rust via `proxy` mounts); what remains is
   scaffold templates, base-path/HMR ergonomics, and publishing the proof.
-- [**phylogenetics-collection**](phylogenetics-collection.md) — **public-first** interactive companion to
-  the tropical displayed-trees paper (displayed trees / tree-of-blobs / NC = D / TINNiK), seeded from an
-  already-built Dash explorer **and a working Pyodide static port**. A domain-specialized sibling of
+- [**phylogenetics-collection**](phylogenetics-collection.md) — scaffolded in
+  `galleries/curiator-phylogenetics` as a **public-first** interactive companion to the tropical
+  displayed-trees paper (displayed trees / tree-of-blobs / NC = D / TINNiK), seeded from an already-built
+  Dash explorer **and a working Pyodide static port**. A domain-specialized sibling of
   `math-geometry-collection` for the phylo-networks community; first client-side-WASM-compute collection;
   ships with the paper's outreach.
 - [**annotated-feedback**](annotated-feedback.md) — draw on the captured screenshot (box / arrow / numbered

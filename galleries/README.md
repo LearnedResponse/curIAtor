@@ -17,6 +17,8 @@ Current local gallery repos:
 - `curiator-finance` — seeded finance self-building demo.
 - `curiator-geometry` — public-knowledge math/geometry quickstart collection.
 - `curiator-ot` — OT/HMI maintenance flagship collection.
+- `curiator-phylogenetics` — public-first tropical phylogenetic networks companion with
+  a Pyodide static explorer and a Dash local explorer.
 
 Run curIAtor against a nested gallery with:
 
