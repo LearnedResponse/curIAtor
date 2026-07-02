@@ -81,11 +81,14 @@ def test_react_shell_has_burned_screenshot_annotations(web_client):
     js = web_client.get("/assets/react_shell.js").get_data(as_text=True)
     css = web_client.get("/assets/react_shell.css").get_data(as_text=True)
     assert "function AnnotationEditor" in js
+    assert "function AnnotationSummary" in js
     assert "function composeShot" in js
     assert "function withDomTarget" in js
     assert "function selectorFor" in js
+    assert "function annotationTarget" in js
     assert "annotations: screenshot ? annotations : []" in js
     assert "rshell-annotation-note" in js
+    assert "rshell-annotation-summary" in js
     assert "annotation note " in js
     assert "shotSource" in js
     assert 'setShotSource("capture")' in js
@@ -95,6 +98,8 @@ def test_react_shell_has_burned_screenshot_annotations(web_client):
     assert "anonymousHeld ? null" in js
     assert "rshell-annotation-canvas" in css
     assert ".rshell-annotation-note input" in css
+    assert ".rshell-annotation-summary" in css
+    assert ".rshell-annotation-target" in css
     assert "touch-action: none" in css
 
 
@@ -310,6 +315,12 @@ def test_react_shell_feedback_api_stores_sanitized_annotations(web_client):
     assert "text" not in annotations[0]["target"]
     assert annotations[1]["note"] == "private value"
     assert "target" not in annotations[1]
+
+    home = web_client.get("/general").get_data(as_text=True)
+    assert "Annotations" in home
+    assert "legend overlaps chart" in home
+    assert "#chart .legend" in home
+    assert "target omitted" in home
 
 
 def test_react_shell_trace_and_app_mount(collection, web_mod):

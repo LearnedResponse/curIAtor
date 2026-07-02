@@ -454,6 +454,56 @@ body {
   font: 12px system-ui, sans-serif;
 }
 
+.rshell-annotation-summary {
+  display: grid;
+  gap: 4px;
+  margin-top: 6px;
+  padding: 6px 7px;
+  border: 1px solid #e5e5e5;
+  border-radius: 4px;
+  background: #fff;
+  color: #444;
+  font-size: 11px;
+}
+
+.rshell-annotation-summary-title {
+  font-weight: 700;
+  color: #555;
+}
+
+.rshell-annotation-summary-row {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr);
+  align-items: start;
+  gap: 6px;
+}
+
+.rshell-annotation-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 20px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  background: #f7f7f7;
+  font-weight: 700;
+}
+
+.rshell-annotation-copy {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.rshell-annotation-target {
+  display: block;
+  margin-top: 2px;
+  color: #555;
+  background: #f7f7f7;
+  border-radius: 3px;
+  padding: 2px 4px;
+  white-space: normal;
+}
+
 .rshell-shot {
   max-width: 100%;
   margin-top: 4px;

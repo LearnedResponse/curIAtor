@@ -494,6 +494,99 @@ def _clean_annotations(raw) -> list[dict]:
     return out
 
 
+def _annotation_label(mark: dict, idx: int) -> str:
+    tool = mark.get("tool")
+    if tool == "pin":
+        return str(mark.get("n") or idx + 1)
+    if tool == "box":
+        return f"□{idx + 1}"
+    if tool == "arrow":
+        return f"↗{idx + 1}"
+    if tool == "redact":
+        return f"█{idx + 1}"
+    return str(idx + 1)
+
+
+def _annotation_target_text(mark: dict) -> str:
+    if mark.get("tool") == "redact":
+        return "target omitted"
+    target = mark.get("target") or {}
+    if not isinstance(target, dict):
+        return ""
+    if target.get("selector"):
+        return str(target["selector"])
+    if target.get("data_testid"):
+        return f'[data-testid="{target["data_testid"]}"]'
+    if target.get("id"):
+        return f'#{target["id"]}'
+    if target.get("role"):
+        return f'[role="{target["role"]}"]'
+    if target.get("tag"):
+        return str(target["tag"])
+    return ""
+
+
+def _annotation_marks(entry: dict) -> list[dict]:
+    marks = entry.get("annotations")
+    return [mark for mark in marks if isinstance(mark, dict)] if isinstance(marks, list) else []
+
+
+def _annotation_summary_html(entry: dict) -> str:
+    marks = _annotation_marks(entry)
+    if not marks:
+        return ""
+    rows = []
+    for idx, mark in enumerate(marks):
+        label = _annotation_label(mark, idx)
+        note = mark.get("note")
+        target = _annotation_target_text(mark)
+        text = _esc(str(mark.get("tool") or "mark"))
+        if note:
+            text += f" — {_esc(str(note))}"
+        target_html = (f"<code style='display:block;margin-top:2px;color:#555;background:#f7f7f7;"
+                       f"border-radius:3px;padding:2px 4px;white-space:normal'>{_esc(target)}</code>"
+                       if target else "")
+        rows.append(
+            "<div style='display:grid;grid-template-columns:28px minmax(0,1fr);gap:6px;"
+            "align-items:start;margin-top:4px'>"
+            f"<span style='display:inline-flex;align-items:center;justify-content:center;min-height:20px;"
+            f"border:1px solid #ddd;border-radius:4px;background:#f7f7f7;font-weight:700'>{_esc(label)}</span>"
+            f"<span style='min-width:0;overflow-wrap:anywhere'>{text}{target_html}</span></div>"
+        )
+    return ("<div style='margin-top:6px;padding:6px 7px;border:1px solid #e5e5e5;border-radius:4px;"
+            "background:#fff;color:#444;font-size:11px'>"
+            "<div style='font-weight:700;color:#555'>Annotations</div>"
+            f"{''.join(rows)}</div>")
+
+
+def _annotation_summary_dash(entry: dict):
+    marks = _annotation_marks(entry)
+    if not marks:
+        return None
+    rows = []
+    for idx, mark in enumerate(marks):
+        target = _annotation_target_text(mark)
+        body = [html.Span(str(mark.get("tool") or "mark"))]
+        if mark.get("note"):
+            body.append(html.Span(f" — {mark['note']}"))
+        if target:
+            body.append(html.Code(target, style={"display": "block", "marginTop": "2px", "color": "#555",
+                                                "background": "#f7f7f7", "borderRadius": "3px",
+                                                "padding": "2px 4px", "whiteSpace": "normal"}))
+        rows.append(html.Div([
+            html.Span(_annotation_label(mark, idx),
+                      style={"display": "inline-flex", "alignItems": "center", "justifyContent": "center",
+                             "minHeight": "20px", "border": "1px solid #ddd", "borderRadius": "4px",
+                             "background": "#f7f7f7", "fontWeight": 700}),
+            html.Span(body, style={"minWidth": 0, "overflowWrap": "anywhere"}),
+        ], style={"display": "grid", "gridTemplateColumns": "28px minmax(0, 1fr)", "alignItems": "start",
+                  "gap": "6px"}))
+    return html.Div([html.Div("Annotations", style={"fontWeight": 700, "color": "#555"})] + rows,
+                    style={"display": "grid", "gap": "4px", "marginTop": "6px", "padding": "6px 7px",
+                           "border": "1px solid #e5e5e5", "borderRadius": "4px", "background": "#fff",
+                           "color": "#444", "fontSize": "11px"})
+
+
 def save_entry(key, stars, comment, shot_dataurl, user=None, reply_to=None, status: str = "new", annotations=None):
     eid = uuid.uuid4().hex[:8]
     screenshot = None
@@ -757,9 +850,11 @@ def render_history(range_key=None):
                        "awaiting_approval": "#2980b9", "held": HELD,
                        "rejected": REJECTED}.get(st, "#777")
                 stars = ("★" * (e.get("stars") or 0)) if e.get("stars") else ""
-                shot = (f"<br><img src='/feedback-shot/{Path(e['screenshot']).name}' "
-                        f"style='max-width:320px;border:1px solid #ddd;border-radius:4px;margin-top:4px'>"
+                shot = (f"<img src='/feedback-shot/{Path(e['screenshot']).name}' "
+                        f"style='display:block;max-width:320px;border:1px solid #ddd;"
+                        f"border-radius:4px;margin-top:4px'>"
                         if e.get("screenshot") else "")
+                annotations = _annotation_summary_html(e)
                 who = (e.get("user") or {}).get("name")
                 whoh = (f" <span style='color:#8e44ad;font-size:10px;font-weight:600'>· {_esc(who)}</span>"
                         if who else "")
@@ -769,7 +864,7 @@ def render_history(range_key=None):
                            f"{_status_badge_html(e, st, stc)} {tsh}{whoh}"
                            f"{_reply_button_html(key, e)}"
                            f"<div style='font-size:12.5px;color:#333;white-space:pre-wrap;margin-top:2px'>"
-                           f"{_esc(e.get('comment', ''))}{shot}</div></div>")
+                           f"{_esc(e.get('comment', ''))}</div>{shot}{annotations}</div>")
             for child in children.get(e.get("id"), []):
                 render_entry(child, depth + 1)
 
@@ -830,6 +925,9 @@ def feedback_list(key):
                 kids.append(html.Img(src=f"/feedback-shot/{Path(e['screenshot']).name}",
                                      style={"maxWidth": "100%", "marginTop": "4px", "border": "1px solid #ddd",
                                             "borderRadius": "4px"}))
+            annotation_summary = _annotation_summary_dash(e)
+            if annotation_summary:
+                kids.append(annotation_summary)
             row = html.Div(kids, style={"borderLeft": f"2px solid {st_col}", "padding": "4px 8px",
                                         "marginBottom": "6px", "marginLeft": f"{indent}px",
                                         "background": "#fafafa", "opacity": 0.6 if st == "done" else 1.0})

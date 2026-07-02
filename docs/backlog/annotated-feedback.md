@@ -65,8 +65,10 @@ Two tiers, and the second is the one only curiator can do:
    **and** the code anchor.
 4. **Per-mark note lines** — first pass landed: every mark gets a compact optional note input, and
    non-empty notes ride with the structured annotation into the ledger/task bundle.
-5. **Richer annotation replay** — follow-on: preserve an editable/replayable overlay view for reviewers
-   rather than only the burned PNG plus task-bundle text.
+5. **Richer annotation replay** — first replay surface landed: prior-feedback threads and the
+   General collection home show compact structured annotation summaries with per-mark notes and
+   DOM targets. Follow-on: preserve an editable/replayable overlay view for reviewers rather than
+   only the burned PNG plus task-bundle text.
 6. **Graceful fallback.** Same-origin only (already the screenshot moat's requirement); for
    a cross-origin proxy iframe, fall back to burn-in-only for that mount.
 

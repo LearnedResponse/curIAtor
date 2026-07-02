@@ -109,6 +109,41 @@
     ctx.restore();
   }
 
+  function annotationLabel(mark, idx) {
+    if (mark.tool === "pin") return String(mark.n || idx + 1);
+    if (mark.tool === "box") return "□" + (idx + 1);
+    if (mark.tool === "arrow") return "↗" + (idx + 1);
+    if (mark.tool === "redact") return "█" + (idx + 1);
+    return String(idx + 1);
+  }
+
+  function annotationTarget(mark) {
+    if (mark.tool === "redact") return "target omitted";
+    const target = mark.target || {};
+    if (target.selector) return target.selector;
+    if (target.data_testid) return "[data-testid=\"" + target.data_testid + "\"]";
+    if (target.id) return "#" + target.id;
+    if (target.role) return "[role=\"" + target.role + "\"]";
+    if (target.tag) return target.tag;
+    return "";
+  }
+
+  function AnnotationSummary({entry}) {
+    const marks = (entry && entry.annotations) || [];
+    if (!marks.length) return null;
+    return h("div", {className: "rshell-annotation-summary"},
+      h("div", {className: "rshell-annotation-summary-title"}, "Annotations"),
+      marks.map((mark, idx) => {
+        const target = annotationTarget(mark);
+        return h("div", {className: "rshell-annotation-summary-row", key: idx},
+          h("span", {className: "rshell-annotation-chip"}, annotationLabel(mark, idx)),
+          h("span", {className: "rshell-annotation-copy"},
+            mark.tool || "mark",
+            mark.note ? " — " + mark.note : "",
+            target ? h("code", {className: "rshell-annotation-target"}, target) : null));
+      }));
+  }
+
   function composeShot(dataUrl, annotations) {
     if (!dataUrl || !annotations.length) return Promise.resolve(dataUrl);
     return new Promise((resolve) => {
@@ -263,14 +298,6 @@
       setAnnotations(annotations.concat([annotate ? annotate(mark) : mark]));
     }
 
-    function markLabel(mark, idx) {
-      if (mark.tool === "pin") return String(mark.n || idx + 1);
-      if (mark.tool === "box") return "□" + (idx + 1);
-      if (mark.tool === "arrow") return "↗" + (idx + 1);
-      if (mark.tool === "redact") return "█" + (idx + 1);
-      return String(idx + 1);
-    }
-
     function note(idx, value) {
       setAnnotations(annotations.map((mark, i) => i === idx ? Object.assign({}, mark, {note: value}) : mark));
     }
@@ -291,9 +318,9 @@
           onPointerDown: down, onPointerMove: move, onPointerUp: up, onPointerCancel: () => setDraft(null)})),
       annotations.length ? h("div", {className: "rshell-annotation-notes"},
         annotations.map((mark, idx) => h("label", {className: "rshell-annotation-note", key: idx},
-          h("span", null, markLabel(mark, idx)),
+          h("span", null, annotationLabel(mark, idx)),
           h("input", {value: mark.note || "", maxLength: 500, placeholder: "note…",
-            "aria-label": "annotation note " + markLabel(mark, idx),
+            "aria-label": "annotation note " + annotationLabel(mark, idx),
             onChange: (e) => note(idx, e.target.value)})))) : null);
   }
 
@@ -370,6 +397,7 @@
         h("button", {className: "rshell-reply", onClick: () => onReply(entry)}, "reply")),
       h("div", {className: "rshell-entry-body"}, entry.comment || ""),
       entry.shot_url ? h("img", {className: "rshell-shot", src: entry.shot_url}) : null,
+      h(AnnotationSummary, {entry}),
       actionBlock);
     return h("div", {className: "rshell-thread"}, body,
       (children[entry.id] || []).map((c) => h(Entry, {key: c.id, entry: c, depth: depth + 1, children, actions, onReply, onAction})));
