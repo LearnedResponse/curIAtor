@@ -106,11 +106,11 @@ stay in this repo. The shell never needed to know what it displays (0 coupling),
 
 ## Decisions — RESOLVED 2026-06-28
 
-1. ~~Name~~ → **curIAtor** (`curiator`). **License** → still open; recommend **MIT** (max adoption). ← only remaining decision.
+1. ~~Name~~ → **curIAtor** (`curiator`). ~~License~~ → **Apache-2.0** (`LICENSE` + `NOTICE`).
 2. ~~Dash-first vs framework-agnostic~~ → **Dash-first** (own the niche; `proxy` mount kind keeps the door open).
 3. ~~Where it lives~~ → **fresh public repo `LearnedResponse/curiator`**, separate from Kwisatz.
 4. ~~Distribution~~ → **both** — standalone repo (the shell) **and** Claude Code / Codex interactive shims (the loop), per the Graphify channel.
 
-Only open knob: **MIT vs Apache-2.0**. Everything else is locked → ready for **M0**.
+No open extraction-scope knobs remain; the standalone package has shipped under Apache-2.0.
 
 If this scope looks right, say go and I'll start at **M0** (lift & strip into a scratch layout) — read-only on the live shell, building the standalone copy beside it.

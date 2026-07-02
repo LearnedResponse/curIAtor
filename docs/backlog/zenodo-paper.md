@@ -38,7 +38,7 @@ the durable record of that conversation.
    compliment), html2canvas fidelity limits, single-tenant assumptions.
 5. **Related work** — agentic coding CLIs (Claude Code, Codex, aider), in-context visual feedback /
    annotation tools, ChatOps, research-software engineering (JOSS-style tooling papers).
-6. **Availability** — GitHub, PyPI, Zenodo DOI, MIT.
+6. **Availability** — GitHub, PyPI, Zenodo DOI, Apache-2.0.
 
 ## Work-order
 
