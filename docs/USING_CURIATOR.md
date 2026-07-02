@@ -268,6 +268,7 @@ Before moving or publishing a collection, run the portability preflight:
 curiator doctor                # errors on absolute/missing paths; warns on weak smoke/proxy/HMR/deps
 curiator doctor --json
 curiator smoke                 # runs each app's configured smoke command or cheap inferred fallback
+curiator smoke --http          # also starts proxy apps briefly and verifies an HTTP response
 curiator smoke --app revenue --json
 curiator smoke --jobs 4 --json # run independent app checks concurrently, preserving report order
 curiator release-preflight     # nested public galleries + publish-unsafe artifacts/local deps
@@ -288,6 +289,16 @@ make release-check
 
 The full publication checklist lives in [`RELEASE.md`](RELEASE.md), including PyPI Trusted Publishing,
 collection publication, Zenodo, and post-release smoke checks.
+
+For proxy apps that should prove they can answer HTTP, add an optional path:
+
+```yaml
+smoke_http: /healthz
+```
+
+Then run `curiator smoke --http`. The command starts the app with `commands.preview` when available
+(otherwise `mount.cmd`), exports `PORT` and `CURIATOR_APP`, polls `http://127.0.0.1:<port><path>`, and
+tears the process down. This is a lightweight server-response check, not a full browser/HMR test.
 
 ## 4. Two install profiles
 

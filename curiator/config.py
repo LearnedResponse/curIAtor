@@ -123,7 +123,9 @@ def _resolve(base: Path, value: str | None) -> Path | None:
 # ── the ONE home of `gallery.yaml` app/mount normalization ──
 # The shell registry, the loop adapters, gitmem, and the CLI all consume these helpers. The schema
 # semantics (mount/mounts merge, root/source resolution) live HERE — don't re-derive them per consumer.
-MOUNT_MERGE_KEYS = ("source", "title", "tags", "color", "smoke", "smoke_timeout", "cwd", "port", "cmd")
+MOUNT_MERGE_KEYS = (
+    "source", "title", "tags", "color", "smoke", "smoke_timeout", "smoke_http", "cwd", "port", "cmd"
+)
 
 
 def mount_entries(app_cfg: dict) -> list[tuple[str, dict]]:
@@ -159,6 +161,7 @@ def app_specs(cfg: dict) -> list[dict]:
                 "source": str(_resolve(source_base, source) or root),
                 "smoke": mount.get("smoke", a.get("smoke")),
                 "smoke_timeout": mount.get("smoke_timeout", a.get("smoke_timeout")),
+                "smoke_http": mount.get("smoke_http", a.get("smoke_http")),
                 "commands": mount.get("commands", a.get("commands") or {}),
                 "module": mount.get("module"),
                 "mount": mount,

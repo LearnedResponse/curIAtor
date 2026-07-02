@@ -115,8 +115,10 @@ only at scaffold/import time.
   per framework.
 - **Smoke-test for a build step** — `auto-small` "smoke-test before commit" means more than "this
   Python module imports." Scaffolded apps carry explicit per-template smoke commands, and no-smoke
-  proxy directories now get conservative inferred checks for obvious Python/Node/Rust servers. Full
-  browser-level "the app renders" smoke remains a heavier, demand-paced check.
+  proxy directories now get conservative inferred checks for obvious Python/Node/Rust servers.
+  `curiator smoke --http` can also start proxy apps briefly and verify an HTTP response, using
+  `smoke_http` when a collection pins a health path. Full browser-level "the app renders" smoke
+  remains a heavier, demand-paced check.
 - **Static-export synergy** — JS apps are *already* static-buildable, so this direction and the deferred
   static-publish target reinforce each other (a built React app **is** the static export).
 - **Where does it stop?** Hosting arbitrary processes is powerful but widens the security/sandbox surface
@@ -149,9 +151,10 @@ only at scaffold/import time.
    Gradio, or Streamlit lack a dependency manifest, which keeps proxy scaffolds portable before
    publication. `curiator smoke` now reports and runs cheap inferred fallback checks for no-smoke
    proxy directories when an obvious `server.py`/`app.py`/`main.py`, Node server file, or `Cargo.toml`
-   is present. `curiator app import` now surfaces the same visible warnings immediately after
-   registering an existing repo, before the user first loads a broken mount. Full live-HMR reverse
-   proxying remains demand-paced per framework.
+   is present, and `curiator smoke --http` adds an opt-in proxy process + HTTP response check.
+   `curiator app import` now surfaces the same visible warnings immediately after registering an
+   existing repo, before the user first loads a broken mount. Full live-HMR reverse proxying remains
+   demand-paced per framework.
 
 Dash-first is the *launch wedge* (ship fast, own the data/HMI audience), **not the identity** — the
 overlay stayed framework-agnostic and the non-Dash proof now runs (`curiator-aviato`: React SSR + Rust +

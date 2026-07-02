@@ -75,7 +75,8 @@ All notable changes to curIAtor are documented here. The format follows
   with `--app`, `--jobs`, `--json`, and configurable `smoke_timeout` / `smoke.timeout` limits for
   release preflight automation. Directory/proxy apps without explicit `smoke:` now get conservative
   inferred checks for obvious Python, Node, and Rust server roots instead of silently passing with
-  `n/a`.
+  `n/a`; `curiator smoke --http` can also start proxy apps briefly and verify a configured
+  `smoke_http` path or default app URL responds over HTTP.
 - `curiator release-preflight` runs doctor/smoke/path checks across the nested public release
   collections, rejects tracked publish-unsafe runtime/auth artifacts such as local user stores, task
   traces, screenshots, SQLite sidecars, env files, and legacy JSON ledgers, as well as generated caches,

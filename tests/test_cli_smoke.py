@@ -50,6 +50,106 @@ def test_smoke_infers_python_proxy_directory_check(collection, capsys):
     assert "SyntaxError" in payload["results"][0]["message"]
 
 
+def test_smoke_http_starts_proxy_and_checks_configured_path(collection, capsys, monkeypatch):
+    from curiator import cli
+    from curiator import gitmem
+
+    port = 8877
+    root = collection / "apps" / "proxy_http"
+    root.mkdir()
+    (root / "server.py").write_text(textwrap.dedent("""\
+        from __future__ import annotations
+
+        import argparse
+        from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+
+        class Handler(BaseHTTPRequestHandler):
+            def do_GET(self):
+                if self.path == "/healthz":
+                    body = b"ok"
+                    self.send_response(200)
+                    self.send_header("content-length", str(len(body)))
+                    self.end_headers()
+                    self.wfile.write(body)
+                    return
+                self.send_response(404)
+                self.end_headers()
+
+            def log_message(self, fmt, *args):
+                return
+
+
+        parser = argparse.ArgumentParser()
+        parser.add_argument("--port", type=int, required=True)
+        args = parser.parse_args()
+        ThreadingHTTPServer(("127.0.0.1", args.port), Handler).serve_forever()
+    """))
+    (collection / "gallery.yaml").write_text(textwrap.dedent(f"""\
+        apps:
+          - name: proxy_http
+            title: Proxy HTTP
+            root: apps/proxy_http
+            source: .
+            smoke: python -m py_compile server.py
+            smoke_http: /healthz
+            commands:
+              preview: "{sys.executable} server.py --port {port}"
+            mount: {{ kind: proxy, cmd: "{sys.executable} server.py --port {{port}}", port: {port} }}
+    """))
+
+    popen_calls = []
+
+    class FakeProc:
+        pid = 123
+
+        def __init__(self):
+            self.terminated = False
+
+        def poll(self):
+            return None
+
+        def terminate(self):
+            self.terminated = True
+
+        def wait(self, timeout=None):
+            return 0
+
+    def fake_popen(args, *popen_args, **popen_kwargs):
+        if args[:2] != [sys.executable, "server.py"]:
+            return real_popen(args, *popen_args, **popen_kwargs)
+        popen_calls.append({"args": args, "cwd": popen_kwargs.get("cwd"), "env": popen_kwargs.get("env")})
+        return FakeProc()
+
+    class FakeResponse:
+        status = 204
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+    real_popen = gitmem.subprocess.Popen
+    monkeypatch.setattr(gitmem.subprocess, "Popen", fake_popen)
+    monkeypatch.setattr(gitmem.urllib.request, "urlopen", lambda url, timeout=None: FakeResponse())
+
+    assert cli.main(["smoke", "--app", "proxy_http", "--json"]) == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert "http_smoke" not in payload["results"][0]
+
+    assert cli.main(["smoke", "--app", "proxy_http", "--http", "--json"]) == 0
+    payload = json.loads(capsys.readouterr().out)
+    result = payload["results"][0]
+    assert result["smoke"] == "python -m py_compile server.py"
+    assert result["http_smoke"]["ok"] is True
+    assert result["http_smoke"]["url"] == f"http://127.0.0.1:{port}/healthz"
+    assert result["http_smoke"]["command"] == f"{sys.executable} server.py --port {port}"
+    assert popen_calls[0]["cwd"] == root
+    assert popen_calls[0]["env"]["PORT"] == str(port)
+    assert popen_calls[0]["env"]["CURIATOR_APP"] == "proxy_http"
+
+
 def test_smoke_reports_failing_configured_smoke(collection, capsys):
     from curiator import cli
 

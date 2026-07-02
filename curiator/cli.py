@@ -1109,30 +1109,36 @@ def _smoke_result_metadata(cfg: dict, spec: dict) -> dict:
     }
 
 
-def _smoke_result_for_spec(cfg: dict, spec: dict) -> dict:
+def _smoke_result_for_spec(cfg: dict, spec: dict, *, http: bool = False) -> dict:
     from . import gitmem
 
     result = _smoke_result_metadata(cfg, spec)
     try:
         name = result["app"]
         ok, message = gitmem.smoke_app(cfg, name, spec.get("source"))
+        if ok and http:
+            http_result = gitmem.http_smoke_app(cfg, name, spec.get("source"), spec)
+            result["http_smoke"] = http_result
+            if http_result.get("ok") is False:
+                ok = False
+                message = f"{message}; HTTP smoke failed: {http_result.get('message')}"
     except Exception as exc:  # noqa: BLE001
         ok, message = False, f"{type(exc).__name__}: {exc}"
     result.update({"ok": ok, "message": message})
     return result
 
 
-def _smoke_results(cfg: dict, app: str | None = None, jobs: int = 1) -> list[dict]:
+def _smoke_results(cfg: dict, app: str | None = None, jobs: int = 1, *, http: bool = False) -> list[dict]:
     specs = _smoke_work_specs(cfg, app)
     if jobs <= 1 or len(specs) <= 1:
-        return [_smoke_result_for_spec(cfg, spec) for spec in specs]
+        return [_smoke_result_for_spec(cfg, spec, http=http) for spec in specs]
 
     from concurrent.futures import ThreadPoolExecutor, as_completed
 
     results: list[dict | None] = [None] * len(specs)
     with ThreadPoolExecutor(max_workers=min(jobs, len(specs))) as pool:
         futures = {
-            pool.submit(_smoke_result_for_spec, cfg, spec): index
+            pool.submit(_smoke_result_for_spec, cfg, spec, http=http): index
             for index, spec in enumerate(specs)
         }
         for future in as_completed(futures):
@@ -1146,7 +1152,7 @@ def cmd_smoke(args) -> int:
     if args.jobs < 1:
         print("curiator: smoke --jobs must be >= 1")
         return 2
-    results = _smoke_results(cfg, args.app, jobs=args.jobs)
+    results = _smoke_results(cfg, args.app, jobs=args.jobs, http=args.http)
     ok = all(r["ok"] for r in results)
     if args.json:
         print(json.dumps({"ok": ok, "results": results}, indent=2))
@@ -1154,6 +1160,13 @@ def cmd_smoke(args) -> int:
     for r in results:
         status = "OK" if r["ok"] else "FAIL"
         detail = f" — {r['message']}" if r.get("message") else ""
+        if r.get("http_smoke"):
+            http_smoke = r["http_smoke"]
+            if http_smoke.get("ok") is None:
+                http_status = "SKIP"
+            else:
+                http_status = "OK" if http_smoke.get("ok") else "FAIL"
+            detail += f" — http {http_status} {http_smoke.get('url') or ''}: {http_smoke.get('message')}"
         command = f" [{r['smoke']}]" if r.get("smoke") else ""
         print(f"curiator: smoke {status} {r['app']}{command}{detail}")
     print(f"curiator: smoke {'OK' if ok else 'FAILED'} ({sum(1 for r in results if r['ok'])}/{len(results)} passed)")
@@ -3195,6 +3208,7 @@ def main(argv=None) -> int:
     sm = sub.add_parser("smoke", help="run configured app smoke commands for this collection")
     sm.add_argument("--app", help="limit smoke checks to one app")
     sm.add_argument("--jobs", type=int, default=1, help="run up to N smoke checks concurrently (default: 1)")
+    sm.add_argument("--http", action="store_true", help="also start proxy apps briefly and verify HTTP response")
     sm.add_argument("--json", action="store_true", help="emit machine-readable results")
     sm.set_defaults(func=cmd_smoke)
     gl = sub.add_parser("galleries", help="list, clone, or adopt nested curiator-* collection repos")

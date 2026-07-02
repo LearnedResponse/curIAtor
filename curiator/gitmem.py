@@ -20,10 +20,15 @@ from __future__ import annotations
 import contextlib
 import fcntl
 import fnmatch
+import os
 import importlib.util
 import re
 import shlex
 import subprocess
+import tempfile
+import time
+import urllib.error
+import urllib.request
 from pathlib import Path
 
 from . import ledger
@@ -245,13 +250,126 @@ def inferred_smoke_command(cfg: dict, spec: dict) -> str | None:
     return None
 
 
+def _render_smoke_template(cfg: dict, spec: dict, app: str, src: str | None, command: str) -> str:
+    root = spec.get("root") or Path(cfg["repo_root"])
+    source = spec.get("source") or (Path(cfg["repo_root"]) / src if src else root)
+    return str(command).format(root=str(root), source=str(source), app=app)
+
+
 def smoke_command(cfg: dict, spec: dict, app: str, src: str | None) -> str | None:
     cmd = spec.get("smoke") or inferred_smoke_command(cfg, spec)
     if not cmd:
         return None
-    root = spec.get("root") or Path(cfg["repo_root"])
-    source = spec.get("source") or (Path(cfg["repo_root"]) / src if src else root)
-    return str(cmd).format(root=str(root), source=str(source), app=app)
+    return _render_smoke_template(cfg, spec, app, src, str(cmd))
+
+
+def _http_smoke_settings(spec: dict, app: str) -> dict | None:
+    raw = spec.get("smoke_http")
+    if raw is False:
+        return None
+    mount = spec.get("mount") or {}
+    if mount.get("kind") != "proxy":
+        return None
+    if isinstance(raw, str):
+        settings = {"path": raw}
+    elif isinstance(raw, dict):
+        settings = dict(raw)
+    else:
+        settings = {}
+    path = settings.get("path")
+    if not path:
+        path = f"/app/{app}/" if mount.get("preserve_prefix") else "/"
+    path = str(path).format(app=app)
+    if not path.startswith(("http://", "https://", "/")):
+        path = "/" + path
+    settings["path"] = path
+    return settings
+
+
+def _tail(path: Path, limit: int = 2000) -> str:
+    try:
+        return path.read_text(encoding="utf-8", errors="replace")[-limit:].strip()
+    except OSError:
+        return ""
+
+
+def http_smoke_app(cfg: dict, app: str, src: str | None, spec: dict | None = None) -> dict:
+    """Start a proxy app briefly and verify it answers HTTP. Intended for opt-in CLI/runtime smoke."""
+    spec = spec or _app_spec(cfg, app) or {}
+    settings = _http_smoke_settings(spec, app)
+    if not settings:
+        return {"ok": None, "message": "no HTTP smoke configured for this app"}
+    mount = spec.get("mount") or {}
+    port = mount.get("port")
+    if not port:
+        return {"ok": False, "message": "proxy mount needs a port for HTTP smoke"}
+
+    commands = spec.get("commands") or {}
+    command = settings.get("command") or commands.get("preview") or mount.get("cmd")
+    if not command:
+        return {"ok": False, "message": "proxy mount needs commands.preview or mount.cmd for HTTP smoke"}
+    rendered = _render_smoke_template(cfg, spec, app, src, str(command))
+    root = Path(spec.get("root") or cfg["repo_root"])
+    timeout = float(settings.get("timeout") or 5.0)
+    path = settings["path"]
+    url = path if path.startswith(("http://", "https://")) else f"http://127.0.0.1:{port}{path}"
+    env = {**os.environ, "PORT": str(port), "CURIATOR_APP": app}
+
+    with tempfile.TemporaryDirectory(prefix="curiator-http-smoke-") as tmp:
+        out_path = Path(tmp) / "stdout.log"
+        err_path = Path(tmp) / "stderr.log"
+        with out_path.open("wb") as out, err_path.open("wb") as err:
+            try:
+                proc = subprocess.Popen(shlex.split(rendered), cwd=root, env=env, stdout=out, stderr=err)
+            except OSError as exc:
+                return {"ok": False, "message": f"could not start HTTP smoke command: {exc}", "command": rendered}
+
+            try:
+                deadline = time.monotonic() + timeout
+                last_error = "not attempted"
+                while time.monotonic() < deadline:
+                    code = proc.poll()
+                    if code is not None:
+                        last_error = f"process exited with code {code}"
+                        break
+                    try:
+                        with urllib.request.urlopen(url, timeout=0.25) as response:
+                            status = getattr(response, "status", 200)
+                            if 200 <= int(status) < 400:
+                                return {
+                                    "ok": True,
+                                    "message": f"HTTP {status}",
+                                    "url": url,
+                                    "command": rendered,
+                                }
+                            last_error = f"HTTP {status}"
+                    except urllib.error.HTTPError as exc:
+                        last_error = f"HTTP {exc.code}"
+                    except OSError as exc:
+                        last_error = str(exc)
+                    time.sleep(0.1)
+                stderr = _tail(err_path)
+                stdout = _tail(out_path)
+                detail = last_error
+                if stderr:
+                    detail += f"; stderr: {stderr}"
+                elif stdout:
+                    detail += f"; stdout: {stdout}"
+                return {
+                    "ok": False,
+                    "message": detail,
+                    "url": url,
+                    "command": rendered,
+                    "timeout": timeout,
+                }
+            finally:
+                if proc.poll() is None:
+                    proc.terminate()
+                    try:
+                        proc.wait(timeout=2)
+                    except subprocess.TimeoutExpired:
+                        proc.kill()
+                        proc.wait(timeout=2)
 
 
 def smoke_app(cfg: dict, app: str, src: str | None) -> tuple[bool, str]:
