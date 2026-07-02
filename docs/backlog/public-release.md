@@ -21,9 +21,11 @@ leave feedback → watch the fix land and the ⚙ reply arrive. Every item below
    release. The release workflow builds/attaches artifacts and has a PyPI trusted-publishing job with
    a tag-vs-`pyproject.toml` version guard; `make release-check` now runs the local gate (lint, tests,
    strict public-gallery fresh-clone preflight, demo GIF regeneration, package build, and `twine check`). Local
-   gate evidence from July 2, 2026: `make release-check` passed with 211 tests, public-gallery
+   gate evidence from July 2, 2026: `make release-check` passed with 212 tests, public-gallery
    fresh-clone preflight `3/3` with zero publish-artifact hits, regenerated `docs/demo.gif`, built
-   sdist/wheel, and `twine check` passed both artifacts.
+   sdist/wheel, and `twine check` passed both artifacts. The broader optional-public gate
+   `curiator release-preflight --include-optional --fresh-clone --strict` passed `5/5` with all smoke
+   hooks green.
    Remaining external setup is configuring the PyPI Trusted Publisher, then running
    `make release-prepare VERSION=0.2.0 DATE=<release-date>` and pushing the matching `v0.2.0` tag.
 2. **The hero `docs/demo.gif`** (absorbs the old M3) — the README now has a committed generated
