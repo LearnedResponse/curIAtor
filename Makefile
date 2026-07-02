@@ -24,8 +24,10 @@ release-check:  ## local release gate: lint, tests, demo gif, gallery preflight,
 	python -m build
 	python -m twine check dist/*
 release-launch-check:  ## final public-launch gate: reject generated/paper placeholders and optional-gallery drift
-	python scripts/check_release_docs.py --strict-launch
-	curiator release-preflight --include-optional --fresh-clone --strict
+	@set +e; \
+	python scripts/check_release_docs.py --strict-launch; docs_status=$$?; \
+	curiator release-preflight --include-optional --fresh-clone --strict; preflight_status=$$?; \
+	exit $$((docs_status || preflight_status))
 reset-demo:     ## rewind for another take: re-break aviato, clear the ledger
 	curiator reset-demo
 walkthrough:    ## print the demo recording script
