@@ -356,7 +356,7 @@ def build_flask_app() -> Flask:
             body = request.get_json(silent=True) or {}
             screenshot = body.get("screenshot")
             if status == "held" and screenshot and body.get("screenshot_source") != "capture":
-                return jsonify({"error": "anonymous upload is disabled; use Capture view"}), 400
+                return jsonify({"error": "anonymous uploaded/native screenshots are disabled; use Capture view"}), 400
             reply_to = body.get("reply_to") or []
             if isinstance(reply_to, str):
                 reply_to = [reply_to]

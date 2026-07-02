@@ -611,6 +611,53 @@
         .catch((e) => setMsg("Capture failed: " + e));
     }
 
+    function stopCaptureStream(stream) {
+      (stream && stream.getTracks ? stream.getTracks() : []).forEach((track) => track.stop());
+    }
+
+    function nativeCapture() {
+      const media = navigator.mediaDevices || {};
+      if (!media.getDisplayMedia) {
+        setMsg("Native capture unavailable in this browser.");
+        return;
+      }
+      setMsg("Choose a tab or window to capture.");
+      media.getDisplayMedia({video: true, audio: false}).then((stream) => {
+        const video = document.createElement("video");
+        video.muted = true;
+        video.playsInline = true;
+        return new Promise((resolve, reject) => {
+          video.onloadedmetadata = () => {
+            video.play().then(() => {
+              const nextFrame = window.requestAnimationFrame || ((fn) => window.setTimeout(fn, 0));
+              nextFrame(() => {
+                try {
+                  const width = video.videoWidth || 1;
+                  const height = video.videoHeight || 1;
+                  const canvas = document.createElement("canvas");
+                  canvas.width = width;
+                  canvas.height = height;
+                  const ctx = canvas.getContext("2d");
+                  if (!ctx) throw new Error("canvas unavailable");
+                  ctx.drawImage(video, 0, 0, width, height);
+                  resolve(canvas.toDataURL("image/png"));
+                } catch (e) {
+                  reject(e);
+                }
+              });
+            }).catch(reject);
+          };
+          video.onerror = () => reject(new Error("video stream failed"));
+          video.srcObject = stream;
+        }).finally(() => stopCaptureStream(stream));
+      }).then((dataUrl) => {
+        setShot(dataUrl);
+        setShotSource("native");
+        setAnnotations([]);
+        setMsg("Native capture ready.");
+      }).catch((e) => setMsg("Native capture failed: " + (e && e.message ? e.message : e)));
+    }
+
     function upload(file) {
       if (!file) return;
       const r = new FileReader();
@@ -675,6 +722,8 @@
         value: comment, onChange: (e) => setComment(e.target.value)}),
       h("div", {style: {display: "flex", gap: 8, margin: "6px 0"}},
         h("button", {className: "rshell-button secondary", onClick: capture}, "📷 Capture view"),
+        anonymousHeld ? null : h("button", {className: "rshell-button secondary",
+          title: "Browser screen capture", onClick: nativeCapture}, "▣ Native"),
         anonymousHeld ? null : h("label", {className: "rshell-button secondary"}, "⬆ upload",
           h("input", {type: "file", accept: "image/*", style: {display: "none"}, onChange: (e) => upload(e.target.files[0])}))),
       shot ? h(AnnotationEditor, {image: shot, annotations, setAnnotations, annotate}) : null,

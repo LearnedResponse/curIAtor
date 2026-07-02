@@ -91,10 +91,11 @@ degradation are now present.
    from the ledger — account age + accepted-fix count, which `curiator stats` already computes the
    material for — rather than storing a reputation score anywhere.
 6. **Anonymous screenshots: capture only** — landed for the React shell path. The 📷 capture of the
-   live app is fine (it renders the app's own DOM); the arbitrary-file **upload** button is disabled
-   for anonymous users, and the feedback API rejects anonymous-held screenshots that are not explicitly
-   marked as captures by the shell. Uploads are a separate abuse/injection channel and the pool
-   reviewers shouldn't have to moderate arbitrary images.
+   live app is fine (it renders the app's own DOM); arbitrary-file **upload** and browser-native
+   **Native** screen capture are disabled for anonymous users, and the feedback API rejects
+   anonymous-held screenshots that are not explicitly marked as same-origin captures by the shell.
+   Upload/native images are separate abuse/injection channels and the pool reviewers shouldn't have to
+   moderate arbitrary pixels.
 
 ## Deployment shape — a pattern, not a rearchitecture
 

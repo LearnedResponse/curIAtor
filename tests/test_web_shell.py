@@ -89,6 +89,11 @@ def test_react_shell_has_burned_screenshot_annotations(web_client):
     assert "function composeShot" in js
     assert "function withDomTarget" in js
     assert "function annotationDoc" in js
+    assert "function nativeCapture" in js
+    assert "getDisplayMedia" in js
+    assert 'setShotSource("native")' in js
+    assert "Native capture unavailable in this browser." in js
+    assert "Browser screen capture" in js
     assert "function selectorFor" in js
     assert "function annotationTarget" in js
     assert 'mark.tool === "redact" || !doc || !doc.elementFromPoint' in js
@@ -224,7 +229,7 @@ auth:
     assert [e["status"] for e in items if e.get("author") == "user"] == ["held", "held"]
 
 
-def test_react_shell_rejects_anonymous_upload_screenshots(collection, monkeypatch):
+def test_react_shell_rejects_anonymous_upload_and_native_screenshots(collection, monkeypatch):
     from curiator import auth, ledger
     from curiator.config import load_config
 
@@ -244,9 +249,20 @@ auth:
         "screenshot_source": "upload",
     })
     assert upload.status_code == 400
-    assert upload.get_json()["error"] == "anonymous upload is disabled; use Capture view"
+    assert upload.get_json()["error"] == "anonymous uploaded/native screenshots are disabled; use Capture view"
     assert ledger.load(load_config()).get("sample", []) == []
 
+    auth.clear_anonymous_feedback("127.0.0.1")
+    native = client.post("/api/feedback/sample", json={
+        "comment": "screen capture",
+        "screenshot": "data:image/png;base64,aGVsbG8=",
+        "screenshot_source": "native",
+    })
+    assert native.status_code == 400
+    assert native.get_json()["error"] == "anonymous uploaded/native screenshots are disabled; use Capture view"
+    assert ledger.load(load_config()).get("sample", []) == []
+
+    auth.clear_anonymous_feedback("127.0.0.1")
     capture = client.post("/api/feedback/sample", json={
         "comment": "captured image",
         "screenshot": "data:image/png;base64,aGVsbG8=",

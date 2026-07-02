@@ -31,6 +31,9 @@ All notable changes to curIAtor are documented here. The format follows
   saved-feedback preview, including a modal replay overlay reconstructed from the saved mark
   coordinates and an editable-copy path back into the reply composer. DOM target lookup now explicitly
   degrades to coordinates-only when the mounted app frame is unreadable or cross-origin.
+- Signed-in reviewers can use an opt-in browser-native screen capture fallback (`getDisplayMedia`) when
+  `html2canvas` misses canvas/WebGL-heavy app pixels; anonymous-held feedback remains limited to
+  same-origin Capture view.
 - Interactive app-repo workflow: `curiator link`, `status`, `context`, `work`, `done`, `open`, and
   `commands install` let Claude Code/Codex sessions use the same ledger/task/reply/git path without
   spawning a separate headless agent.

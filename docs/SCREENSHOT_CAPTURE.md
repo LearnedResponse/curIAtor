@@ -4,7 +4,7 @@ curIAtor's feedback panel needs a picture of the app at the moment a user leaves
 is part of the task bundle an agent reads, so capture fidelity matters. The current implementation is
 deliberately simple and local-first.
 
-## Current path: same-origin `html2canvas`
+## Default path: same-origin `html2canvas`
 
 The gallery mounts every app under the same origin, `/app/<name>/...`, then the browser calls
 `html2canvas` against the app iframe's document body. This is why curIAtor uses same-origin proxying
@@ -25,8 +25,11 @@ Limits:
 - the capture is of the browser-rendered DOM, not the operating-system window
 - any sensitive state visible in the iframe can be stored in `feedback/shots/`
 
-The upload button stays as the fallback: if capture fidelity is bad, the user can attach their own
-cropped screenshot.
+The **Native** button is the first fallback: if DOM capture fidelity is bad, a signed-in reviewer can
+use browser screen capture to grab the rendered tab/window pixels. The upload button remains the final
+manual fallback for attaching a cropped screenshot. Anonymous-held feedback only gets same-origin
+**Capture view**; upload and native screen capture are disabled and rejected server-side because they
+can attach arbitrary pixels.
 
 Captured or uploaded screenshots can be annotated before saving. The current v1 tools burn boxes,
 arrows, numbered pins, and redaction rectangles into the PNG in the browser, before it is posted to
@@ -39,8 +42,10 @@ load a copy of that screenshot and mark set into a reply draft for further marku
 
 ## Browser screen capture: `getDisplayMedia`
 
-`navigator.mediaDevices.getDisplayMedia()` can capture the real tab/window/screen. It is the best
-browser-native candidate for canvas/WebGL fidelity because it captures pixels after rendering.
+The React shell includes an opt-in **Native** button that calls
+`navigator.mediaDevices.getDisplayMedia()` and captures the selected tab/window/screen into the same
+annotation/save flow. It is the best browser-native candidate for canvas/WebGL fidelity because it
+captures pixels after rendering.
 
 Tradeoffs:
 
@@ -49,8 +54,8 @@ Tradeoffs:
 - automation and headless use are awkward
 - the UX is heavier than one-click DOM capture
 
-Best fit: an opt-in "capture screen" fallback for apps with canvas/WebGL-heavy views, not the default
-path for every feedback item.
+Best fit: signed-in/trusted reviewers working on apps with canvas/WebGL-heavy views. It is intentionally
+not the default path for every feedback item.
 
 ## Server-side browser capture: Playwright
 
@@ -85,9 +90,9 @@ fidelity is more important than zero-install feedback.
 
 ## Default recommendation
 
-Keep `html2canvas` as the default because it preserves curIAtor's low-friction loop. Treat native or
-server-side capture as opt-in fallbacks for specific collections where screenshot fidelity is a known
-blocker.
+Keep `html2canvas` as the default because it preserves curIAtor's low-friction loop. Use native capture
+as the browser-native fallback for specific collections where screenshot fidelity is a known blocker;
+treat server-side capture or helper extensions as heavier deployment-specific options.
 
 Security rule: screenshots are data. Before publishing a collection or sharing a ledger, review
 `feedback/shots/` just like source, task bundles, replies, and git history.

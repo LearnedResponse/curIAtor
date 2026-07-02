@@ -104,10 +104,10 @@ mount, opinionated only at scaffold time.
   need the public base path set so assets resolve under `/app/<name>/`. Solvable, but per-framework
   fiddly; the scaffold templates should bake in the right base-path config.
 - **Screenshot fidelity beyond Dash** — the ★/📷 moat rides on html2canvas, which struggles with
-  canvas/WebGL and some modern CSS that JS frameworks reach for. The existing upload button is the
-  fallback; expect fidelity complaints to scale with framework diversity, and treat a native capture
-  path (`getDisplayMedia`, or a headless-browser shot server-side) as the eventual fix — not per-framework
-  patches to html2canvas.
+  canvas/WebGL and some modern CSS that JS frameworks reach for. The browser-native `getDisplayMedia`
+  fallback now exists for signed-in reviewers, and upload remains the manual fallback; server-side
+  Playwright/Chromium capture is still the heavier deployment-specific option. Do not patch fidelity
+  per framework.
 - **Smoke-test for a build step** — `auto-small` "smoke-test before commit" means *the build passes + the
   app renders*; needs a per-mount-kind smoke hook (Python import vs `npm run build`).
 - **Static-export synergy** — JS apps are *already* static-buildable, so this direction and the deferred

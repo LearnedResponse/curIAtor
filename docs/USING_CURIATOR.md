@@ -151,6 +151,9 @@ or proposes a plan (propose-only), smoke-tests, reloads the app, and replies in 
 **uncommitted** in your working tree for review — the curator never commits.
 The current screenshot path uses same-origin `html2canvas` with upload as the fallback; see
 [`SCREENSHOT_CAPTURE.md`](SCREENSHOT_CAPTURE.md) for fidelity, privacy, and native-capture options.
+Signed-in reviewers can also use the **Native** capture button for browser screen capture when
+canvas/WebGL-heavy views do not render well through `html2canvas`; anonymous feedback is limited to
+same-origin **Capture view**.
 In the React shell, burned-in annotations also carry sanitized normalized coordinates and same-origin
 DOM target hints into the task bundle when available, plus any short per-mark notes you enter;
 redaction marks, uploads, and unreadable/cross-origin mounts do not carry DOM targets. Prior feedback
