@@ -263,7 +263,8 @@ def _start_shell(gallery: Path) -> subprocess.Popen:
     )
 
 
-def _start_brave(brave_bin: str, profile: Path, debug_port: int) -> subprocess.Popen:
+def _start_brave(brave_bin: str, profile: Path, debug_port: int,
+                 extra_args: list[str] | None = None) -> subprocess.Popen:
     return subprocess.Popen(
         [
             brave_bin,
@@ -277,6 +278,7 @@ def _start_brave(brave_bin: str, profile: Path, debug_port: int) -> subprocess.P
             "--hide-scrollbars",
             f"--user-data-dir={profile}",
             f"--window-size={W},{H}",
+            *(extra_args or []),
             "about:blank",
         ],
         stdout=subprocess.DEVNULL,
