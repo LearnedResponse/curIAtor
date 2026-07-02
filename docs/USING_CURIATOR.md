@@ -153,6 +153,7 @@ curiator doctor                # errors on absolute/missing paths; warns on weak
 curiator doctor --json
 curiator smoke                 # runs each app's configured smoke command/fallback import
 curiator smoke --app revenue --json
+curiator release-preflight     # from a runner checkout: checks nested public galleries
 ```
 
 ## 4. Two install profiles

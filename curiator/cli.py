@@ -11,6 +11,7 @@
     curiator work       # open a feedback item for interactive CLI work
     curiator done       # finish interactive work via the same reply/reload/git path
     curiator smoke      # run configured app smoke checks across the collection
+    curiator release-preflight # run doctor/smoke/path checks across nested release galleries
     curiator reset-demo # rewind the demo: re-break aviato, clear the ledger
     curiator demo-up    # reset-demo, then serve — one command, record-ready
     curiator demo       # print the demo walkthrough
@@ -495,6 +496,173 @@ def cmd_smoke(args) -> int:
         print(f"curiator: smoke {status} {r['app']}{command}{detail}")
     print(f"curiator: smoke {'OK' if ok else 'FAILED'} ({sum(1 for r in results if r['ok'])}/{len(results)} passed)")
     return 0 if ok else 1
+
+
+_PUBLIC_RELEASE_GALLERIES = ("curiator-aviato", "curiator-ot", "curiator-geometry")
+
+
+def _load_config_for_gallery(gallery: Path) -> dict:
+    """Load exactly this gallery, insulated from a caller's linked-app cwd."""
+    old_gallery = os.environ.get("CURIATOR_GALLERY")
+    old_cwd = Path.cwd()
+    os.environ["CURIATOR_GALLERY"] = str(gallery)
+    try:
+        os.chdir(gallery.parent)
+        return load_config()
+    finally:
+        os.chdir(old_cwd)
+        if old_gallery is None:
+            os.environ.pop("CURIATOR_GALLERY", None)
+        else:
+            os.environ["CURIATOR_GALLERY"] = old_gallery
+
+
+def _git_text(repo: Path, *args: str) -> str:
+    r = subprocess.run(["git", *args], cwd=repo, capture_output=True, text=True)
+    return r.stdout if r.returncode == 0 else ""
+
+
+def _tracked_files(repo: Path) -> list[str]:
+    data = subprocess.run(["git", "ls-files", "-z"], cwd=repo, capture_output=True, text=True)
+    if data.returncode != 0:
+        return []
+    return [p for p in data.stdout.split("\0") if p]
+
+
+def _machine_path_hits(repo: Path, needles: tuple[str, ...]) -> list[dict]:
+    hits: list[dict] = []
+    for rel in _tracked_files(repo):
+        path = repo / rel
+        if not path.is_file():
+            continue
+        try:
+            text = path.read_text(encoding="utf-8", errors="ignore")
+        except OSError:
+            continue
+        for line_no, line in enumerate(text.splitlines(), start=1):
+            label = None
+            for needle in needles:
+                if needle and needle in line:
+                    label = needle
+                    break
+            if label:
+                hits.append({"file": rel, "line": line_no, "message": f"contains machine-local path {label}"})
+            elif _USER_ABS_PATH_RE.search(line):
+                hits.append({"file": rel, "line": line_no, "message": "contains a user-home absolute path"})
+    return hits
+
+
+def _release_preflight_one(gallery: Path, *, run_smoke: bool, allow_dirty: bool, needles: tuple[str, ...]) -> dict:
+    repo = gallery.parent
+    result = {
+        "name": repo.name,
+        "path": str(repo),
+        "gallery": str(gallery),
+        "ok": False,
+        "head": None,
+        "dirty": [],
+        "path_hits": [],
+        "doctor": {"ok": False, "errors": 0, "warnings": 0, "issues": []},
+        "smoke": {"ok": None, "results": []},
+    }
+    if not gallery.exists():
+        result["error"] = f"missing gallery.yaml: {gallery}"
+        return result
+    if _git_output(repo, "rev-parse", "--is-inside-work-tree") != "true":
+        result["error"] = f"not a git repository: {repo}"
+        return result
+
+    result["head"] = _git_output(repo, "rev-parse", "--short", "HEAD")
+    dirty = _git_text(repo, "status", "--porcelain", "--untracked-files=all").splitlines()
+    result["dirty"] = dirty
+    result["path_hits"] = _machine_path_hits(repo, needles)
+
+    try:
+        cfg = _load_config_for_gallery(gallery)
+        issues = _doctor_issues(cfg)
+        errors = [i for i in issues if i.get("severity") == "error"]
+        warnings = [i for i in issues if i.get("severity") == "warning"]
+        result["doctor"] = {
+            "ok": not errors,
+            "errors": len(errors),
+            "warnings": len(warnings),
+            "issues": issues,
+        }
+        if run_smoke:
+            smoke = _smoke_results(cfg)
+            result["smoke"] = {"ok": all(r["ok"] for r in smoke), "results": smoke}
+    except Exception as exc:  # noqa: BLE001
+        result["error"] = f"{type(exc).__name__}: {exc}"
+
+    result["ok"] = (
+        not result.get("error")
+        and result["doctor"]["ok"]
+        and not result["path_hits"]
+        and (allow_dirty or not dirty)
+        and (not run_smoke or result["smoke"]["ok"] is True)
+    )
+    return result
+
+
+def _release_preflight_payload(args) -> dict:
+    root_arg = Path(args.root).expanduser()
+    root = root_arg if root_arg.is_absolute() else (_project_root() / root_arg).resolve()
+    names = args.gallery or list(_PUBLIC_RELEASE_GALLERIES)
+    needles = tuple(sorted({str(Path.home()), str(_project_root())} | set(args.path_needle or [])))
+    galleries = [
+        _release_preflight_one(
+            (root / name / "gallery.yaml").resolve(),
+            run_smoke=not args.no_smoke,
+            allow_dirty=args.allow_dirty,
+            needles=needles,
+        )
+        for name in names
+    ]
+    return {
+        "ok": all(g["ok"] for g in galleries),
+        "root": str(root),
+        "galleries": galleries,
+        "checks": {
+            "smoke": not args.no_smoke,
+            "allow_dirty": args.allow_dirty,
+            "path_needles": list(needles),
+        },
+    }
+
+
+def cmd_release_preflight(args) -> int:
+    payload = _release_preflight_payload(args)
+    if args.json:
+        print(json.dumps(payload, indent=2))
+        return 0 if payload["ok"] else 1
+
+    passed = sum(1 for g in payload["galleries"] if g["ok"])
+    total = len(payload["galleries"])
+    print(f"curiator: release preflight {'OK' if payload['ok'] else 'FAILED'} ({passed}/{total} galleries)")
+    for g in payload["galleries"]:
+        status = "OK" if g["ok"] else "FAIL"
+        smoke = g.get("smoke") or {}
+        smoke_results = smoke.get("results") or []
+        smoke_label = "skipped" if smoke.get("ok") is None else f"{sum(1 for r in smoke_results if r['ok'])}/{len(smoke_results)}"
+        print(
+            f"  {status} {g['name']} {g.get('head') or '-'} "
+            f"doctor={g['doctor']['errors']}e/{g['doctor']['warnings']}w "
+            f"smoke={smoke_label} dirty={len(g['dirty'])} paths={len(g['path_hits'])}"
+        )
+        if g.get("error"):
+            print(f"    error: {g['error']}")
+        for issue in g["doctor"]["issues"]:
+            print(f"    doctor {issue['severity'].upper()} {issue['where']}: {issue['message']}")
+        for hit in g["path_hits"]:
+            print(f"    path {hit['file']}:{hit['line']}: {hit['message']}")
+        for line in g["dirty"][:8]:
+            print(f"    dirty {line}")
+        if len(g["dirty"]) > 8:
+            print(f"    dirty ... {len(g['dirty']) - 8} more")
+        for r in smoke_results:
+            if not r["ok"]:
+                print(f"    smoke FAIL {r['app']}: {r['message']}")
+    return 0 if payload["ok"] else 1
 
 
 def cmd_context(args) -> int:
@@ -1220,6 +1388,16 @@ def main(argv=None) -> int:
     sm.add_argument("--app", help="limit smoke checks to one app")
     sm.add_argument("--json", action="store_true", help="emit machine-readable results")
     sm.set_defaults(func=cmd_smoke)
+    rp = sub.add_parser("release-preflight", help="run release checks across nested public galleries")
+    rp.add_argument("--root", default="galleries", help="directory containing curiator-* gallery repos")
+    rp.add_argument("--gallery", action="append",
+                    help="gallery directory name under --root; repeatable; default is the public release set")
+    rp.add_argument("--path-needle", action="append",
+                    help="extra machine-local path string to reject in tracked files")
+    rp.add_argument("--allow-dirty", action="store_true", help="report dirty nested repos without failing")
+    rp.add_argument("--no-smoke", action="store_true", help="skip per-app smoke checks")
+    rp.add_argument("--json", action="store_true", help="emit machine-readable diagnostics")
+    rp.set_defaults(func=cmd_release_preflight)
     cx = sub.add_parser("context", help="print app context and recent feedback for interactive agents")
     cx.add_argument("--app", help="override linked/current app")
     cx.add_argument("--limit", type=int, default=8)

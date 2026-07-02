@@ -22,3 +22,12 @@ CURIATOR_GALLERY=galleries/curiator-geometry/gallery.yaml curiator up
 ```
 
 When editing a nested gallery, commit inside that gallery repo, not in the parent runner repo.
+
+Before publishing or moving the public examples, run:
+
+```bash
+curiator release-preflight
+```
+
+It checks the default public release set (`curiator-aviato`, `curiator-ot`, `curiator-geometry`) for
+dirty nested repos, tracked machine-local paths, `curiator doctor` errors, and smoke failures.

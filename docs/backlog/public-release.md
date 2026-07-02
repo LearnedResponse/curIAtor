@@ -31,14 +31,13 @@ leave feedback → watch the fix land and the ⚙ reply arrive. Every item below
    `/home/adamguetz/...`. `curiator commands install` now lays down repo-local interactive shims at
    `.claude/commands/curiator.md` and `.agents/skills/curiator/SKILL.md`; the three release
    collections carry those current paths and now default to `runner.mode: pinned` for standalone
-   `pip install curiator` use (`curiator-aviato` `9fd69b2`, `curiator-ot` `36e21cf`,
+   `pip install curiator` use (`curiator-aviato` `b23e0bc`, `curiator-ot` `36e21cf`,
    `curiator-geometry` `e6d9141`). `curiator doctor` now gives a local preflight for machine-absolute paths,
    missing app roots/sources, weak smoke coverage, and suspicious proxy port wiring; `curiator smoke`
-   runs the same per-app smoke hooks used by git-as-memory commits. Local `doctor` and `smoke` now pass
-   on all three public collections after removing the sibling-checkout `runner.path`; same-machine
-   tracked-file clones under `/tmp/curiator-release-preflight` also pass `doctor`, path scans, and
-   `smoke` for all three. Remaining release work is the fresh-clone check on a machine that isn't this
-   one, and the loop must close there.
+   runs the same per-app smoke hooks used by git-as-memory commits. From the runner checkout,
+   `curiator release-preflight` runs those checks across the nested public galleries and also rejects
+   dirty nested repos or tracked machine-local paths. Remaining release work is the fresh-clone check
+   on a machine that isn't this one, and the loop must close there.
 4. **Publish the three example collections** as public sibling repos, each linked from the README's
    Examples section. README links are prepared for `LearnedResponse/curiator-aviato`,
    `LearnedResponse/curiator-ot`, and `LearnedResponse/curiator-geometry`; publication and
