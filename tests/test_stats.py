@@ -113,6 +113,20 @@ def test_stats_cli_json_is_machine_readable(cfg, capsys):
     assert "git" not in out
 
 
+def test_stats_cli_output_writes_selected_report(cfg, tmp_path, capsys):
+    from curiator import cli
+
+    _seed_two_cycles(cfg)
+    out_path = tmp_path / "reports" / "stats.md"
+
+    assert cli.main(["stats", "--markdown", "--no-git", "--output", str(out_path)]) == 0
+
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert f"curiator: wrote {out_path}" in captured.err
+    assert out_path.read_text(encoding="utf-8").startswith("# curIAtor Stats\n")
+
+
 def test_stats_markdown_renders_release_tables(cfg, capsys):
     from curiator import cli
 
@@ -215,6 +229,31 @@ def test_stats_compare_combines_collection_rows(tmp_path, capsys):
     assert payload["totals"]["cycles"] == 3
     assert [row["collection"] for row in payload["collections"]] == ["alpha", "beta"]
     assert payload["collections"][0]["git_head"] == rows["alpha"]["git_head"]
+
+
+def test_stats_compare_output_writes_selected_report(tmp_path, capsys):
+    from curiator import cli
+
+    alpha = _make_collection(tmp_path, "alpha")
+    _seed_two_cycles(alpha)
+    out_path = tmp_path / "paper" / "case-study-stats.md"
+
+    assert cli.main([
+        "stats",
+        "compare",
+        str(Path(alpha["gallery_path"]).parent),
+        "--markdown",
+        "--no-git",
+        "--output",
+        str(out_path),
+    ]) == 0
+
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert f"curiator: wrote {out_path}" in captured.err
+    text = out_path.read_text(encoding="utf-8")
+    assert text.startswith("# curIAtor Stats Compare\n")
+    assert "| alpha | n/a | 2 |" in text
 
 
 def test_stats_compare_csv_keeps_single_collection_csv_unchanged(tmp_path):

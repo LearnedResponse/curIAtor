@@ -259,6 +259,7 @@ curiator stats                 # human-readable ledger + git-as-memory summary
 curiator stats --json --app revenue
 curiator stats --markdown      # paper/release-note tables
 curiator stats --csv           # app-level spreadsheet/plotting rows
+curiator stats --markdown --output docs/paper/figures/collection-stats.md
 curiator stats compare galleries/curiator-aviato galleries/curiator-ot galleries/curiator-geometry --markdown
 ```
 

@@ -1,8 +1,8 @@
 # Backlog — the companion paper (Zenodo)
 
 > **Status:** scoped 2026-07-01; stats CLI, local Zenodo metadata, a conservative `docs/paper/`
-> Markdown draft scaffold, draft related-work prose, and draft acknowledgements have landed. Paper/DOI
-> publication work is still blocked on public
+> Markdown draft scaffold, draft related-work prose, draft acknowledgements, and `curiator stats
+> --output` evidence snapshots have landed. Paper/DOI publication work is still blocked on public
 > collection publication and Zenodo wiring. A citable software/systems paper, self-archived on **Zenodo** with a DOI. Sequences last:
 > the three public collections are its evaluation, so [public-release](public-release.md) → the
 > collections → this.
@@ -53,7 +53,8 @@ the durable record of that conversation.
    rates, per-app counts, reply latency, curator commits), with `--json` for machine-readable
    snapshots, `--markdown` for paper/release-note tables, and `--csv` for app-level spreadsheets or
    plotting scripts. `curiator stats compare <gallery>...` now emits the cross-collection case-study
-   table directly.
+   table directly, and `--output <path>` writes any selected stats report as a named paper evidence
+   artifact without shell redirection.
    Remaining paper work: run it against each public collection after publication and cite the exact
    command/output snapshot.
 3. Draft in `docs/paper/` (markdown → pandoc PDF) — scaffolded with `curiator-paper.md` and

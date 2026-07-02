@@ -12,11 +12,16 @@ or checked out under `galleries/`:
 curiator release-preflight --fresh-clone
 curiator stats compare galleries/curiator-aviato galleries/curiator-ot galleries/curiator-geometry --markdown
 curiator stats compare galleries/curiator-aviato galleries/curiator-ot galleries/curiator-geometry --json
+curiator stats compare galleries/curiator-aviato galleries/curiator-ot galleries/curiator-geometry \
+  --markdown --output docs/paper/figures/case-study-stats.md
+curiator stats compare galleries/curiator-aviato galleries/curiator-ot galleries/curiator-geometry \
+  --json --output docs/paper/figures/case-study-stats.json
 ```
 
 The compare report includes the runner version/git head and each collection's git branch/head plus
 direct-fix, proposal, no-dispatch, and human-intervention rates derived from ledger statuses; do not
-recalculate those columns by hand.
+recalculate those columns by hand. The `--output` form is preferred for the final paper evidence
+snapshot because it records the exact command product without shell-specific redirection.
 
 For per-collection appendix tables:
 
@@ -24,6 +29,8 @@ For per-collection appendix tables:
 CURIATOR_GALLERY=galleries/curiator-aviato/gallery.yaml curiator stats --markdown
 CURIATOR_GALLERY=galleries/curiator-ot/gallery.yaml curiator stats --markdown
 CURIATOR_GALLERY=galleries/curiator-geometry/gallery.yaml curiator stats --markdown
+CURIATOR_GALLERY=galleries/curiator-geometry/gallery.yaml \
+  curiator stats --markdown --output docs/paper/figures/curiator-geometry-stats.md
 ```
 
 Use `--csv` when building figures or spreadsheets:
@@ -65,6 +72,8 @@ As of this draft scaffold, the local command shape is:
 
 ```bash
 curiator stats compare galleries/curiator-aviato galleries/curiator-ot galleries/curiator-geometry --markdown
+curiator stats compare galleries/curiator-aviato galleries/curiator-ot galleries/curiator-geometry \
+  --markdown --output /tmp/curiator-local-case-study-stats.md
 ```
 
 Copy final numbers into the paper only after rerunning the command at release time and recording the

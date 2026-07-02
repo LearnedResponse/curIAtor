@@ -134,6 +134,8 @@ All notable changes to curIAtor are documented here. The format follows
 - `make release-check` runs the local release gate without rewriting the hero GIF: lint, tests,
   release-doc validation that `docs/demo.gif` exists, public-gallery fresh-clone preflight, package
   build, and `twine check`.
+- `curiator stats --output <path>` writes JSON, Markdown, CSV, or human-readable stats reports directly
+  to a named artifact, so paper/release evidence snapshots do not depend on shell redirection.
 - `.zenodo.json` provides GitHub-Zenodo archive metadata, and
   `make release-prepare VERSION=... DATE=...` cuts release metadata by updating `pyproject.toml`,
   `CITATION.cff`, `.zenodo.json`, and the Keep-a-Changelog links in one tested step.

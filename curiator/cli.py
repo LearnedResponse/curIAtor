@@ -2371,6 +2371,16 @@ def _fmt_optional_int(value) -> str:
     return "n/a" if value is None else str(value)
 
 
+def _emit_stats_report(text: str, output: str | None) -> None:
+    if output:
+        path = Path(output).expanduser()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text, encoding="utf-8")
+        print(f"curiator: wrote {path}", file=sys.stderr)
+        return
+    print(text, end="" if text.endswith("\n") else "\n")
+
+
 def cmd_stats(args) -> int:
     """Emit reproducible collection metrics for release notes and case studies."""
     from . import stats as stats_mod
@@ -2385,86 +2395,85 @@ def cmd_stats(args) -> int:
         configs = [load_config_at(gallery) for gallery in args.galleries]
         report = stats_mod.compare(configs, include_git=not args.no_git)
         if args.json:
-            print(json.dumps(report, indent=2, sort_keys=True))
+            _emit_stats_report(json.dumps(report, indent=2, sort_keys=True) + "\n", args.output)
             return 0
         if args.markdown:
-            print(stats_mod.format_compare_markdown(report), end="")
+            _emit_stats_report(stats_mod.format_compare_markdown(report), args.output)
             return 0
         if args.csv:
-            print(stats_mod.format_compare_csv(report), end="")
+            _emit_stats_report(stats_mod.format_compare_csv(report), args.output)
             return 0
         totals = report["totals"]
-        print("curIAtor stats compare")
-        print(
+        lines = [
+            "curIAtor stats compare",
             "  totals: "
             f"{totals['collections']} collections, {totals['cycles']} cycles, "
             f"{totals['replied_cycles']} replied ({totals['reply_rate_percent']}%), "
-            f"{totals['curator_commits']} curator commits"
-        )
+            f"{totals['curator_commits']} curator commits",
+        ]
         for row in report["collections"]:
-            print(
+            lines.append(
                 f"  {row['collection']}: {row['cycles']} cycles, {row['open_cycles']} open, "
                 f"{row['replied_cycles']} replied ({row['reply_rate_percent']}%), "
                 f"median reply {_fmt_seconds(row['median_reply_seconds'])}, "
                 f"curator commits {_fmt_optional_int(row['curator_commits'])}"
             )
+        _emit_stats_report("\n".join(lines) + "\n", args.output)
         return 0
 
     cfg = load_config()
     summary = stats_mod.summarize(cfg, app=args.app, include_git=not args.no_git)
     if args.json:
-        print(json.dumps(summary, indent=2, sort_keys=True))
+        _emit_stats_report(json.dumps(summary, indent=2, sort_keys=True) + "\n", args.output)
         return 0
     if args.markdown:
-        print(stats_mod.format_markdown(summary), end="")
+        _emit_stats_report(stats_mod.format_markdown(summary), args.output)
         return 0
     if args.csv:
-        print(stats_mod.format_csv(summary), end="")
+        _emit_stats_report(stats_mod.format_csv(summary), args.output)
         return 0
 
     totals = summary["totals"]
     latency = summary["reply_latency"]
-    print("curIAtor stats")
-    print(f"  gallery: {summary['gallery']}")
-    print(f"  ledger:  {summary['ledger']}")
-    print(f"  apps:    {summary['apps_with_feedback']} with feedback")
-    print(
+    lines = [
+        "curIAtor stats",
+        f"  gallery: {summary['gallery']}",
+        f"  ledger:  {summary['ledger']}",
+        f"  apps:    {summary['apps_with_feedback']} with feedback",
         "  cycles:  "
         f"{totals['cycles']} feedback items, {totals['open_cycles']} open, "
-        f"{totals['replied_cycles']} replied ({totals['reply_rate_percent']}%)"
-    )
-    print(f"  notes:   {totals['agent_notes']} agent notes")
-    print(f"  media:   {totals['screenshots']} screenshots, {totals['rated_cycles']} rated")
-    print(
+        f"{totals['replied_cycles']} replied ({totals['reply_rate_percent']}%)",
+        f"  notes:   {totals['agent_notes']} agent notes",
+        f"  media:   {totals['screenshots']} screenshots, {totals['rated_cycles']} rated",
         "  latency: "
         f"median={_fmt_seconds(latency['median_seconds'])}, "
-        f"avg={_fmt_seconds(latency['avg_seconds'])}, n={latency['count']}"
-    )
-    print(f"  status:  {_fmt_counts(summary['status_counts'])}")
+        f"avg={_fmt_seconds(latency['avg_seconds'])}, n={latency['count']}",
+        f"  status:  {_fmt_counts(summary['status_counts'])}",
+    ]
     if "git" in summary:
         git = summary["git"]
         if git.get("available"):
             latest = git.get("latest") or {}
             suffix = f", latest={latest.get('sha')} {latest.get('subject')}" if latest else ""
-            print(
+            lines.append(
                 "  git:     "
                 f"{git['curator_commits']} curator commits, {git['revert_commits']} reverts, "
                 f"{git['feedback_ids']} feedback ids{suffix}"
             )
         else:
-            print(f"  git:     unavailable ({git.get('reason')})")
-    print("")
-    print("per app:")
+            lines.append(f"  git:     unavailable ({git.get('reason')})")
+    lines.extend(["", "per app:"])
     for row in summary["apps"]:
         if not row["entries"]:
             continue
         lat = row["reply_latency"]
-        print(
+        lines.append(
             f"  {row['app']}: {row['cycles']} cycles, {row['open_cycles']} open, "
             f"{row['agent_notes']} notes, {row['replied_cycles']} replied, "
             f"median reply {_fmt_seconds(lat['median_seconds'])}, "
             f"status [{_fmt_counts(row['status_counts'])}]"
         )
+    _emit_stats_report("\n".join(lines) + "\n", args.output)
     return 0
 
 
@@ -3382,6 +3391,7 @@ def main(argv=None) -> int:
     stats_out.add_argument("--json", action="store_true", help="emit machine-readable JSON")
     stats_out.add_argument("--markdown", action="store_true", help="emit Markdown tables for release notes or papers")
     stats_out.add_argument("--csv", action="store_true", help="emit app-level CSV rows")
+    stt.add_argument("--output", help="write the selected stats report to a file instead of stdout")
     stt.add_argument("--no-git", action="store_true", help="skip git log metrics")
     stt.set_defaults(func=cmd_stats)
     fb = sub.add_parser("feedback", help="inspect or add SQLite feedback")
