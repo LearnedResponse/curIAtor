@@ -55,12 +55,14 @@ leave feedback → watch the fix land and the ⚙ reply arrive. Every item below
    seeded feedback loop is complete on `curiator/auto` with ten curator commits from rainbow baseline
    toward HP-HMI, and still needs a fresh-clone portability gate.
    (`curiator-finance` can join as a fourth if the cleanup is cheap; the three above are the release set.)
-5. **SECURITY.md — core landed; review before release.** The product auto-runs a coding agent against
+5. **SECURITY.md — reviewed against current defaults; re-read once at release cut.** The product auto-runs a coding agent against
    feedback text. The first policy now states: one-container-per-collection as the blast-radius unit,
    the autonomy dial, group-gated elevated profiles, deny-lists — and the **prompt-injection caveat
    plainly** (public feedback is untrusted input to an agent with edit rights; `auth.mode` +
-   `propose-only` are mitigations, not a solved problem). Before release, reread it against the final
-   adapter defaults and public collection setup.
+   `propose-only` are mitigations, not a solved problem). The release-example nuance is now explicit:
+   `auth.mode: none` + `auto-small` is acceptable for clone-and-run examples, not hosted public forms;
+   hosted examples need auth/propose-only or a human-reviewed queue. Before release, do one final reread
+   against the tag's adapter defaults.
 6. **Repo hygiene** — issue templates are present (bug, feature, example-collection quickstart), labels
    are tracked in `.github/labels.yml`, and `docs/GOOD_FIRST_ISSUES.md` has ready-to-file issue seeds.
    Remaining after publication: README badges for PyPI/DOI and creating/pinning the GitHub issues.

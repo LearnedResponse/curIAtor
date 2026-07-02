@@ -57,6 +57,17 @@ For shared/team use:
   elevated operations.
 - Review git-as-memory commits before merging or deploying them.
 
+For public example repositories:
+
+- `auth.mode: none` plus `agent.autonomy: auto-small` is acceptable for a repository someone clones
+  and runs on their own machine. In that shape, the user is both the feedback author and the operator
+  of the agent's sandbox.
+- Do not deploy those same configs as a hosted public feedback form. Before putting an example
+  collection on the internet, switch to authenticated feedback and `propose-only`, or put anonymous
+  submissions behind a human-reviewed queue.
+- Keep `runner.mode: pinned` for published examples so feedback on the runner cannot silently patch a
+  maintainer's local curIAtor checkout.
+
 ## Adapter Notes
 
 - `headless-cc` and `command` adapters inherit the security behavior of the CLI you configure.
@@ -79,6 +90,11 @@ bundles, agent traces, and commit metadata. Before publishing an example collect
 
 Runtime-only files such as local users, task traces, screenshots, and SQLite sidecars should normally
 be gitignored unless you deliberately intend to publish them as part of a sanitized demo.
+
+For the three release example collections, run `curiator release-preflight --fresh-clone` from the
+runner checkout before publishing. It catches dirty source repos, missing app paths, weak smoke
+coverage, tracked machine-local paths, and smoke failures in the committed state. It is not a secrets
+scanner; still review ledgers, screenshots, traces, commits, and app data manually.
 
 ## Public Internet Use
 
