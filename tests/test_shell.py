@@ -53,6 +53,16 @@ def _dispatch_selected(client, search, rows=None, changed=("url.search",)):
     return r.get_json()["response"]["selected-app"]["data"]
 
 
+def test_proxy_backend_path_can_preserve_app_prefix(shell_mod):
+    assert shell_mod._proxy_backend_path("sample", "", {}) == "/"
+    assert shell_mod._proxy_backend_path("sample", "assets/app.js", {}) == "/assets/app.js"
+    assert shell_mod._proxy_backend_path("sample", "", {"preserve_prefix": True}) == "/app/sample/"
+    assert (
+        shell_mod._proxy_backend_path("sample", "_stcore/stream", {"preserve_prefix": True})
+        == "/app/sample/_stcore/stream"
+    )
+
+
 # ── boot + the pages that crashed ────────────────────────────────────────────
 def test_index_and_general_serve(client):
     assert client.get("/").status_code == 200            # the Dash shell index

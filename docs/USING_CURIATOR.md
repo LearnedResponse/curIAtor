@@ -51,9 +51,11 @@ curiator app create revenue --template dash --title "Revenue dashboard" --tags f
 ```
 
 Templates today: `dash` (in-process Dash), `static` (same-origin proxy using `http.server`), `python`
-(tiny proxy-served Python HTTP app), `react` (Vite + React), and `svelte` (Vite + Svelte). The JS
-templates use `proxy` mounts and set Vite's base path from `CURIATOR_APP` so assets resolve under
-`/app/<name>/`.
+(tiny proxy-served Python HTTP app), `react` (Vite + React), `svelte` (Vite + Svelte), and `streamlit`.
+The JS templates use `proxy` mounts and set Vite's base path from `CURIATOR_APP` so assets resolve
+under `/app/<name>/`. The Streamlit template uses Streamlit's `server.baseUrlPath` with a
+prefix-preserving proxy mount and includes a generated README note about the lightweight proxy's
+WebSocket/production reverse-proxy limits.
 
 You can also register an existing app manually: drop `apps/<name>.py` (exposing
 `build_app() -> dash.Dash`, plus a module-level `app`), then add an entry to `gallery.yaml`:

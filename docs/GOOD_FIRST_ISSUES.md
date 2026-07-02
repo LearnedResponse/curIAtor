@@ -3,23 +3,6 @@
 These are ready-to-file issues for the public launch. After the repo is published, create them as
 GitHub issues, label them `good first issue`, and pin 2-3 that best match the current release focus.
 
-## Add a Streamlit Scaffold Template
-
-Labels: `good first issue`, `enhancement`, `example-collection`
-
-Why: general app hosting should stay framework-neutral, and Streamlit is a common first request for
-research prototypes.
-
-Scope:
-- Add `--template streamlit` to `curiator app create` / `curiator init-app`.
-- Generate a minimal `app.py`, `requirements.txt`, and proxy mount using `streamlit run`.
-- Configure the app so it works under `/app/<name>/` as far as Streamlit allows.
-- Add a CLI scaffold test similar to the React/Svelte tests.
-
-Done when:
-- `curiator app create demo_streamlit --template streamlit` writes files and registers a proxy mount.
-- The generated app has a smoke command and clear README note if Streamlit base-path support has limits.
-
 ## Add Dependency Checks To `curiator doctor`
 
 Labels: `good first issue`, `portability`, `release`

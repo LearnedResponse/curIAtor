@@ -879,6 +879,15 @@ def _ensure_proxy(key: str, rec: dict) -> tuple[bool, str | None]:
     return True, None
 
 
+def _proxy_backend_path(key: str, rest: str, mount_cfg: dict) -> str:
+    path = rest or "/"
+    if not path.startswith("/"):
+        path = "/" + path
+    if mount_cfg.get("preserve_prefix"):
+        return f"/app/{key}/" if path == "/" else f"/app/{key}{path}"
+    return path
+
+
 def _proxy_call(key: str, rec: dict, rest: str, environ, start_response):
     ok, err = _ensure_proxy(key, rec)
     if not ok:
@@ -887,9 +896,7 @@ def _proxy_call(key: str, rec: dict, rest: str, environ, start_response):
                 f"<b>{key}</b> proxy could not start: {_esc(err)}</div>".encode()]
     mount_cfg = rec.get("mount") or {}
     port = mount_cfg.get("port") or rec.get("port")
-    path = rest or "/"
-    if not path.startswith("/"):
-        path = "/" + path
+    path = _proxy_backend_path(key, rest, mount_cfg)
     qs = environ.get("QUERY_STRING") or ""
     url = f"http://127.0.0.1:{port}{path}" + (f"?{qs}" if qs else "")
     method = environ.get("REQUEST_METHOD", "GET")

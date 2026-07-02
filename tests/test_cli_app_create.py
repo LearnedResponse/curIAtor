@@ -74,6 +74,30 @@ def test_app_create_react_and_svelte_proxy_templates(collection):
     assert svelte["smoke"] == "npm run build"
 
 
+def test_app_create_streamlit_proxy_template(collection):
+    from curiator import cli
+
+    assert cli.main(["app", "create", "demo_streamlit", "--template", "streamlit"]) == 0
+
+    root = collection / "apps" / "demo_streamlit"
+    assert (root / "app.py").exists()
+    assert (root / "requirements.txt").read_text() == "streamlit>=1.36\n"
+    readme = (root / "README.md").read_text()
+    assert "--server.baseUrlPath app/demo_streamlit" in readme
+    assert "preserve_prefix: true" in readme
+    assert "WebSocket or production reverse-proxy behavior" in readme
+
+    data = _gallery(collection)
+    app = next(a for a in data["apps"] if a["name"] == "demo_streamlit")
+    assert app["mount"]["kind"] == "proxy"
+    assert app["mount"]["port"] == 8700
+    assert app["mount"]["preserve_prefix"] is True
+    assert "streamlit run app.py" in app["mount"]["cmd"]
+    assert "--server.baseUrlPath app/{app}" in app["mount"]["cmd"]
+    assert app["smoke"] == "python -m py_compile app.py"
+    assert app["tags"] == ["streamlit"]
+
+
 def test_app_create_rejects_duplicate_or_invalid_name(collection):
     from curiator import cli
 

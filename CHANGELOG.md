@@ -17,8 +17,11 @@ All notable changes to curIAtor are documented here. The format follows
   expose multiple gallery endpoints.
 - Same-origin `proxy` mount support for local web servers under `/app/<name>/...`, with process restart
   on curIAtor reload.
+  Proxy mounts can opt into preserving the `/app/<name>/` prefix for frameworks like Streamlit that
+  need their own base path.
 - `curiator app create` / `curiator init-app` to scaffold app directories and register them in
-  `gallery.yaml` using Dash, static, tiny Python-server, React/Vite, or Svelte/Vite templates.
+  `gallery.yaml` using Dash, static, tiny Python-server, React/Vite, Svelte/Vite, or Streamlit
+  templates.
 - Per-feedback run artifacts: task bundles live under `feedback/tasks/<id>.md`, agent stdout/stderr
   streams live to `feedback/replies/<id>.md`, and feedback status badges link to a scrollable trace view.
 - Interactive app-repo workflow: `curiator link`, `status`, `context`, `work`, `done`, `open`, and
