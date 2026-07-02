@@ -49,8 +49,8 @@ For personal/local use:
 
 For shared/team use:
 
-- Require sign-in with `auth.mode: local`, `header`, or `oidc`; do not accept anonymous public feedback
-  into an auto-editing loop.
+- Require sign-in with `auth.mode: local`, `header`, or `oidc`; if you allow logged-out public feedback
+  with `auth.allow_anonymous: true`, keep it in the enforced held queue.
 - Use `agent.autonomy: propose-only` for feedback from broad groups.
 - Gate elevated profiles to trusted admin groups only.
 - Give the agent least-privilege credentials. Mount provider tokens read-only and avoid host-wide

@@ -437,13 +437,16 @@ def _current_user():
         return None
 
 
-def save_entry(key, stars, comment, shot_dataurl, user=None, reply_to=None):
+def save_entry(key, stars, comment, shot_dataurl, user=None, reply_to=None, status: str = "new"):
     eid = uuid.uuid4().hex[:8]
     screenshot = None
     if shot_dataurl and shot_dataurl.startswith("data:image"):
         fname = f"{key}_{eid}.png"
         (SHOTS / fname).write_bytes(base64.b64decode(shot_dataurl.split(",", 1)[1]))
         screenshot = f"shots/{fname}"
+    extra = {"proposed_plan": None, "reply_to": reply_to or []}
+    if status != "new":
+        extra["status"] = status
     ledger.save_entry(
         LEDGER_CFG,
         key,
@@ -453,7 +456,7 @@ def save_entry(key, stars, comment, shot_dataurl, user=None, reply_to=None):
         screenshot=screenshot,
         ts=datetime.now(timezone.utc).isoformat(timespec="seconds"),
         user=auth.stamp(user if user is not None else _current_user()),
-        extra={"proposed_plan": None, "reply_to": reply_to or []},
+        extra=extra,
     )
     return next(e for e in load_feedback().get(key, []) if e.get("id") == eid)
 
@@ -502,10 +505,22 @@ def thread_buttons(items):
     return (note["id"], acts) if acts else None
 
 
-def record_action(key, value, reply_to=None):
-    """A quick-approval button was clicked → post it as a normal user reply (status 'new') so the
-    feedback watcher fires and the loop processes it exactly like a typed approval."""
-    return save_entry(key, None, str(value), None, reply_to=[reply_to] if reply_to else None)
+def record_action(key, value, reply_to=None, user=None, status: str = "new"):
+    """A quick-approval button was clicked → post it as a normal user reply.
+
+    Normally it is status:new so the watcher processes it like a typed approval; logged-out
+    `allow_anonymous` users are forced to status:held.
+    """
+    return save_entry(key, None, str(value), None, user=user, reply_to=[reply_to] if reply_to else None, status=status)
+
+
+def _feedback_user_and_status() -> tuple[dict | None, str, str | None]:
+    u = _current_user()
+    if auth.login_required(REG.AUTH_CFG) and not u:
+        if not auth.allow_anonymous_feedback(REG.AUTH_CFG):
+            return None, "new", "Sign in to leave feedback."
+        return auth.anonymous_user(), "held", None
+    return u, "new", None
 
 
 def app_metrics(key):
@@ -1387,18 +1402,20 @@ def build_shell() -> Dash:
         hide = {"display": "none"}
         if not key:
             return "Select an app first.", errstyle, no_update, no_update, no_update, no_update, no_update, no_update, no_update
-        u = _current_user()
-        if auth.login_required(REG.AUTH_CFG) and not u:    # oidc: feedback requires a verified identity
-            return ("Sign in to leave feedback.", errstyle, no_update, no_update, no_update,
+        u, status, auth_error = _feedback_user_and_status()
+        if auth_error:
+            return (auth_error, errstyle, no_update, no_update, no_update,
                     no_update, no_update, no_update, no_update)
         if not stars and not (comment or "").strip() and not shot:
             return "Add a rating, comment, or screenshot.", errstyle, no_update, no_update, no_update, \
                 no_update, no_update, no_update, no_update
         shot = shot if (isinstance(shot, str) and shot.startswith("data:image")) else None
         parent = reply_to.get("id") if isinstance(reply_to, dict) and reply_to.get("key") == key else None
-        e = save_entry(key, stars, comment, shot, user=u, reply_to=[parent] if parent else None)
+        e = save_entry(key, stars, comment, shot, user=u, reply_to=[parent] if parent else None, status=status)
         who = (e.get("user") or {}).get("name")
         msg = f"✓ saved ({e['id']})" + (f" · {who}" if who else "") + ("  +screenshot" if e["screenshot"] else "")
+        if e.get("status") == "held":
+            msg += " · queued for review"
         return msg, okstyle, feedback_list(key), "", None, None, hide, \
             catalog_rows(search, sortby, tags_sel, bool(rev)), None
 
@@ -1488,9 +1505,13 @@ def build_shell() -> Dash:
         trig = ctx.triggered_id
         if not trig or not any(clicks or []):
             return no_update, no_update, no_update
-        record_action(trig["key"], trig["value"], trig.get("reply_to"))
+        u, status, auth_error = _feedback_user_and_status()
+        if auth_error:
+            return no_update, auth_error, {"fontSize": "11.5px", "color": "#c0392b"}
+        entry = record_action(trig["key"], trig["value"], trig.get("reply_to"), user=u, status=status)
         newlist = feedback_list(trig["key"]) if trig["key"] == sel else no_update
-        return newlist, f"✓ recorded “{trig['value']}” — processing shortly", {"fontSize": "11.5px", "color": GREEN}
+        suffix = "queued for review" if entry.get("status") == "held" else "processing shortly"
+        return newlist, f"✓ recorded “{trig['value']}” — {suffix}", {"fontSize": "11.5px", "color": GREEN}
 
     @shell.server.route("/fb-action", methods=["POST", "GET"])
     def _fb_action_route():
@@ -1499,7 +1520,10 @@ def build_shell() -> Dash:
         value = request.args.get("value")
         reply_to = request.args.get("reply_to")
         if key and value is not None:
-            record_action(key, value, reply_to)
+            u, status, auth_error = _feedback_user_and_status()
+            if auth_error:
+                return (auth_error, 401)
+            record_action(key, value, reply_to, user=u, status=status)
             return ("ok", 200)
         return ("missing key/value", 400)
 

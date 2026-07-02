@@ -140,6 +140,15 @@ def _queue_page_html(message: str = "") -> str:
     return msg + "".join(cards)
 
 
+def _feedback_user_and_status() -> tuple[dict | None, str, str | None]:
+    u = core._current_user()
+    if auth.login_required(core.REG.AUTH_CFG) and not u:
+        if not auth.allow_anonymous_feedback(core.REG.AUTH_CFG):
+            return None, "new", "sign in required"
+        return auth.anonymous_user(), "held", None
+    return u, "new", None
+
+
 def _index() -> str:
     return f"""<!doctype html>
 <html>
@@ -233,6 +242,7 @@ def build_flask_app() -> Flask:
             "auth": {
                 "mode": core.REG.AUTH_CFG.get("mode", "none"),
                 "is_admin": auth.is_admin(core.REG.AUTH_CFG, u),
+                "allow_anonymous": auth.allow_anonymous_feedback(core.REG.AUTH_CFG),
             },
         })
 
@@ -333,9 +343,9 @@ def build_flask_app() -> Flask:
     @app.route("/api/feedback/<key>", methods=["GET", "POST"])
     def _feedback(key):
         if request.method == "POST":
-            u = core._current_user()
-            if auth.login_required(core.REG.AUTH_CFG) and not u:
-                return jsonify({"error": "sign in required"}), 401
+            u, status, auth_error = _feedback_user_and_status()
+            if auth_error:
+                return jsonify({"error": auth_error}), 401
             body = request.get_json(silent=True) or {}
             reply_to = body.get("reply_to") or []
             if isinstance(reply_to, str):
@@ -347,6 +357,7 @@ def build_flask_app() -> Flask:
                 body.get("screenshot"),
                 user=u,
                 reply_to=reply_to,
+                status=status,
             )
             return jsonify({"entry": _safe_entry(entry), **_feedback_payload(key)})
         return jsonify(_feedback_payload(key))
@@ -362,8 +373,11 @@ def build_flask_app() -> Flask:
         value = body.get("value")
         if not key or value is None:
             return jsonify({"error": "missing key/value"}), 400
-        core.record_action(key, value, body.get("reply_to"))
-        return jsonify(_feedback_payload(key))
+        u, status, auth_error = _feedback_user_and_status()
+        if auth_error:
+            return jsonify({"error": auth_error}), 401
+        entry = core.record_action(key, value, body.get("reply_to"), user=u, status=status)
+        return jsonify({"entry": _safe_entry(entry), **_feedback_payload(key)})
 
     @app.route("/feedback-shot/<path:fname>")
     def _shot(fname):

@@ -73,6 +73,15 @@ def test_login_required_only_oidc():
     assert auth.login_required({}) is False
 
 
+def test_allow_anonymous_feedback_only_for_explicit_login_gated_modes():
+    assert auth.allow_anonymous_feedback({"mode": "local", "allow_anonymous": True}) is True
+    assert auth.allow_anonymous_feedback({"mode": "oidc", "allow_anonymous": True}) is True
+    assert auth.allow_anonymous_feedback({"mode": "none", "allow_anonymous": True}) is False
+    assert auth.allow_anonymous_feedback({"mode": "header", "allow_anonymous": True}) is False
+    assert auth.allow_anonymous_feedback({"mode": "local"}) is False
+    assert auth.anonymous_user() == {"id": "anonymous", "email": "anonymous", "name": "anonymous", "groups": []}
+
+
 def test_is_admin_open_in_none_group_gated_otherwise():
     assert auth.is_admin({"mode": "none"}, None) is True            # solo / your box → open
     assert auth.is_admin({}, None) is True                          # default mode is none

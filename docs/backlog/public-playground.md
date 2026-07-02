@@ -1,8 +1,8 @@
 # Backlog — public playground (hosted collections, trust-tiered dispatch)
 
 > **Status:** scoped 2026-07-01; phase-2 moderation primitive partly landed (`held` status,
-> admin `/queue` shell view, and `curiator queue list|approve|reject` CLI), hosted anonymous intake
-> still not started. Sequences AFTER
+> `auth.allow_anonymous` held intake for `local`/`oidc`, admin `/queue` shell view, and
+> `curiator queue list|approve|reject` CLI). Sequences AFTER
 > [public-release](public-release.md): the
 > static example repos are the pitch; this is the live complement — **a hosted public collection where
 > anyone can leave feedback and watch the curator work**, without handing an autonomous agent to the
@@ -27,7 +27,7 @@ tier is not what you can *say* — it's **when the agent acts on it**:
 
 This is not a new system — it's **rungs below the ladder that already exists**. Groups on users,
 group-gated elevation, `admin_groups`, the login rate-limiter, and `curiator revert` are all in the
-runner today; what's missing is the bottom of the ladder (anonymous-but-held) and the budget.
+runner today; what's missing is the budget/quota layer and public deployment hardening.
 
 ## Rollout phases (each phase gates the next)
 
@@ -48,14 +48,14 @@ OIDC mode — identity dedupe plus a free reputation prior), and the quota knobs
 
 **Phase 2 — anonymous + the held pool.** The full ladder below: anonymous browsing + feedback that is
 **always held** for human review, the moderation queue in the shell + `curiator queue` CLI, per-IP
-submission limits. Core moderation status, shell review view, and CLI are now present; the hosted
-anonymous intake, per-IP limits, and quota degradation still remain.
+submission limits. Core moderation status, hosted anonymous-held intake for `local`/`oidc`, shell
+review view, and CLI are now present; per-IP limits and quota degradation still remain.
 
 ## Design (each piece lands on an existing seam)
 
-1. **Mixed anonymity** — `auth.allow_anonymous: true` alongside `mode: local|oidc`: browsing + feedback
-   work logged-out (recorded as anonymous), login upgrades identity. Today `local`/`oidc` gate feedback
-   entirely; this relaxes the gate without losing provenance for those who do sign in.
+1. **Mixed anonymity** — `auth.allow_anonymous: true` alongside `mode: local|oidc` is landed: browsing
+   + feedback work logged-out (recorded as anonymous and forced to `held`), login upgrades identity
+   and keeps the normal `new` path.
 2. **The dispatch ladder** — a per-tier policy the loop consults before waking the agent:
    ```yaml
    agent:
@@ -71,8 +71,7 @@ anonymous intake, per-IP limits, and quota degradation still remain.
    spent"), not a silent drop.
 3. **The moderation pool** — ledger status `held`, the admin-gated `/queue` shell view, and the
    headless CLI are landed: `curiator queue list|approve|reject` reviews held items; approve → `new`
-   (dispatches normally), reject → `rejected` with an audit note. Remaining: the hosted
-   anonymous-feedback path that creates held items automatically. Approval is admission control,
+   (dispatches normally), reject → `rejected` with an audit note. Approval is admission control,
    distinct from the existing `awaiting_approval` (which is the *agent* asking a human about a *plan*).
 4. **Admin operations** — `curiator revert` already exists (git-as-memory makes every run one
    revertible commit). `curiator user disable <email>` / `enable` now toggles a `disabled` flag in the

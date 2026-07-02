@@ -337,6 +337,9 @@
     const byId = new Map(items.map((e) => [e.id, e]));
     const target = replyTo && byId.get(replyTo.id);
     const t = tree(items);
+    const auth = (boot && boot.auth) || {};
+    const user = (boot && boot.user) || {};
+    const anonymousHeld = Boolean(auth.allow_anonymous && auth.mode !== "none" && !(user && user.name));
 
     function refresh() {
       return api("/api/feedback/" + encodeURIComponent(selected)).then(setFeedback).then(reloadApps);
@@ -360,7 +363,9 @@
           setShot(null);
           setAnnotations([]);
           setReplyTo(null);
-          setMsg("✓ saved (" + data.entry.id + ")" + (data.entry.screenshot ? " +screenshot" : ""));
+          setMsg(data.entry.status === "held"
+            ? "✓ queued for review (" + data.entry.id + ")" + (data.entry.screenshot ? " +screenshot" : "")
+            : "✓ saved (" + data.entry.id + ")" + (data.entry.screenshot ? " +screenshot" : ""));
           reloadApps();
         }).catch((e) => setMsg(e.error || "Save failed."));
     }
@@ -392,7 +397,13 @@
 
     function action(value, replyToId) {
       api("/api/action", {method: "POST", body: JSON.stringify({key: selected, value, reply_to: replyToId})})
-        .then((data) => { setFeedback(data); setMsg("✓ recorded “" + value + "” — processing shortly"); reloadApps(); });
+        .then((data) => {
+          setFeedback(data);
+          setMsg(data.entry && data.entry.status === "held"
+            ? "✓ recorded “" + value + "” — queued for review"
+            : "✓ recorded “" + value + "” — processing shortly");
+          reloadApps();
+        });
     }
 
     return h("aside", {className: "rshell-feedback" + (open ? " open" : "") + (collapsed ? " collapsed" : "")},
@@ -413,7 +424,7 @@
         value: comment, onChange: (e) => setComment(e.target.value)}),
       h("div", {style: {display: "flex", gap: 8, margin: "6px 0"}},
         h("button", {className: "rshell-button secondary", onClick: capture}, "📷 Capture view"),
-        h("label", {className: "rshell-button secondary"}, "⬆ upload",
+        anonymousHeld ? null : h("label", {className: "rshell-button secondary"}, "⬆ upload",
           h("input", {type: "file", accept: "image/*", style: {display: "none"}, onChange: (e) => upload(e.target.files[0])}))),
       shot ? h(AnnotationEditor, {image: shot, annotations, setAnnotations}) : null,
       h("button", {className: "rshell-button primary", onClick: save}, "Save feedback"),

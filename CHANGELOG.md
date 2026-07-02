@@ -58,6 +58,8 @@ All notable changes to curIAtor are documented here. The format follows
   dispatching it, `/queue` gives admins a shell review view, and
   `curiator queue list|approve|reject` lets headless admins review, release, or close held items with
   ledger audit notes.
+- `auth.allow_anonymous: true` for `local`/`oidc` hosted galleries lets logged-out users leave feedback,
+  but it is always recorded as `held`; logged-in users keep the normal dispatch path.
 - `docs/SCREENSHOT_CAPTURE.md` documents the current same-origin `html2canvas` capture path, upload
   fallback, and native/server-side capture tradeoffs.
 - `CITATION.cff` provides machine-readable software citation metadata for GitHub and Zenodo.

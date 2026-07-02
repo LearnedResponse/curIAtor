@@ -262,6 +262,18 @@ Passwords are stored only as **hashes** (`werkzeug`) in a gitignored `.curiator-
 — no plaintext, no extra dependency. The `header` / `oidc` settings live in the same `auth:` block; see
 the `gallery.yaml` comments. `oidc` needs the `[oidc]` extra (`pip install 'curiator[oidc]'`).
 
+For a hosted gallery where logged-out visitors may leave feedback, keep sign-in enabled and opt into
+held anonymous intake:
+
+```yaml
+auth:
+  mode: local          # or oidc
+  allow_anonymous: true
+```
+
+Logged-out feedback is always saved as `held`; it will not wake the agent until an admin approves it
+from **Queue** or `curiator queue approve`. Logged-in users keep the normal `new` feedback path.
+
 ## 6. Run it in a container (one sandbox per collection)
 
 The curator **auto-edits and runs** your code, so the safety unit is **one container per collection** —

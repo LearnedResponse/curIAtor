@@ -7,6 +7,9 @@ curiator RECORDS identity; it doesn't run a user database it doesn't have to. Mo
   local  → a built-in username/password login form against a hashed-password user file (managed by
            `curiator user add`) — for self-hosted installs with no IdP and no proxy
 
+`auth.allow_anonymous: true` may be paired with local/oidc for hosted galleries: logged-out feedback
+is accepted only into the held moderation queue, never directly dispatched.
+
 A user is `{id, email, name, groups}`. Roles + reputation are OUT OF SCOPE — we only capture `groups`
 for when they arrive. OIDC secrets come from env (`auth.client_secret_env`), NEVER the YAML; local
 passwords are stored only as hashes (werkzeug), in a gitignored file.
@@ -82,6 +85,21 @@ def current_user(auth_cfg: dict) -> dict | None:
 def login_required(auth_cfg: dict) -> bool:
     """Does this mode gate feedback behind a curiator login? (oidc/local yes; none/header resolve transparently.)"""
     return (auth_cfg or {}).get("mode") in ("oidc", "local")
+
+
+def allow_anonymous_feedback(auth_cfg: dict) -> bool:
+    """May logged-out users leave feedback in an otherwise login-gated gallery?
+
+    This only applies to explicit hosted modes. `auth.mode: none` keeps its existing clone-and-run
+    behavior, while `local|oidc + allow_anonymous: true` means anonymous feedback is accepted into a
+    held moderation queue rather than dispatched.
+    """
+    a = auth_cfg or {}
+    return a.get("mode") in ("local", "oidc") and bool(a.get("allow_anonymous"))
+
+
+def anonymous_user() -> dict:
+    return _norm("anonymous", "", "anonymous", [])
 
 
 def is_admin(auth_cfg: dict, user: dict | None) -> bool:

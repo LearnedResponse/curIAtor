@@ -8,8 +8,7 @@ import pytest
 SHELL_DIR = Path(__file__).resolve().parents[1] / "curiator" / "shell"
 
 
-@pytest.fixture
-def web_mod(collection, monkeypatch):
+def _load_web_mod(monkeypatch):
     import importlib.util as u
     import sys
 
@@ -25,6 +24,11 @@ def web_mod(collection, monkeypatch):
     sys.modules["curiator.shell.web_shell"] = mod
     spec.loader.exec_module(mod)
     return mod
+
+
+@pytest.fixture
+def web_mod(collection, monkeypatch):
+    return _load_web_mod(monkeypatch)
 
 
 @pytest.fixture
@@ -80,6 +84,7 @@ def test_react_shell_has_burned_screenshot_annotations(web_client):
     assert "function composeShot" in js
     assert "drawAnnotation(ctx, mark" in js
     assert "tool === \"redact\"" in js
+    assert "anonymousHeld ? null" in js
     assert "rshell-annotation-canvas" in css
     assert "touch-action: none" in css
 
@@ -132,6 +137,53 @@ def test_react_shell_admin_queue_page_reviews_held_feedback(web_client):
     assert any(e.get("kind") == "system" and reject_id in (e.get("reply_to") or [])
                and "Reason: spam" in e.get("comment", "")
                for e in items)
+
+
+def test_react_shell_login_required_rejects_logged_out_feedback_by_default(collection, monkeypatch):
+    (collection / "gallery.yaml").write_text((collection / "gallery.yaml").read_text() + """
+auth:
+  mode: local
+  users_file: .curiator-users.json
+""")
+    mod = _load_web_mod(monkeypatch)
+    client = mod.build_flask_app().test_client()
+    r = client.post("/api/feedback/sample", json={"comment": "logged out"})
+    assert r.status_code == 401
+    assert r.get_json()["error"] == "sign in required"
+
+
+def test_react_shell_allow_anonymous_feedback_is_held(collection, monkeypatch):
+    from curiator import ledger
+    from curiator.config import load_config
+
+    (collection / "gallery.yaml").write_text((collection / "gallery.yaml").read_text() + """
+auth:
+  mode: local
+  allow_anonymous: true
+  users_file: .curiator-users.json
+""")
+    mod = _load_web_mod(monkeypatch)
+    client = mod.build_flask_app().test_client()
+
+    boot = client.get("/api/bootstrap").get_json()
+    assert boot["auth"]["mode"] == "local"
+    assert boot["auth"]["allow_anonymous"] is True
+    assert boot["user"] == {"authenticated": False}
+
+    r = client.post("/api/feedback/sample", json={"comment": "logged out public comment", "stars": 5})
+    assert r.status_code == 200
+    entry = r.get_json()["entry"]
+    assert entry["status"] == "held"
+    assert entry["user"]["name"] == "anonymous"
+
+    action = client.post("/api/action", json={"key": "sample", "value": "yes", "reply_to": entry["id"]})
+    assert action.status_code == 200
+    action_entry = action.get_json()["entry"]
+    assert action_entry["status"] == "held"
+    assert action_entry["reply_to"] == [entry["id"]]
+
+    items = ledger.load(load_config())["sample"]
+    assert [e["status"] for e in items if e.get("author") == "user"] == ["held", "held"]
 
 
 def test_react_shell_feedback_api_threads_replies(web_client):
