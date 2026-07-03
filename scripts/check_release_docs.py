@@ -95,6 +95,7 @@ def check_release_docs(root: Path = ROOT, *, strict_launch: bool = False) -> lis
         "release-evidence/case-study-stats.json",
         "make paper-stats",
         "make paper-pdf",
+        "playground-backup-smoke",
     ]:
         if phrase not in release_text:
             failures.append(f"docs/RELEASE.md missing required phrase: {phrase}")

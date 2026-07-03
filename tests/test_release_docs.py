@@ -141,6 +141,7 @@ def test_release_docs_requires_optional_preflight_artifact_in_runbook(tmp_path):
         .replace("release-evidence/release-preflight-optional.json", "release-evidence/optional.json")
         .replace("release-evidence/release-package-smoke.json", "release-evidence/package.json")
         .replace("make release-package-smoke", "make package-smoke")
+        .replace("playground-backup-smoke", "playground-backup-missing")
     )
 
     failures = module.check_release_docs(tmp_path)
@@ -156,6 +157,10 @@ def test_release_docs_requires_optional_preflight_artifact_in_runbook(tmp_path):
     assert (
         "docs/RELEASE.md missing required phrase: "
         "make release-package-smoke"
+    ) in failures
+    assert (
+        "docs/RELEASE.md missing required phrase: "
+        "playground-backup-smoke"
     ) in failures
 
 
