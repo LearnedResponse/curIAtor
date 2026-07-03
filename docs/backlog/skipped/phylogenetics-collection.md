@@ -1,6 +1,8 @@
 # Backlog — curiator-phylogenetics collection (public interactive companion)
 
-> **Status:** scaffolded 2026-07-02 in nested repo `galleries/curiator-phylogenetics`.
+> **Status:** skipped/external as of 2026-07-03. The local collection and seeded loop are complete;
+> remaining work is external Pages enable/run/URL wiring plus optional expansion. Original status:
+> scaffolded 2026-07-02 in nested repo `galleries/curiator-phylogenetics`.
 > Seed commit `713b39e` carries a **public-first** collection seeded from an already-built
 > displayed-trees viz suite: a Pyodide static proxy app (`tinnik_static`) and a Dash local
 > explorer (`tinnik_dash`). The seeded feedback loop is complete on `curiator/auto` through `b1b3586`:
@@ -28,7 +30,7 @@ phylogeneticist's feedback. It plays **three roles at once**:
    does its math *in the browser*, served same-origin via the already-proven `proxy` mount;
    it stress-tests the overlay + curator loop over a *static-but-computational* page, and
    it's the domain-specialized sibling of
-   [math-geometry-collection](completed/math-geometry-collection.md).
+   [math-geometry-collection](../completed/math-geometry-collection.md).
 
 Why public-first is *reachable now*: the hard part is already done — a **validated
 network-coalescent engine runs byte-identical in the browser** (CPython → WASM via
@@ -139,7 +141,7 @@ server, no re-implementation.
 This collection is **part of the displayed-trees paper's outreach, not a side quest**. It
 is the interactive companion the outreach plan named as a differentiator. It slots into the
 **public-release track** as another public collection (a domain-specialized sibling of
-[math-geometry-collection](completed/math-geometry-collection.md)) and as an evaluation collection for
+[math-geometry-collection](../completed/math-geometry-collection.md)) and as an evaluation collection for
 `zenodo-paper.md`. Build
 it **alongside** the paper's arXiv/timestamp step so the paper can link it on day one.
 

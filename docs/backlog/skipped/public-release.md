@@ -1,10 +1,13 @@
 # Backlog — public release (GitHub, three example collections, a DOI)
 
-> **Status:** release infrastructure started 2026-07-01. The decision: release curIAtor externally on
+> **Status:** skipped/external as of 2026-07-03. Local release infrastructure is prepared, but the
+> remaining work requires external publication authority: public pushes/tags, PyPI Trusted Publisher,
+> GitHub↔Zenodo wiring, DOI/badge updates, and off-machine release validation. The original scoped
+> release plan follows for provenance. Release infrastructure started 2026-07-01. The decision: release curIAtor externally on
 > GitHub as v0.2.x with **three public example collections** — `curiator-aviato` (mixed frameworks,
 > local, same-machine temp-clone portability, and published-head preflights now pass), `curiator-ot`
-> ([the OT/HMI flagship](completed/ot-hmi-demo.md), scaffolded in `galleries/curiator-ot`), and a
-> [math/geometry explainer collection](completed/math-geometry-collection.md) (scaffolded in
+> ([the OT/HMI flagship](../completed/ot-hmi-demo.md), scaffolded in `galleries/curiator-ot`), and a
+> [math/geometry explainer collection](../completed/math-geometry-collection.md) (scaffolded in
 > `galleries/curiator-geometry`) — plus a Zenodo-archived, DOI-citable release and a companion paper
 > ([zenodo-paper](zenodo-paper.md)).
 
@@ -21,7 +24,7 @@ leave feedback → watch the fix land and the ⚙ reply arrive. Every item below
    release. The release workflow builds/attaches artifacts and has a PyPI trusted-publishing job with
    a tag-vs-`pyproject.toml` version guard; `make release-check` now runs the local gate (lint, tests,
    strict public-gallery fresh-clone preflight, `docs/demo.gif` presence validation, package build, and `twine check`). The
-   human release checklist now lives in [`docs/RELEASE.md`](../RELEASE.md). Latest local gate evidence
+   human release checklist now lives in [`docs/RELEASE.md`](../../RELEASE.md). Latest local gate evidence
    at runner `4e27ece`: `make release-package-smoke` passed, including `make release-check` with 299
    tests, public-gallery
    fresh-clone preflight `3/3` with zero publish-artifact hits, validated the browser-captured

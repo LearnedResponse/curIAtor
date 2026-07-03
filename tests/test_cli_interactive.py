@@ -38,9 +38,12 @@ def test_link_file_resolves_gallery_from_external_app_repo(collection, tmp_path,
 def test_interactive_work_and_done_use_same_ledger_and_git_memory(collection, monkeypatch, capsys):
     import subprocess
 
+    from curiator import agent_capabilities
     from curiator import cli, ledger
     from curiator.config import load_config
 
+    monkeypatch.delenv("CURIATOR_BROWSER", raising=False)
+    monkeypatch.setattr(agent_capabilities.shutil, "which", lambda _name: None)
     monkeypatch.chdir(collection)
     assert cli.main(["feedback", "add", "sample", "make it calmer"]) == 0
     cfg = load_config()
@@ -189,9 +192,12 @@ def test_commands_install_keeps_customized_legacy_codex_skill(collection, monkey
 
 def test_done_with_message_only_closes_the_working_item(collection, monkeypatch, capsys):
     """`curiator done "<summary>"` (no id) must treat the words as the message, not an id."""
+    from curiator import agent_capabilities
     from curiator import cli, ledger
     from curiator.config import load_config
 
+    monkeypatch.delenv("CURIATOR_BROWSER", raising=False)
+    monkeypatch.setattr(agent_capabilities.shutil, "which", lambda _name: None)
     monkeypatch.chdir(collection)
     assert cli.main(["feedback", "add", "sample", "make it calmer"]) == 0
     cfg = load_config()

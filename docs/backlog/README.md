@@ -8,37 +8,34 @@ implementation, release action, or external operating step; shipped items move t
 > **private `curiator-planning` repo**, surfaced to the loop as `.planning/` when present. This file is
 > the public half — the release track and example collections.
 
-## The release track (in order)
+## Live
 
-- [**public-release**](public-release.md) — release curIAtor externally on GitHub as v0.2.x with three
-  public example collections (`curiator-aviato`, `curiator-ot`, math/geometry), the hero demo.gif, a
-  portability pass (no machine-absolute paths in collections), SECURITY.md, and Zenodo DOI wiring.
-- [**zenodo-paper**](zenodo-paper.md) — the companion software/systems paper, self-archived on Zenodo
-  with a DOI (JOSS as the reviewed follow-up); the public collections are its evaluation, and a small
-  `curiator stats` keeps its numbers reproducible.
+No live public backlog items. Local implementation work has either shipped or moved out of the active
+public backlog. External publication/hosting/DOI work is parked under [`skipped/`](skipped/) until a
+human chooses to reopen it with concrete credentials, remotes, or deployment targets.
 
-## After the release
+## Skipped / External
 
-- [**public-playground**](public-playground.md) — hosted collections with **trust-tiered dispatch**,
-  rolled out in phases: **phase 0 is velvet-gated** (invite-only accounts — deployable with today's
-  runner, the invite list is the rate limit and the vetting), then self-serve accounts + quotas, then
-  anonymous feedback held in a human-reviewed pool. The live complement to the static examples, and
-  the enforcement mechanism for SECURITY.md's public-internet policy.
+Skipped items are not shipped; they are parked so the local backlog stays drainable.
 
-## Direction
-
-- [**general-app-hosting**](general-app-hosting.md) — host *any* framework and *multi-file* apps.
-  **Core landed & proven** (`curiator-aviato` runs React SSR + Rust via `proxy` mounts); framework
-  scaffolds and a discoverable template menu now exist, so what remains is deeper per-framework
-  hardening, live-HMR proxy ergonomics, and publishing the proof.
-- [**phylogenetics-collection**](phylogenetics-collection.md) — scaffolded in
-  `galleries/curiator-phylogenetics` as a **public-first** interactive companion to the tropical
-  displayed-trees paper (displayed trees / tree-of-blobs / NC = D / TINNiK), seeded from an already-built
-  Dash explorer **and a working Pyodide static port**. A domain-specialized sibling of
-  [**math-geometry-collection**](completed/math-geometry-collection.md) for the phylo-networks
-  community; first client-side-WASM-compute collection; the full eight-item seeded feedback loop is
-  complete through `b1b3586`, the static GitHub Pages publishing path is prepared at `0095229`, and
-  the remaining work is external deploy/URL wiring plus optional expansion apps.
+- [**public-release**](skipped/public-release.md) — local release gates and example-collection
+  publication prep are in place, but the remaining work is external: push/tag/publication, PyPI Trusted
+  Publisher, GitHub/Zenodo wiring, badges, and off-machine release validation.
+- [**zenodo-paper**](skipped/zenodo-paper.md) — local stats, draft, figures, metadata, and PDF build
+  scaffolding exist; final DOI/deposit and human PDF review are external release-time steps.
+- [**public-playground**](skipped/public-playground.md) — moderation, quotas, hosted preflight, and
+  backup/restore gates exist; the actual velvet-gated hosted pilot is an external deployment.
+- [**general-app-hosting**](skipped/general-app-hosting.md) — the core framework-agnostic hosting work is
+  landed and proven locally; remaining items are deeper hardening, HMR ergonomics, engine-backed mounts,
+  and publishing the proof.
+- [**phylogenetics-collection**](skipped/phylogenetics-collection.md) — the collection and seeded loop
+  are complete locally; remaining work is external Pages enable/run/URL wiring plus optional expansion.
+- [**games-collection**](skipped/games-collection.md) — post-release public demo direction requiring
+  external/open-source game app integration and user-supplied game substrates.
+- [**ot-digital-twin**](skipped/ot-digital-twin.md) — post-release engine-backed OT v2 direction that
+  needs a real FMU/digital-twin substrate, beyond the shipped OT v1 local demo.
+- [**curiator-ml**](skipped/curiator-ml.md) — post-release diagnostic-backend direction requiring an
+  external benchmark/dataset choice and metric contract.
 
 ## Shipped
 

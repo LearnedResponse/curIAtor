@@ -12,6 +12,8 @@ from .config import agent_label, app_spec, app_specs, load_config
 
 
 OPEN_FEEDBACK_STATUSES = {"new", "working", "awaiting_approval", "held"}
+_BROWSER_SMOKE_SECTION = "## Browser-smoke capability"
+_BROWSER_SMOKE_PATH_RE = re.compile(r"^- (?P<label>result JSON|screenshot|console log): `(?P<path>[^`]+)`", re.M)
 
 
 def _cli_shared():
@@ -58,6 +60,85 @@ def _cli_user(cfg: dict) -> dict | None:
 
 def _reload_in_shell(cfg: dict, app: str) -> str | None:
     return _cli_shared()._reload_in_shell(cfg, app)
+
+
+def _feedback_dir(cfg: dict) -> Path:
+    value = str((cfg.get("feedback") or {}).get("dir") or "feedback").strip("/") or "feedback"
+    p = Path(value)
+    return p if p.is_absolute() else Path(cfg["repo_root"]) / p
+
+
+def _repo_path(cfg: dict, value: str) -> Path:
+    p = Path(value)
+    return p if p.is_absolute() else Path(cfg["repo_root"]) / p
+
+
+def _browser_smoke_contract_paths(task_text: str) -> dict[str, str]:
+    paths: dict[str, str] = {}
+    for match in _BROWSER_SMOKE_PATH_RE.finditer(task_text):
+        paths[match.group("label")] = match.group("path")
+    return paths
+
+
+def _browser_smoke_result_ok(path: Path) -> tuple[bool, str]:
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except Exception as exc:  # noqa: BLE001
+        return False, f"cannot read result JSON: {exc}"
+    if payload.get("ok") is False:
+        return False, "result JSON reports ok=false"
+    results = payload.get("results")
+    if isinstance(results, list) and results:
+        failed = [
+            str(row.get("app") or "?")
+            for row in results
+            if isinstance(row, dict) and (
+                row.get("ok") is False
+                or ((row.get("browser_smoke") or {}).get("ok") is False
+                    if isinstance(row.get("browser_smoke"), dict) else False)
+            )
+        ]
+        if failed:
+            return False, f"browser smoke failed for {', '.join(failed)}"
+    return True, ""
+
+
+def _enforce_browser_smoke_contract(cfg: dict, feedback_id: str) -> None:
+    task_file = _feedback_dir(cfg) / "tasks" / f"{feedback_id}.md"
+    if not task_file.exists():
+        return
+    task_text = task_file.read_text(encoding="utf-8")
+    if _BROWSER_SMOKE_SECTION not in task_text:
+        return
+
+    paths = _browser_smoke_contract_paths(task_text)
+    result_path = paths.get("result JSON")
+    screenshot_path = paths.get("screenshot")
+    console_path = paths.get("console log")
+    missing_labels = [
+        label
+        for label, raw in (
+            ("result JSON", result_path),
+            ("screenshot", screenshot_path),
+            ("console log", console_path),
+        )
+        if not raw or not _repo_path(cfg, raw).exists()
+    ]
+    if missing_labels:
+        command = "curiator smoke --app <app> --browser --artifact-dir <artifact-dir> --output <result.json> --json"
+        raise SystemExit(
+            "curIAtor: refusing --status done because this task bundle required browser-smoke "
+            f"artifacts and the following are missing: {', '.join(missing_labels)}. "
+            f"Run `{command}` using the paths listed in feedback/tasks/{feedback_id}.md, then reply again."
+        )
+    ok, reason = _browser_smoke_result_ok(_repo_path(cfg, result_path or ""))
+    if not ok:
+        raise SystemExit(
+            "curIAtor: refusing --status done because the browser-smoke result is not passing "
+            f"({reason}). Fix the rendered app or rerun the browser smoke before replying."
+        )
+
+
 def _parse_actions_arg(s):
     """`--actions "A,B,C"` or `"Yes:yes,No:no"` → [[label, value], …] for quick-approval buttons."""
     out = []
@@ -71,6 +152,8 @@ def _parse_actions_arg(s):
 
 
 def _post_reply(cfg: dict, app: str, feedback_id: str, text: str, status: str | None, actions: str | None = None) -> int:
+    if status == "done":
+        _enforce_browser_smoke_contract(cfg, feedback_id)
     ts = datetime.now(timezone.utc).isoformat()
     ledger.add_system_note(cfg, app, text, reply_to=[feedback_id],
                            status="update", ts=ts, actions=_parse_actions_arg(actions),
@@ -558,6 +641,5 @@ def cmd_queue(args) -> int:
     else:
         print(f"curiator: rejected {app}/{entry['id']} → rejected")
     return 0
-
 
 

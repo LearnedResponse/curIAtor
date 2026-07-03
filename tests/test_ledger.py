@@ -58,6 +58,68 @@ def test_cmd_reply_stamps_the_configured_provider(cfg, collection):
     assert note["agent"] == "Claude"
 
 
+def test_cmd_reply_done_rejects_missing_browser_smoke_artifacts(cfg, collection, monkeypatch):
+    import argparse
+
+    import pytest
+
+    from curiator import agent_capabilities
+    from curiator.cli import cmd_reply
+    from curiator.loop.adapters import build_task
+
+    monkeypatch.delenv("CURIATOR_BROWSER", raising=False)
+    monkeypatch.setattr(
+        agent_capabilities.shutil,
+        "which",
+        lambda name: "/usr/bin/brave-browser" if name == "brave-browser" else None,
+    )
+
+    fid = ledger.save_entry(cfg, "sample", comment="fix the chart", ts="t0")
+    entry = next(e for e in ledger.load(cfg)["sample"] if e["id"] == fid)
+    build_task(cfg, "sample", entry)
+
+    with pytest.raises(SystemExit, match="required browser-smoke artifacts"):
+        cmd_reply(argparse.Namespace(app="sample", feedback_id=fid, text="Done.", status="done", actions=None))
+
+    items = ledger.load(cfg)["sample"]
+    assert next(e for e in items if e["id"] == fid)["status"] == "new"
+    assert not [e for e in items if e["author"] == "claude" and fid in (e.get("reply_to") or [])]
+
+
+def test_cmd_reply_done_accepts_passing_browser_smoke_artifacts(cfg, collection, monkeypatch):
+    import argparse
+    import json
+
+    from curiator import agent_capabilities
+    from curiator.cli import cmd_reply
+    from curiator.loop.adapters import build_task
+
+    monkeypatch.delenv("CURIATOR_BROWSER", raising=False)
+    monkeypatch.setattr(
+        agent_capabilities.shutil,
+        "which",
+        lambda name: "/usr/bin/brave-browser" if name == "brave-browser" else None,
+    )
+
+    fid = ledger.save_entry(cfg, "sample", comment="fix the chart", ts="t0")
+    entry = next(e for e in ledger.load(cfg)["sample"] if e["id"] == fid)
+    build_task(cfg, "sample", entry)
+
+    artifact_dir = collection / "feedback" / "replies" / f"{fid}-browser-smoke"
+    artifact_dir.mkdir(parents=True)
+    (artifact_dir / "sample.png").write_bytes(b"png")
+    (artifact_dir / "sample.console.json").write_text("[]")
+    (artifact_dir / "result.json").write_text(json.dumps({
+        "ok": True,
+        "results": [{"app": "sample", "ok": True, "browser_smoke": {"ok": True}}],
+    }))
+
+    cmd_reply(argparse.Namespace(app="sample", feedback_id=fid, text="Done.", status="done", actions=None))
+    items = ledger.load(cfg)["sample"]
+    assert next(e for e in items if e["id"] == fid)["status"] == "done"
+    assert [e for e in items if e["author"] == "claude" and fid in (e.get("reply_to") or [])]
+
+
 def test_reply_actions_arg_parsing():
     from curiator.cli import _parse_actions_arg
     assert _parse_actions_arg("A,B,C") == [["A", "A"], ["B", "B"], ["C", "C"]]

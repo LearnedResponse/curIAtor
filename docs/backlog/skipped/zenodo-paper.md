@@ -1,6 +1,8 @@
 # Backlog — the companion paper (Zenodo)
 
-> **Status:** scoped 2026-07-01; stats CLI, local Zenodo metadata, a conservative `docs/paper/`
+> **Status:** skipped/external as of 2026-07-03. Local paper/statistics/metadata/PDF scaffolding is in
+> place; remaining work is final human review plus release-time Zenodo/DOI deposit. The original scoped
+> paper plan follows for provenance. Scoped 2026-07-01; stats CLI, local Zenodo metadata, a conservative `docs/paper/`
 > Markdown draft scaffold, draft related-work prose, draft acknowledgements, and command-backed
 > `curiator stats --output` / `curiator release-preflight --output` evidence snapshots have landed.
 > The public-collection publication blocker is cleared at the release-candidate heads; `make paper-stats`

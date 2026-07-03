@@ -8,7 +8,7 @@ This is the human checklist for cutting a curIAtor release. The automated releas
 Start from the public-release backlog:
 
 ```bash
-sed -n '1,140p' docs/backlog/public-release.md
+sed -n '1,140p' docs/backlog/skipped/public-release.md
 ```
 
 The v0.2.x release bar is that a stranger can reach a working loop in under ten minutes:

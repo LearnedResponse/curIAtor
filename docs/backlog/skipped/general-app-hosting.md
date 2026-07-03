@@ -1,12 +1,15 @@
 # Backlog — general app hosting (any framework, multi-file apps)
 
-> **Status: core landed & proven in the wild (2026-07-01) — what's left is ergonomics + visibility.**
+> **Status: skipped/deferred as of 2026-07-03. Core landed & proven in the wild (2026-07-01); the
+> active backlog is drained. Remaining work is follow-on hardening, HMR ergonomics, engine-backed
+> mounts, and public proof surfacing, all parked until reopened as concrete local work-orders.**
 > App directories, multi-endpoint `mounts:`, the same-origin `proxy` mount, and `curiator app create`
 > scaffolds (dash/static/python/node/flask/fastapi/rust/react/svelte/vue/next/streamlit/gradio) are in the runner, and the **non-Dash proof now exists**:
 > `curiator-aviato` runs a React/Node SSR app and a Rust HTTP server through `proxy` mounts next to
 > Dash, with per-root smoke commands — the loop closed on all of them. Remaining backlog: framework
 > template hardening beyond the first React/Svelte/Vue/Next/Flask/FastAPI/Rust/Streamlit/Gradio scaffolds, heavier Docker/Compose
-> orchestration — and **surfacing the proof**, which is now the cheapest highest-leverage step: the
+> orchestration, **engine-backed mounts** (a managed backend engine behind a proxied front-end — the
+> shared substrate for games / OT-twin / ML) — and **surfacing the proof**, which is now the cheapest highest-leverage step: the
 > proof is private/local until [public-release](public-release.md) publishes `curiator-aviato` and links
 > it from the README. **Reframed 2026-06-29 — this is *not* an expansion past Dash; it *realizes* what
 > the overlay already is.**
@@ -86,6 +89,37 @@ metadata. When git-as-memory handles a source-changing run against one of those 
 commits the app repo first and then records the collection ledger plus updated gitlink. Plugins =
 lock-in + maintenance; templates + the generic proxy = leverage. Stay generic at the mount, opinionated
 only at scaffold/import time.
+
+## Engine-backed mounts (the shared substrate for games, OT twins, and ML)
+
+Three roadmap collections want the same thing `proxy` doesn't yet give: a **persistent backend engine**
+the proxied front-end talks to but the loop never edits — a game server (`games-collection`: Factorio
+RCON / DFHack / the NetHack Learning Environment), an FMU co-sim (`ot-digital-twin`), or a
+training/inference process (`curiator-ml`). That's the **engine-backed mount**: `proxy` (the front-end
+the loop iterates) **plus a managed backend sidecar** reachable over websocket / RCON / API.
+
+```yaml
+apps:
+  - name: factory-board
+    mount:
+      kind: engine-backed                       # proxy front-end + a managed backend engine
+      cmd:    "npm run dev -- --port {port}"     # the dashboard the loop iterates
+      engine: "factorio --start-server … --rcon-port {engine_port}"   # substrate, never edited
+      engine_port: 27015
+    source: apps/factory-board/
+```
+
+What it adds over `proxy`: **lifecycle** (the engine starts/stops + health-checks with the app);
+**wiring** (the front-end gets the engine's connection info; if the browser needs the engine directly,
+the shell proxies that ws under the same origin, so the html2canvas moat stays intact). **The invariant
+holds:** the loop maintains the *front-end* (dashboard / HMI / diagnostic surface); the engine is
+**substrate it doesn't edit** — screenshot/feedback lands on the front-end, the engine is the data
+source. Factorio-over-RCON, FMU-over-co-sim, and a model-over-API are one shape — **build the mount once;
+games, OT, and ML are instances.** (Realizes the `.planning/strategy/engine-backed-apps.md` pattern.)
+
+**Guardrail:** the engine runs *inside* the one-container-per-collection blast radius — it doesn't widen
+it — and curiator ships the *mount + overlay*, never third-party engine binaries (games are commercial;
+the FMU/model is the collection's own).
 
 ## Honest scoping & sequencing
 

@@ -2,7 +2,7 @@
 
 > **Status:** scaffolded 2026-07-01 in nested repo `galleries/curiator-geometry`; first feedback loop
 > receipt landed at `30bb155` on `curiator/auto`. The third public example for the
-> [release](../public-release.md) — and the origin story made public: curIAtor's shell was proven over
+> [release](../skipped/public-release.md) — and the origin story made public: curIAtor's shell was proven over
 > dozens of feedback→fix cycles in a private research repo full of interactive geometry explainers
 > before it was extracted. **The IP guardrail up front:** this is a NEW collection of public-knowledge
 > classics. `curiator-Kwisatz` (the private 63-app research overlay) stays private; nothing
@@ -65,7 +65,7 @@ feedback ledger has 12 apps with at least one 4+ star rating:
 4. Run the loop, keep the commits: first loop receipt landed (`30bb155`), and the git log now has the
    collection polishing itself.
 5. README + link from the main repo's Examples — README link prepared; the before/after screenshots
-   feed the [paper](../zenodo-paper.md)'s case-study section.
+   feed the [paper](../skipped/zenodo-paper.md)'s case-study section.
 
 ## Current checks
 
