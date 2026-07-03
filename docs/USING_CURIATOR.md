@@ -357,12 +357,14 @@ curiator release-preflight --fresh-clone
 curiator release-preflight --fresh-clone --strict  # fail on doctor warnings for publication gates
 curiator release-preflight --fresh-clone --json --output release-evidence/release-preflight.json
 curiator release-preflight --http-smoke  # also start proxy apps and poll HTTP when deps are installed
+curiator release-preflight --browser-smoke  # also open apps through the shell in headless Brave
 curiator release-preflight --include-optional --fresh-clone --strict  # add finance + phylogenetics
 curiator playground-preflight  # hosted pilot posture: auth, quotas, queue, doctor, smoke
 curiator playground-preflight --http-smoke  # also start proxy apps when deps are installed
+curiator playground-preflight --browser-smoke  # also prove shell iframe render with headless Brave
 curiator playground-preflight --strict  # fail on warnings for CI/final pre-pilot gates
 curiator playground-preflight --strict --json --output release-evidence/playground-preflight.json
-curiator playground-backup-smoke --strict --json --output release-evidence/playground-backup-smoke.json
+curiator playground-backup-smoke --browser-smoke --strict --json --output release-evidence/playground-backup-smoke.json
 make release-prepare VERSION=0.2.0 DATE=2026-07-02  # updates package, citation, Zenodo, changelog
 ```
 
@@ -390,6 +392,8 @@ When you need shell-level confidence that the app actually renders inside the sa
 `curiator smoke --browser` or pass `--browser-bin <path>`; this starts or reuses the configured shell,
 opens each app through headless Brave, and fails if the iframe shows a mount/proxy diagnostic or no
 visible content. It is opt-in because it requires a local browser binary.
+The same browser pass is available in release and hosted-pilot gates as `--browser-smoke`; pass
+`--browser-bin <path>` when Brave is not on `PATH`.
 For publication gates, `curiator release-preflight --http-smoke` applies the same HTTP pass across the
 selected nested galleries, or across fresh clones after app dependencies are installed there.
 

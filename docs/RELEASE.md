@@ -36,16 +36,18 @@ make release-evidence
 make paper-stats
 curiator release-preflight --include-optional --fresh-clone --strict
 curiator release-preflight --gallery curiator-aviato --http-smoke
+curiator release-preflight --gallery curiator-aviato --browser-smoke
 curiator release-preflight --fresh-clone --json --output release-evidence/release-preflight.json
 ```
 
 `make release-check` runs lint, the full pytest suite, release-doc checks, strict fresh-clone preflight
 for the three required public collections, `docs/demo.gif` presence validation, package build, and
 `twine check`. It does not rewrite `docs/demo.gif`, so a recorded browser capture is not replaced by
-the generated storyboard fallback. The optional preflight adds finance and phylogenetics. The HTTP-smoke variant starts
-proxy apps briefly and polls configured `smoke_http` paths or default app URLs; it expects app
-dependencies to be installed in the tree being checked, so use it against the nested workspace or a
-fresh clone after dependency installation.
+the generated storyboard fallback. The optional preflight adds finance and phylogenetics. The
+HTTP-smoke variant starts proxy apps briefly and polls configured `smoke_http` paths or default app
+URLs; the browser-smoke variant opens apps through the shell in headless Brave and fails on mount/proxy
+diagnostics or empty iframes. Both expect app dependencies to be installed in the tree being checked,
+so use them against the nested workspace or a fresh clone after dependency installation.
 
 Use the `--output` form when you need a durable release or paper evidence artifact. It writes the full
 JSON payload, including runner checks, gallery heads, doctor issues, smoke results, path hits, and

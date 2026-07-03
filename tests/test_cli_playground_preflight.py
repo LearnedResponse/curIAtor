@@ -119,7 +119,7 @@ def test_playground_preflight_accepts_phase0_local_auth_config(collection, capsy
     assert payload["user_store"]["users_file_ignored"] is True
     assert payload["doctor"]["ok"] is True
     assert payload["smoke"]["ok"] is True
-    assert payload["checks"] == {"smoke": True, "http_smoke": False}
+    assert payload["checks"] == {"smoke": True, "http_smoke": False, "browser_smoke": False}
 
 
 def test_playground_preflight_json_output_writes_evidence_file(collection, capsys, tmp_path):
@@ -497,9 +497,81 @@ def test_playground_preflight_can_run_http_smoke(collection, monkeypatch, capsys
     assert cli.main(["playground-preflight", "--http-smoke", "--json"]) == 0
     payload = json.loads(capsys.readouterr().out)
 
-    assert payload["checks"] == {"smoke": True, "http_smoke": True}
+    assert payload["checks"] == {"smoke": True, "http_smoke": True, "browser_smoke": False}
     assert calls == [{"gallery": str(collection / "gallery.yaml"), "http": True}]
     assert payload["smoke"]["results"][0]["http_smoke"]["url"].endswith(":8800/")
+
+
+def test_playground_preflight_can_run_browser_smoke(collection, capsys, monkeypatch):
+    from curiator import auth, cli
+
+    (collection / "gallery.yaml").write_text(textwrap.dedent("""\
+        apps:
+          - name: sample
+            title: Sample
+            mount: { kind: dash-inproc, module: sample }
+            source: apps/sample.py
+        runner:
+          mode: pinned
+        git:
+          commit: true
+        auth:
+          mode: local
+          users_file: .curiator-users.json
+          admin_groups: [admin]
+        agent:
+          autonomy: propose-only
+          dispatch:
+            trusted_groups: [trusted]
+          quotas:
+            per_user_daily: 3
+            global_daily: 25
+    """))
+    _ignore_local_users_file(collection)
+    auth.save_users_file(
+        str(collection / ".curiator-users.json"),
+        {"admin@example.com": {"name": "Admin", "groups": ["admin"], "password_hash": "test-hash"}},
+    )
+    calls = []
+
+    def fake_smoke_results(cfg, app=None, jobs=1, *, http=False, browser=False, browser_bin=None):
+        calls.append({
+            "gallery": cfg["gallery_path"],
+            "http": http,
+            "browser": browser,
+            "browser_bin": browser_bin,
+        })
+        return [{
+            "app": "sample",
+            "smoke": "python -m py_compile apps/sample.py",
+            "ok": True,
+            "message": "ok",
+            "browser_smoke": {
+                "ok": True,
+                "url": "http://127.0.0.1:8300/?app=sample",
+                "message": "Sample app rendered",
+            },
+        }]
+
+    monkeypatch.setattr(cli, "_smoke_results", fake_smoke_results)
+
+    assert cli.main([
+        "playground-preflight",
+        "--browser-smoke",
+        "--browser-bin",
+        "/usr/bin/brave",
+        "--json",
+    ]) == 0
+    payload = json.loads(capsys.readouterr().out)
+
+    assert payload["checks"] == {"smoke": True, "http_smoke": False, "browser_smoke": True}
+    assert calls == [{
+        "gallery": str(collection / "gallery.yaml"),
+        "http": False,
+        "browser": True,
+        "browser_bin": "/usr/bin/brave",
+    }]
+    assert payload["smoke"]["results"][0]["browser_smoke"]["message"] == "Sample app rendered"
 
 
 def test_playground_preflight_rejects_http_smoke_without_smoke(collection, capsys):
@@ -508,6 +580,14 @@ def test_playground_preflight_rejects_http_smoke_without_smoke(collection, capsy
     assert cli.main(["playground-preflight", "--no-smoke", "--http-smoke"]) == 2
     out = capsys.readouterr().out
     assert "--http-smoke requires smoke checks" in out
+
+
+def test_playground_preflight_rejects_browser_smoke_without_smoke(collection, capsys):
+    from curiator import cli
+
+    assert cli.main(["playground-preflight", "--no-smoke", "--browser-smoke"]) == 2
+    out = capsys.readouterr().out
+    assert "--browser-smoke requires smoke checks" in out
 
 
 def test_playground_preflight_strict_fails_warning_only_posture(collection, capsys):
@@ -632,11 +712,79 @@ def test_playground_backup_smoke_restores_collection_and_runs_preflight(collecti
     assert restore_path.exists()
     assert payload["preflight"]["gallery"] == str(restore_path / "gallery.yaml")
     assert payload["preflight"]["user_store"]["users_file_rel"] == ".curiator-users.json"
-    assert payload["preflight"]["checks"] == {"smoke": False, "http_smoke": False}
+    assert payload["preflight"]["checks"] == {"smoke": False, "http_smoke": False, "browser_smoke": False}
     assert (restore_path / ".curiator-users.json").exists()
     assert (restore_path / "feedback" / "tasks" / "abc123.md").read_text(encoding="utf-8") == "restored task trace\n"
     restored = ledger.load(load_config_at(restore_path / "gallery.yaml"))
     assert restored["sample"][0]["comment"] == "restore me"
+
+
+def test_playground_backup_smoke_can_run_browser_smoke_on_restored_collection(
+    collection,
+    capsys,
+    tmp_path,
+    monkeypatch,
+):
+    from curiator import auth, cli
+
+    _write_phase0_local_auth_config(collection)
+    _ignore_local_users_file(collection)
+    auth.save_users_file(
+        str(collection / ".curiator-users.json"),
+        {"admin@example.com": {"name": "Admin", "groups": ["admin"], "password_hash": "test-hash"}},
+    )
+    calls = []
+
+    def fake_smoke_results(cfg, app=None, jobs=1, *, http=False, browser=False, browser_bin=None):
+        calls.append({
+            "gallery": cfg["gallery_path"],
+            "http": http,
+            "browser": browser,
+            "browser_bin": browser_bin,
+        })
+        return [{
+            "app": "sample",
+            "smoke": "python -m py_compile apps/sample.py",
+            "ok": True,
+            "message": "ok",
+            "browser_smoke": {
+                "ok": True,
+                "url": "http://127.0.0.1:8399/?app=sample",
+                "message": "Sample app rendered",
+            },
+        }]
+
+    monkeypatch.setattr(cli, "_smoke_results", fake_smoke_results)
+    restore_root = collection.parent / f"{tmp_path.name}-browser-restores"
+
+    assert cli.main([
+        "playground-backup-smoke",
+        "--browser-smoke",
+        "--browser-bin",
+        "/usr/bin/brave",
+        "--keep-restore",
+        "--restore-root",
+        str(restore_root),
+        "--json",
+    ]) == 0
+    payload = json.loads(capsys.readouterr().out)
+    restore_path = Path(payload["restore"]["path"])
+
+    assert payload["ok"] is True
+    assert payload["checks"] == {
+        "smoke": True,
+        "http_smoke": False,
+        "browser_smoke": True,
+        "strict": False,
+    }
+    assert payload["preflight"]["checks"] == {"smoke": True, "http_smoke": False, "browser_smoke": True}
+    assert calls == [{
+        "gallery": str(restore_path / "gallery.yaml"),
+        "http": False,
+        "browser": True,
+        "browser_bin": "/usr/bin/brave",
+    }]
+    assert payload["preflight"]["smoke"]["results"][0]["browser_smoke"]["message"] == "Sample app rendered"
 
 
 def test_playground_backup_smoke_cleans_restore_by_default(collection, capsys, tmp_path):

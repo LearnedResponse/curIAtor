@@ -291,6 +291,9 @@ def main(argv=None) -> int:
     rp.add_argument("--no-smoke", action="store_true", help="skip per-app smoke checks")
     rp.add_argument("--http-smoke", "--http", action="store_true", dest="http_smoke",
                     help="also start proxy apps briefly and verify configured HTTP smoke paths")
+    rp.add_argument("--browser-smoke", action="store_true", dest="browser_smoke",
+                    help="also open apps through the shell in headless Brave during smoke checks")
+    rp.add_argument("--browser-bin", help="Brave/Chromium executable for --browser-smoke")
     rp.add_argument("--strict", action="store_true", help="fail when doctor warnings are present")
     rp.add_argument("--require-public-remotes", action="store_true",
                     help="also require each gallery's origin remote to match its expected public GitHub repo")
@@ -311,6 +314,9 @@ def main(argv=None) -> int:
     pp.add_argument("--no-smoke", action="store_true", help="skip per-app smoke checks")
     pp.add_argument("--http-smoke", "--http", action="store_true", dest="http_smoke",
                     help="also start proxy apps briefly and verify configured HTTP smoke paths")
+    pp.add_argument("--browser-smoke", action="store_true", dest="browser_smoke",
+                    help="also open apps through the shell in headless Brave during smoke checks")
+    pp.add_argument("--browser-bin", help="Brave/Chromium executable for --browser-smoke")
     pp.add_argument("--strict", action="store_true", help="fail when posture or doctor warnings are present")
     pp.add_argument("--output", help="write the JSON preflight payload to a file")
     pp.add_argument("--json", action="store_true", help="emit machine-readable diagnostics")
@@ -321,6 +327,9 @@ def main(argv=None) -> int:
     pb.add_argument("--no-smoke", action="store_true", help="skip per-app smoke checks on the restored copy")
     pb.add_argument("--http-smoke", "--http", action="store_true", dest="http_smoke",
                     help="also start proxy apps briefly and verify configured HTTP smoke paths")
+    pb.add_argument("--browser-smoke", action="store_true", dest="browser_smoke",
+                    help="also open apps through the shell in headless Brave during smoke checks")
+    pb.add_argument("--browser-bin", help="Brave/Chromium executable for --browser-smoke")
     pb.add_argument("--strict", action="store_true", help="fail when restored posture or doctor warnings are present")
     pb.add_argument("--output", help="write the JSON restore/preflight payload to a file")
     pb.add_argument("--json", action="store_true", help="emit machine-readable diagnostics")

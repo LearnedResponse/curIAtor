@@ -459,8 +459,61 @@ def test_release_preflight_can_run_http_smoke(tmp_path, monkeypatch, capsys):
 
     assert payload["checks"]["smoke"] is True
     assert payload["checks"]["http_smoke"] is True
+    assert payload["checks"]["browser_smoke"] is False
     assert calls == [{"gallery": str(tmp_path / "galleries" / "curiator-demo" / "gallery.yaml"), "http": True}]
     assert payload["galleries"][0]["smoke"]["results"][0]["http_smoke"]["url"].endswith("/healthz")
+
+
+def test_release_preflight_can_run_browser_smoke(tmp_path, monkeypatch, capsys):
+    from curiator import cli
+
+    _make_gallery(tmp_path)
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("CURIATOR_GALLERY", raising=False)
+    calls = []
+
+    def fake_smoke_results(cfg, app=None, jobs=1, *, http=False, browser=False, browser_bin=None):
+        calls.append({
+            "gallery": cfg["gallery_path"],
+            "http": http,
+            "browser": browser,
+            "browser_bin": browser_bin,
+        })
+        return [{
+            "app": "sample",
+            "smoke": "python -m py_compile apps/sample.py",
+            "ok": True,
+            "message": "ok",
+            "browser_smoke": {
+                "ok": True,
+                "url": "http://127.0.0.1:8399/?app=sample",
+                "message": "Sample app rendered",
+            },
+        }]
+
+    monkeypatch.setattr(cli, "_smoke_results", fake_smoke_results)
+
+    assert cli.main([
+        "release-preflight",
+        "--gallery",
+        "curiator-demo",
+        "--browser-smoke",
+        "--browser-bin",
+        "/usr/bin/brave",
+        "--json",
+    ]) == 0
+    payload = json.loads(capsys.readouterr().out)
+
+    assert payload["checks"]["smoke"] is True
+    assert payload["checks"]["http_smoke"] is False
+    assert payload["checks"]["browser_smoke"] is True
+    assert calls == [{
+        "gallery": str(tmp_path / "galleries" / "curiator-demo" / "gallery.yaml"),
+        "http": False,
+        "browser": True,
+        "browser_bin": "/usr/bin/brave",
+    }]
+    assert payload["galleries"][0]["smoke"]["results"][0]["browser_smoke"]["message"] == "Sample app rendered"
 
 
 def test_release_preflight_rejects_http_smoke_without_smoke(tmp_path, monkeypatch, capsys):
@@ -473,6 +526,18 @@ def test_release_preflight_rejects_http_smoke_without_smoke(tmp_path, monkeypatc
     assert cli.main(["release-preflight", "--gallery", "curiator-demo", "--no-smoke", "--http-smoke"]) == 2
     out = capsys.readouterr().out
     assert "--http-smoke requires smoke checks" in out
+
+
+def test_release_preflight_rejects_browser_smoke_without_smoke(tmp_path, monkeypatch, capsys):
+    from curiator import cli
+
+    _make_gallery(tmp_path)
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("CURIATOR_GALLERY", raising=False)
+
+    assert cli.main(["release-preflight", "--gallery", "curiator-demo", "--no-smoke", "--browser-smoke"]) == 2
+    out = capsys.readouterr().out
+    assert "--browser-smoke requires smoke checks" in out
 
 
 def test_release_preflight_strict_fails_doctor_warnings(tmp_path, monkeypatch, capsys):

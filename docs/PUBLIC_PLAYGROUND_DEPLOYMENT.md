@@ -29,8 +29,9 @@ curiator smoke
 curiator playground-preflight
 curiator playground-preflight --strict
 curiator playground-preflight --http-smoke
+curiator playground-preflight --browser-smoke
 curiator playground-preflight --strict --json --output release-evidence/playground-preflight.json
-curiator playground-backup-smoke --strict --json --output release-evidence/playground-backup-smoke.json
+curiator playground-backup-smoke --browser-smoke --strict --json --output release-evidence/playground-backup-smoke.json
 ```
 
 For release collections from the runner checkout:
@@ -46,8 +47,10 @@ count. It does not replace a real hosted pilot or backup-restore test. Use `--st
 final pre-pilot check; it keeps warnings visible as warnings but makes any posture or doctor warning
 fail the command. Use `--http-smoke` when app dependencies are installed in the mounted collection and
 you want the gate to start proxy apps briefly and poll their configured HTTP smoke paths or default app
-URLs. Use `--output` to write the full JSON posture report under gitignored `release-evidence/` for
-pre-pilot review notes.
+URLs. Use `--browser-smoke` when a local Brave/Chromium binary is available and you want the gate to
+open each app through the shell itself, catching same-origin iframe render failures and mount/proxy
+diagnostics. Use `--output` to write the full JSON posture report under gitignored `release-evidence/`
+for pre-pilot review notes.
 
 `curiator playground-backup-smoke` makes the backup-restore check executable: it checkpoints any
 existing SQLite feedback ledger, copies the mounted collection to a temporary restore directory, and

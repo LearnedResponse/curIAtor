@@ -382,6 +382,8 @@ def _release_preflight_one(
     *,
     run_smoke: bool,
     http_smoke: bool,
+    browser_smoke: bool = False,
+    browser_bin: str | None = None,
     allow_dirty: bool,
     needles: tuple[str, ...],
     strict: bool,
@@ -421,7 +423,12 @@ def _release_preflight_one(
             "issues": issues,
         }
         if run_smoke:
-            smoke = cli_mod._smoke_results(cfg, http=http_smoke)
+            smoke_kwargs = {"http": http_smoke}
+            if browser_smoke:
+                smoke_kwargs["browser"] = True
+            if browser_bin:
+                smoke_kwargs["browser_bin"] = browser_bin
+            smoke = cli_mod._smoke_results(cfg, **smoke_kwargs)
             result["smoke"] = {"ok": all(r["ok"] for r in smoke), "results": smoke}
     except Exception as exc:  # noqa: BLE001
         result["error"] = f"{type(exc).__name__}: {exc}"
@@ -512,6 +519,8 @@ def _release_preflight_payload_for_root(args) -> dict:
             (root / name / "gallery.yaml").resolve(),
             run_smoke=not args.no_smoke,
             http_smoke=args.http_smoke,
+            browser_smoke=getattr(args, "browser_smoke", False),
+            browser_bin=getattr(args, "browser_bin", None),
             allow_dirty=args.allow_dirty,
             needles=needles,
             strict=args.strict,
@@ -540,6 +549,7 @@ def _release_preflight_payload_for_root(args) -> dict:
         "checks": {
             "smoke": not args.no_smoke,
             "http_smoke": bool(args.http_smoke),
+            "browser_smoke": bool(getattr(args, "browser_smoke", False)),
             "allow_dirty": args.allow_dirty,
             "strict": args.strict,
             "path_needles": list(needles),
@@ -588,6 +598,8 @@ def _release_preflight_payload_for_clones(args, clone_base: Path) -> dict:
             clone_gallery.resolve(),
             run_smoke=not args.no_smoke,
             http_smoke=args.http_smoke,
+            browser_smoke=getattr(args, "browser_smoke", False),
+            browser_bin=getattr(args, "browser_bin", None),
             allow_dirty=False,
             needles=needles,
             strict=args.strict,
@@ -627,6 +639,7 @@ def _release_preflight_payload_for_clones(args, clone_base: Path) -> dict:
         "checks": {
             "smoke": not args.no_smoke,
             "http_smoke": bool(args.http_smoke),
+            "browser_smoke": bool(getattr(args, "browser_smoke", False)),
             "allow_dirty": args.allow_dirty,
             "strict": args.strict,
             "fresh_clone": True,
@@ -673,6 +686,9 @@ def _write_json_artifact(payload: dict, output: str) -> None:
 def cmd_release_preflight(args) -> int:
     if args.no_smoke and args.http_smoke:
         print("curiator: release-preflight --http-smoke requires smoke checks; remove --no-smoke")
+        return 2
+    if args.no_smoke and getattr(args, "browser_smoke", False):
+        print("curiator: release-preflight --browser-smoke requires smoke checks; remove --no-smoke")
         return 2
     payload = _release_preflight_payload(args)
     if args.output:
@@ -1026,7 +1042,12 @@ def _playground_preflight_payload_for_cfg(cfg: dict, args) -> dict:
     doctor_warnings = [i for i in doctor_issues if i.get("severity") == "warning"]
     smoke = {"ok": None, "results": []}
     if not args.no_smoke:
-        results = cli_mod._smoke_results(cfg, http=args.http_smoke)
+        smoke_kwargs = {"http": args.http_smoke}
+        if getattr(args, "browser_smoke", False):
+            smoke_kwargs["browser"] = True
+        if getattr(args, "browser_bin", None):
+            smoke_kwargs["browser_bin"] = args.browser_bin
+        results = cli_mod._smoke_results(cfg, **smoke_kwargs)
         smoke = {"ok": all(r["ok"] for r in results), "results": results}
     held = [cli_mod._queue_row_payload(key, entry) for key, entry in cli_mod._queue_entries(cfg)]
     errors = [i for i in issues if i.get("severity") == "error"]
@@ -1052,6 +1073,7 @@ def _playground_preflight_payload_for_cfg(cfg: dict, args) -> dict:
         "checks": {
             "smoke": not args.no_smoke,
             "http_smoke": bool(args.http_smoke),
+            "browser_smoke": bool(getattr(args, "browser_smoke", False)),
         },
         "gallery": cfg.get("gallery_path"),
         "auth": auth_payload,
@@ -1084,6 +1106,9 @@ def cmd_playground_preflight(args) -> int:
     """Check one collection's hosted public-playground posture before an invite-only pilot."""
     if args.no_smoke and args.http_smoke:
         print("curiator: playground-preflight --http-smoke requires smoke checks; remove --no-smoke")
+        return 2
+    if args.no_smoke and getattr(args, "browser_smoke", False):
+        print("curiator: playground-preflight --browser-smoke requires smoke checks; remove --no-smoke")
         return 2
     payload = _playground_preflight_payload(args)
     if args.output:
@@ -1202,6 +1227,7 @@ def _playground_backup_smoke_payload(args) -> dict:
         "checks": {
             "smoke": not args.no_smoke,
             "http_smoke": bool(args.http_smoke),
+            "browser_smoke": bool(getattr(args, "browser_smoke", False)),
             "strict": bool(args.strict),
         },
         "preflight": preflight,
@@ -1212,6 +1238,9 @@ def cmd_playground_backup_smoke(args) -> int:
     """Copy the mounted collection to a restore directory and preflight the restored copy."""
     if args.no_smoke and args.http_smoke:
         print("curiator: playground-backup-smoke --http-smoke requires smoke checks; remove --no-smoke")
+        return 2
+    if args.no_smoke and getattr(args, "browser_smoke", False):
+        print("curiator: playground-backup-smoke --browser-smoke requires smoke checks; remove --no-smoke")
         return 2
     payload = _playground_backup_smoke_payload(args)
     if args.output:
