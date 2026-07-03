@@ -21,7 +21,7 @@ leave feedback → watch the fix land and the ⚙ reply arrive. Every item below
    a tag-vs-`pyproject.toml` version guard; `make release-check` now runs the local gate (lint, tests,
    strict public-gallery fresh-clone preflight, `docs/demo.gif` presence validation, package build, and `twine check`). The
    human release checklist now lives in [`docs/RELEASE.md`](../RELEASE.md). Local gate evidence from
-   July 2, 2026: `make release-check` passed with 284 tests, public-gallery
+   July 2, 2026 at runner `c5a3c02`: `make release-check` passed with 290 tests, public-gallery
    fresh-clone preflight `3/3` with zero publish-artifact hits, validated the browser-captured
    `docs/demo.gif`, built sdist/wheel, and `twine check` passed both artifacts. The final local launch
    gate, `make release-launch-check`, also passed: strict release docs were clean and required plus
