@@ -88,6 +88,8 @@ def _build_all_apps() -> list[dict]:
                     APP_SOURCE_DIRS.append(syspath)
             if root not in APP_SOURCE_DIRS:
                 APP_SOURCE_DIRS.append(root)
+            if COLLECTION_ROOT not in APP_SOURCE_DIRS:
+                APP_SOURCE_DIRS.append(COLLECTION_ROOT)
             port = mount.get("port", a.get("port", _DEFAULT_PORT_BASE + ordinal))
             title = mount.get("title", a.get("title", name.replace("_", " ")))
             tags = list(mount.get("tags", a.get("tags") or []))

@@ -58,7 +58,7 @@ sys.path.insert(0, str(HERE))
 PORT = 8200  # default; overridden by gallery.yaml shell.port just below (after the registry import)
 
 from curiator.annotations import clean_annotations  # noqa: E402
-from curiator.narrative import build_narrative, narrative_rows  # noqa: E402
+from curiator.narrative import build_narrative, display_narrative_rows  # noqa: E402
 from curiator.transcripts import clean_transcript_segments  # noqa: E402
 import registry as REG  # gallery.yaml-backed registry
 from curiator import auth, ledger  # identity/provenance + shared SQLite feedback ledger
@@ -407,7 +407,7 @@ GENERAL_KEY = "__general__"
 
 def _general_record() -> dict:
     return {"key": GENERAL_KEY, "port": None, "title": "General — the gallery & runner",
-            "tags": ["meta"], "kind": "general"}
+            "tags": [], "kind": "general"}
 
 
 def refresh_registry(*, reload_module: bool = True) -> int:
@@ -458,25 +458,6 @@ def _annotation_label(mark: dict, idx: int) -> str:
     return str(idx + 1)
 
 
-def _annotation_target_text(mark: dict) -> str:
-    if mark.get("tool") == "redact":
-        return "target omitted"
-    target = mark.get("target") or {}
-    if not isinstance(target, dict):
-        return ""
-    if target.get("selector"):
-        return str(target["selector"])
-    if target.get("data_testid"):
-        return f'[data-testid="{target["data_testid"]}"]'
-    if target.get("id"):
-        return f'#{target["id"]}'
-    if target.get("role"):
-        return f'[role="{target["role"]}"]'
-    if target.get("tag"):
-        return str(target["tag"])
-    return ""
-
-
 def _annotation_marks(entry: dict) -> list[dict]:
     marks = entry.get("annotations")
     return [mark for mark in marks if isinstance(mark, dict)] if isinstance(marks, list) else []
@@ -490,19 +471,15 @@ def _annotation_summary_html(entry: dict) -> str:
     for idx, mark in enumerate(marks):
         label = _annotation_label(mark, idx)
         note = mark.get("note")
-        target = _annotation_target_text(mark)
         text = _esc(str(mark.get("tool") or "mark"))
         if note:
             text += f" — {_esc(str(note))}"
-        target_html = (f"<code style='display:block;margin-top:2px;color:#555;background:#f7f7f7;"
-                       f"border-radius:3px;padding:2px 4px;white-space:normal'>{_esc(target)}</code>"
-                       if target else "")
         rows.append(
             "<div style='display:grid;grid-template-columns:28px minmax(0,1fr);gap:6px;"
             "align-items:start;margin-top:4px'>"
             f"<span style='display:inline-flex;align-items:center;justify-content:center;min-height:20px;"
             f"border:1px solid #ddd;border-radius:4px;background:#f7f7f7;font-weight:700'>{_esc(label)}</span>"
-            f"<span style='min-width:0;overflow-wrap:anywhere'>{text}{target_html}</span></div>"
+            f"<span style='min-width:0;overflow-wrap:anywhere'>{text}</span></div>"
         )
     return ("<div style='margin-top:6px;padding:6px 7px;border:1px solid #e5e5e5;border-radius:4px;"
             "background:#fff;color:#444;font-size:11px'>"
@@ -516,14 +493,9 @@ def _annotation_summary_dash(entry: dict):
         return None
     rows = []
     for idx, mark in enumerate(marks):
-        target = _annotation_target_text(mark)
         body = [html.Span(str(mark.get("tool") or "mark"))]
         if mark.get("note"):
             body.append(html.Span(f" — {mark['note']}"))
-        if target:
-            body.append(html.Code(target, style={"display": "block", "marginTop": "2px", "color": "#555",
-                                                "background": "#f7f7f7", "borderRadius": "3px",
-                                                "padding": "2px 4px", "whiteSpace": "normal"}))
         rows.append(html.Div([
             html.Span(_annotation_label(mark, idx),
                       style={"display": "inline-flex", "alignItems": "center", "justifyContent": "center",
@@ -586,20 +558,18 @@ def _voice_segments(entry: dict) -> list[dict]:
 
 def _voice_summary_rows(entry: dict):
     segments = _voice_segments(entry)
-    narrative = narrative_rows(entry)
+    narrative = display_narrative_rows(entry)
     if narrative:
         rows = []
         for row in narrative[:8]:
-            target = _annotation_target_text({"tool": row.get("tool"), "target": row.get("target")})
-            note = f" — {row['note']}" if row.get("note") else ""
             rows.append({
                 "kind": "narrative",
                 "key": row.get("mark_index"),
                 "time": _time_range_label(row.get("start_ms"), row.get("end_ms")),
-                "lead": f"{row.get('label') or 'mark'} · {row.get('tool') or 'mark'}{note}",
-                "target": target,
-                "text": row.get("text") or "no overlapping transcript",
-                "muted": not bool(row.get("text")),
+                "lead": f"{row.get('label') or 'mark'} · {row.get('tool') or 'mark'}",
+                "note": row.get("note") or "",
+                "text": row.get("text") or "",
+                "muted": False,
             })
         return "Narrated feedback", rows, max(0, len(narrative) - len(rows))
     if segments:
@@ -624,13 +594,12 @@ def _voice_summary_html(entry: dict) -> str:
                    "style='display:block;width:100%;margin-bottom:5px'></audio>")
     for row in rows:
         text_style = "color:#777;font-style:italic" if row.get("muted") else "color:#243746"
-        target = row.get("target")
-        target_html = (f"<code style='display:block;margin-top:2px;color:#555;background:#f7f7f7;"
-                       f"border-radius:3px;padding:2px 4px;white-space:normal'>{_esc(target)}</code>"
-                       if target else "")
         lead = f"<b>{_esc(row['lead'])}</b>" if row.get("lead") else ""
-        copy = (f"{lead}{target_html}<span style='display:block;margin-top:1px;{text_style}'>"
-                f"{_esc(row.get('text') or '')}</span>")
+        note = (f"<span style='display:block;margin-top:1px;color:#526371'>"
+                f"{_esc(row.get('note') or '')}</span>" if row.get("note") else "")
+        text = (f"<span style='display:block;margin-top:1px;{text_style}'>"
+                f"{_esc(row.get('text') or '')}</span>" if row.get("text") else "")
+        copy = f"{lead}{note}{text}"
         out.append(
             "<div style='display:grid;grid-template-columns:54px minmax(0,1fr);gap:6px;"
             "align-items:start;margin-top:4px'>"
@@ -657,13 +626,13 @@ def _voice_summary_dash(entry: dict):
         body = []
         if row.get("lead"):
             body.append(html.B(row["lead"]))
-        if row.get("target"):
-            body.append(html.Code(row["target"], style={"display": "block", "marginTop": "2px", "color": "#555",
-                                                       "background": "#f7f7f7", "borderRadius": "3px",
-                                                       "padding": "2px 4px", "whiteSpace": "normal"}))
-        body.append(html.Span(row.get("text") or "", style={"display": "block", "marginTop": "1px",
-                                                            "color": "#777" if row.get("muted") else "#243746",
-                                                            "fontStyle": "italic" if row.get("muted") else "normal"}))
+        if row.get("note"):
+            body.append(html.Span(row["note"], style={"display": "block", "marginTop": "1px",
+                                                      "color": "#526371"}))
+        if row.get("text"):
+            body.append(html.Span(row["text"], style={"display": "block", "marginTop": "1px",
+                                                      "color": "#777" if row.get("muted") else "#243746",
+                                                      "fontStyle": "italic" if row.get("muted") else "normal"}))
         children.append(html.Div([
             html.Span(row.get("time") or "", style={"color": "#597083", "fontWeight": 700,
                                                     "whiteSpace": "nowrap"}),

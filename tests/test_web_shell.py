@@ -46,6 +46,7 @@ def test_react_shell_index_and_bootstrap(web_client):
     data = web_client.get("/api/bootstrap").get_json()
     assert data["general_key"] == "__general__"
     assert data["general"]["key"] == "__general__"
+    assert data["general"]["tags"] == []
     assert data["auth"]["is_admin"] is True
     assert data["voice"]["local_transcribe"] is False
     assert data["voice"]["web_speech"] is False
@@ -68,6 +69,31 @@ def test_react_shell_pins_general_and_restores_auth_menu(web_client):
     assert "Queue" in body and "Settings" in body and "Profile" in body and "Log in" in body
     assert '.filter((a) => a.kind !== "general")' in body
     assert "rshell-general-row" in body
+
+
+def test_react_shell_has_new_app_wizard(web_client):
+    js = web_client.get("/assets/react_shell.js").get_data(as_text=True)
+    css = web_client.get("/assets/react_shell.css").get_data(as_text=True)
+    general = web_client.get("/general").get_data(as_text=True)
+    assert "function NewAppWizard" in js
+    assert "/api/new-app" in js
+    assert "openNewAppWizard" in js
+    assert "React + Rust" in js
+    assert "GitHub repo" in js
+    assert "Pyodide / WASM" in js
+    assert "Other (will try to accommodate)" in js
+    assert "repo_url: repoUrl" in js
+    assert "dockerize," in js
+    assert "Dockerize" in js
+    assert "rshell-general-title-row" in js
+    assert "rshell-new-app-inline" in js
+    assert ".rshell-new-app-modal" in css
+    assert ".rshell-new-app-prompt" in css
+    assert ".rshell-checkbox-field" in css
+    assert ".rshell-button.secondary.rshell-new-app-inline" in css
+    assert "background: #8e44ad" in css
+    assert "openNewAppWizard" not in general
+    assert "+ New app" not in general
 
 
 def test_react_shell_side_rails_are_collapsible(web_client):
@@ -106,7 +132,7 @@ def test_react_shell_has_burned_screenshot_annotations(web_client):
     assert "Native capture unavailable in this browser." in js
     assert "Browser screen capture" in js
     assert "function selectorFor" in js
-    assert "function annotationTarget" in js
+    assert "function annotationTarget" not in js
     assert 'mark.tool === "redact" || !doc || !doc.elementFromPoint' in js
     assert "return withDomTarget(mark, annotationDoc())" in js
     assert 'if (shotSource !== "capture") return mark;' in js
@@ -175,6 +201,7 @@ def test_react_shell_has_burned_screenshot_annotations(web_client):
     assert ".rshell-voice-summary" in css
     assert ".rshell-voice-row" in css
     assert ".rshell-voice-time" in css
+    assert ".rshell-voice-note" in css
     assert ".rshell-annotation-preview-btn" in css
     assert ".rshell-modal-backdrop" in css
     assert ".rshell-modal-actions" in css
@@ -188,7 +215,7 @@ def test_react_shell_has_burned_screenshot_annotations(web_client):
     assert ".rshell-narrative-audio" in css
     assert ".rshell-narrative-step.active" in css
     assert ".rshell-annotation-replay-box.active" in css
-    assert ".rshell-annotation-target" in css
+    assert ".rshell-annotation-target" not in css
     assert "touch-action: none" in css
 
 
@@ -203,6 +230,8 @@ def test_react_shell_has_local_voice_transcription(web_client):
     assert 'fetch("/api/transcribe"' in js
     assert "function startBrowserSpeech" in js
     assert "function stopBrowserSpeech" in js
+    assert "displayNarrativeRows(buildNarrative(entry))" in js
+    assert "no overlapping transcript" not in js
     assert "SpeechRecognition" in js
     assert "webkitSpeechRecognition" in js
     assert "voice.local_transcribe" in js
@@ -217,6 +246,128 @@ def test_react_shell_has_local_voice_transcription(web_client):
     assert "clockStart: narrativeClockStart" in js
     assert "clockRef.current = clockStart || performance.now()" in js
     assert ".rshell-button.secondary.active" in css
+
+
+def test_react_shell_new_app_api_creates_general_collection_request(web_client):
+    from pathlib import Path
+
+    from curiator import ledger
+    from curiator.config import load_config
+    from curiator.loop.adapters import GENERAL_KEY, build_task, general_targets_collection
+
+    response = web_client.post("/api/new-app", json={
+        "app_type": "dash",
+        "title": "Orange tree picker",
+        "app_key": "orange_tree_picker",
+        "prompt": "Find oranges in orchard photos and report mask quality.",
+        "notes": "Use generated sample data first.",
+    })
+
+    assert response.status_code == 200
+    entry = response.get_json()["entry"]
+    assert entry["status"] == "new"
+    assert entry["app_request"]["kind"] == "new_app"
+    assert entry["app_request"]["app_key"] == "orange_tree_picker"
+    assert entry["app_request"]["template"] == "dash"
+    assert "Create a new curIAtor app." in entry["comment"]
+    assert "curiator app create" in entry["comment"]
+
+    cfg = load_config()
+    stored = ledger.load(cfg)[GENERAL_KEY][-1]
+    assert general_targets_collection(stored, cfg)
+    task = build_task(cfg, GENERAL_KEY, stored)
+    body = Path(task.task_file).read_text()
+    assert "## New app wizard request" in body
+    assert "curiator app create orange_tree_picker --template dash" in body
+    assert "Find oranges in orchard photos" in body
+
+
+def test_react_shell_new_app_api_supports_github_import(web_client):
+    from pathlib import Path
+
+    from curiator import ledger
+    from curiator.config import load_config
+    from curiator.loop.adapters import GENERAL_KEY, build_task, general_targets_collection
+
+    response = web_client.post("/api/new-app", json={
+        "app_type": "github_repo",
+        "title": "Lab viewer",
+        "repo_url": "https://github.com/example/lab-viewer.git",
+        "dockerize": True,
+        "prompt": "Host the existing app and preserve its local development workflow.",
+    })
+
+    assert response.status_code == 200
+    entry = response.get_json()["entry"]
+    request = entry["app_request"]
+    assert request["app_type"] == "github_repo"
+    assert request["repo_url"] == "https://github.com/example/lab-viewer.git"
+    assert request["dockerize"] is True
+    assert "curiator app import" in entry["comment"]
+    assert "Dockerize requested" in entry["comment"]
+
+    cfg = load_config()
+    stored = ledger.load(cfg)[GENERAL_KEY][-1]
+    assert general_targets_collection(stored, cfg)
+    task = build_task(cfg, GENERAL_KEY, stored)
+    body = Path(task.task_file).read_text()
+    assert "source repo: `https://github.com/example/lab-viewer.git`" in body
+    assert "curiator app import https://github.com/example/lab-viewer.git lab_viewer --template react" in body
+    assert "--tags imported,docker" in body
+    assert "Docker requested" in body
+
+
+def test_react_shell_new_app_api_supports_pyodide_static(web_client):
+    from pathlib import Path
+
+    from curiator import ledger
+    from curiator.config import load_config
+    from curiator.loop.adapters import GENERAL_KEY, build_task
+
+    response = web_client.post("/api/new-app", json={
+        "app_type": "pyodide_wasm",
+        "title": "Browser solver",
+        "prompt": "Run the solver entirely in the browser with Python packages loaded by Pyodide.",
+    })
+
+    assert response.status_code == 200
+    entry = response.get_json()["entry"]
+    assert entry["app_request"]["app_type"] == "pyodide_wasm"
+    assert entry["app_request"]["template"] == "static"
+    assert "Pyodide / WASM" in entry["comment"]
+    assert "offloads Python or compute-heavy work" in entry["comment"]
+
+    cfg = load_config()
+    stored = ledger.load(cfg)[GENERAL_KEY][-1]
+    body = Path(build_task(cfg, GENERAL_KEY, stored).task_file).read_text()
+    assert "curiator app create browser_solver --template static" in body
+    assert "--tags pyodide,static" in body
+    assert "keep compute browser-side with Pyodide/WASM" in body
+
+
+def test_react_shell_new_app_api_supports_other_type(web_client):
+    from pathlib import Path
+
+    from curiator import ledger
+    from curiator.config import load_config
+    from curiator.loop.adapters import GENERAL_KEY, build_task
+
+    response = web_client.post("/api/new-app", json={
+        "app_type": "other",
+        "title": "Unusual prototype",
+        "prompt": "Make whatever host best fits this odd simulator.",
+    })
+
+    assert response.status_code == 200
+    entry = response.get_json()["entry"]
+    assert entry["app_request"]["app_type"] == "other"
+    assert entry["app_request"]["template"] == "python"
+    assert "Other (will try to accommodate)" in entry["comment"]
+
+    cfg = load_config()
+    stored = ledger.load(cfg)[GENERAL_KEY][-1]
+    body = Path(build_task(cfg, GENERAL_KEY, stored).task_file).read_text()
+    assert "choose the closest supported template from the brief" in body
 
 
 def test_react_shell_can_expose_opt_in_browser_speech(collection, monkeypatch):
@@ -632,8 +783,6 @@ def test_react_shell_feedback_api_stores_sanitized_annotations(web_client):
     home = web_client.get("/general").get_data(as_text=True)
     assert "Annotations" in home
     assert "legend overlaps chart" in home
-    assert "#chart .legend" in home
-    assert "target omitted" in home
     assert "Narrated feedback" in home
     assert "move the legend" in home
 

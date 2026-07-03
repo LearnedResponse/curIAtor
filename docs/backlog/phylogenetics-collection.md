@@ -106,7 +106,7 @@ server, no re-implementation.
   `python -m http.server` on port 8751 returned HTTP 200 for `/`.
 - Static publishing checks: `.github/workflows/pages.yml` parses as YAML, the workflow's Python syntax
   check avoids writing `__pycache__` into the Pages artifact, and `.nojekyll` is included.
-- Dash app check: `python -m compileall -q apps/tinnik_dash_explorer` passed.
+- Dash app check: `python -m compileall -q apps/dash_suite` passed.
 - `galleries/curiator-phylogenetics` is initialized as its own git repo with seed commit `713b39e`;
   the current head is `0095229`.
 

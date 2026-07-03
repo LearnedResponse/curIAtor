@@ -39,7 +39,7 @@ feedback" is a pitch the OT crowd feels in their bones.
    the alarm-logic glue; Grafana replaced by the curiator-maintained HMI) for full OT authenticity once
    the story is proven — the demo narrative is byte-identical either way, so infrastructure never gates
    the release.
-4. **The HMI** (`apps/overview.py`, Dash, reading from the historian) — **deliberately the "rainbow"
+4. **The HMI** (`apps/dash_suite/overview.py`, Dash, reading from the historian) — **deliberately the "rainbow"
    anti-pattern**: saturated colors everywhere, a busy P&ID-ish mimic, gauges with no normal-band, no
    setpoint markers, an unprioritized alarm list, tiny status dots — done as the rough baseline.
 5. **Seeded operator feedback** (`seed/feedback.yaml`, authored as an operator/control-engineer) —

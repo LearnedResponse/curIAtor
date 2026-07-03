@@ -9,6 +9,7 @@ import shlex
 import subprocess
 from pathlib import Path
 
+from .agent_capabilities import agent_report
 from .app_cli import _app_names
 from .config import LINK_REL, app_spec, app_specs, load_config
 
@@ -538,20 +539,39 @@ def _doctor_issues(cfg: dict) -> list[dict]:
     return issues
 
 
+def _print_agent_report(report: dict) -> None:
+    print("Agent capabilities:")
+    for name, capability in report.get("capabilities", {}).items():
+        status = "available" if capability.get("available") else "missing"
+        print(f"  {name}: {status} — {capability.get('reason')}")
+    tools = report.get("tools") or {}
+    for name in ("browser", "playwright", "docker", "git", "gh", "sqlite"):
+        tool = tools.get(name) or {}
+        status = "available" if tool.get("available") else "missing"
+        detail = tool.get("path") or tool.get("command") or ""
+        print(f"  tool.{name}: {status}{(' — ' + str(detail)) if detail else ''}")
+
+
 def cmd_doctor(args) -> int:
     cfg = load_config()
     issues = _doctor_issues(cfg)
     errors = [i for i in issues if i.get("severity") == "error"]
     warnings = [i for i in issues if i.get("severity") == "warning"]
+    agent = agent_report(cfg) if getattr(args, "agent", False) else None
     if args.json:
-        print(json.dumps({"ok": not errors, "errors": len(errors), "warnings": len(warnings), "issues": issues}, indent=2))
+        payload = {"ok": not errors, "errors": len(errors), "warnings": len(warnings), "issues": issues}
+        if agent is not None:
+            payload["agent"] = agent
+        print(json.dumps(payload, indent=2))
         return 1 if errors else 0
     if not issues:
         print("curiator: doctor OK — no portability/config issues found.")
-        return 0
-    print(f"curiator: doctor found {len(errors)} error(s), {len(warnings)} warning(s):")
-    for issue in issues:
-        print(f"  {issue['severity'].upper()} {issue['where']}: {issue['message']}")
+    else:
+        print(f"curiator: doctor found {len(errors)} error(s), {len(warnings)} warning(s):")
+        for issue in issues:
+            print(f"  {issue['severity'].upper()} {issue['where']}: {issue['message']}")
+    if agent is not None:
+        _print_agent_report(agent)
     return 1 if errors else 0
 
 
@@ -615,10 +635,16 @@ def _merge_browser_smoke_results(
     results: list[dict],
     *,
     browser_bin: str | None = None,
+    artifact_dir: str | None = None,
 ) -> list[dict]:
     from .browser_smoke import browser_smoke_apps
 
-    by_app = browser_smoke_apps(cfg, [str(r["app"]) for r in results], browser_bin=browser_bin)
+    by_app = browser_smoke_apps(
+        cfg,
+        [str(r["app"]) for r in results],
+        browser_bin=browser_bin,
+        artifact_dir=artifact_dir,
+    )
     for result in results:
         browser = by_app.get(str(result["app"])) or {"ok": False, "message": "browser smoke result missing"}
         result["browser_smoke"] = browser
@@ -638,11 +664,17 @@ def _smoke_results(
     http: bool = False,
     browser: bool = False,
     browser_bin: str | None = None,
+    artifact_dir: str | None = None,
 ) -> list[dict]:
     specs = _smoke_work_specs(cfg, app)
     if jobs <= 1 or len(specs) <= 1:
         results = [_smoke_result_for_spec(cfg, spec, http=http) for spec in specs]
-        return _merge_browser_smoke_results(cfg, results, browser_bin=browser_bin) if browser else results
+        return _merge_browser_smoke_results(
+            cfg,
+            results,
+            browser_bin=browser_bin,
+            artifact_dir=artifact_dir,
+        ) if browser else results
 
     from concurrent.futures import ThreadPoolExecutor, as_completed
 
@@ -656,7 +688,12 @@ def _smoke_results(
             index = futures[future]
             results[index] = future.result()
     merged = [result for result in results if result is not None]
-    return _merge_browser_smoke_results(cfg, merged, browser_bin=browser_bin) if browser else merged
+    return _merge_browser_smoke_results(
+        cfg,
+        merged,
+        browser_bin=browser_bin,
+        artifact_dir=artifact_dir,
+    ) if browser else merged
 
 
 def cmd_smoke(args) -> int:
@@ -671,10 +708,16 @@ def cmd_smoke(args) -> int:
         http=args.http,
         browser=args.browser,
         browser_bin=args.browser_bin,
+        artifact_dir=args.artifact_dir,
     )
     ok = all(r["ok"] for r in results)
+    payload = {"ok": ok, "results": results}
+    if getattr(args, "output", None):
+        out = Path(args.output)
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_text(json.dumps(payload, indent=2), encoding="utf-8")
     if args.json:
-        print(json.dumps({"ok": ok, "results": results}, indent=2))
+        print(json.dumps(payload, indent=2))
         return 0 if ok else 1
     for r in results:
         status = "OK" if r["ok"] else "FAIL"

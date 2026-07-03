@@ -13,6 +13,25 @@ def test_doctor_ok_for_portable_collection(collection, capsys):
     assert "doctor OK" in out
 
 
+def test_doctor_agent_json_reports_capability_availability(collection, capsys, monkeypatch):
+    from curiator import agent_capabilities, cli
+
+    def fake_which(name):
+        return f"/usr/bin/{name}" if name in {"brave-browser", "docker", "git", "sqlite3"} else None
+
+    monkeypatch.delenv("CURIATOR_BROWSER", raising=False)
+    monkeypatch.setattr(agent_capabilities.shutil, "which", fake_which)
+
+    assert cli.main(["doctor", "--agent", "--json"]) == 0
+    payload = json.loads(capsys.readouterr().out)
+    agent = payload["agent"]
+    assert agent["capabilities"]["browser_smoke"]["available"] is True
+    assert agent["capabilities"]["docker_packaging"]["available"] is True
+    assert agent["tools"]["browser"]["command"] == "brave-browser"
+    assert agent["tools"]["git"]["available"] is True
+    assert agent["tools"]["sqlite"]["available"] is True
+
+
 def test_doctor_flags_absolute_paths_and_missing_sources(collection, capsys):
     from curiator import cli
 

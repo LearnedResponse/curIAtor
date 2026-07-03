@@ -356,10 +356,13 @@ Before moving or publishing a collection, run the portability preflight:
 
 ```bash
 curiator doctor                # errors on absolute/missing paths; warns on weak smoke/proxy/HMR/deps
+curiator doctor --agent        # also report browser/Docker/git/gh/sqlite availability for agent tasks
 curiator doctor --json
 curiator smoke                 # runs each app's configured smoke command or cheap inferred fallback
 curiator smoke --http          # also starts proxy apps briefly and verifies an HTTP response
 curiator smoke --app revenue --json
+curiator smoke --app revenue --browser --artifact-dir feedback/replies/<id>-browser-smoke \
+  --output feedback/replies/<id>-browser-smoke/result.json --json
 curiator smoke --jobs 4 --json # run independent app checks concurrently, preserving report order
 curiator release-preflight     # nested public galleries + publish-unsafe artifacts/local deps
 curiator release-preflight --fresh-clone
@@ -401,6 +404,8 @@ When you need shell-level confidence that the app actually renders inside the sa
 `curiator smoke --browser` or pass `--browser-bin <path>`; this starts or reuses the configured shell,
 opens each app through headless Brave, and fails if the iframe shows a mount/proxy diagnostic or no
 visible content. It is opt-in because it requires a local browser binary.
+For agent proof artifacts, add `--artifact-dir` and `--output`; the browser pass writes a screenshot,
+console log, and JSON result under the requested directory so the feedback thread has a visible receipt.
 The same browser pass is available in release and hosted-pilot gates as `--browser-smoke`; pass
 `--browser-bin <path>` when Brave is not on `PATH`.
 For publication gates, `curiator release-preflight --http-smoke` applies the same HTTP pass across the

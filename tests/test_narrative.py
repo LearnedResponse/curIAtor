@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from curiator.narrative import build_narrative, narrative_rows
+from curiator.narrative import build_narrative, display_narrative_rows, narrative_rows
 
 
 def test_build_narrative_pairs_timed_marks_with_overlapping_segments():
@@ -42,6 +42,22 @@ def test_build_narrative_keeps_timed_mark_without_matching_speech():
         "text": "",
         "segment_indexes": [],
     }]
+
+
+def test_display_narrative_rows_omits_empty_timed_marks():
+    rows = display_narrative_rows({
+        "annotations": [
+            {"tool": "box", "x1": 0.1, "y1": 0.1, "start_ms": 1000},
+            {"tool": "arrow", "x1": 0.2, "y1": 0.2, "start_ms": 1200, "note": "show this"},
+        ],
+        "transcript_segments": [
+            {"start_ms": 0, "end_ms": 500, "text": "earlier"},
+        ],
+    })
+
+    assert [row["label"] for row in rows] == ["mark 2"]
+    assert rows[0]["note"] == "show this"
+    assert rows[0]["text"] == ""
 
 
 def test_narrative_rows_prefers_persisted_rows_with_fallback_sanitizing():

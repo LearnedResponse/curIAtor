@@ -33,6 +33,34 @@ def test_app_bundle_paths_and_commands(cfg, collection):
     assert "SMOKE OK" in body                               # smoke-test recipe
 
 
+def test_app_bundle_includes_doctor_gated_browser_smoke_contract(cfg, monkeypatch):
+    from curiator import agent_capabilities
+
+    def fake_which(name):
+        return "/usr/bin/brave-browser" if name == "brave-browser" else None
+
+    monkeypatch.delenv("CURIATOR_BROWSER", raising=False)
+    monkeypatch.setattr(agent_capabilities.shutil, "which", fake_which)
+
+    body = Path(build_task(cfg, "sample", _entry()).task_file).read_text()
+    assert "## Browser-smoke capability" in body
+    assert "curiator smoke --app sample --browser" in body
+    assert "--artifact-dir feedback/replies/f1-browser-smoke" in body
+    assert "--output feedback/replies/f1-browser-smoke/result.json --json" in body
+    assert "feedback/replies/f1-browser-smoke/sample.png" in body
+    assert "what was not verified" in body
+
+
+def test_app_bundle_omits_browser_smoke_contract_when_browser_missing(cfg, monkeypatch):
+    from curiator import agent_capabilities
+
+    monkeypatch.delenv("CURIATOR_BROWSER", raising=False)
+    monkeypatch.setattr(agent_capabilities.shutil, "which", lambda _name: None)
+
+    body = Path(build_task(cfg, "sample", _entry()).task_file).read_text()
+    assert "## Browser-smoke capability" not in body
+
+
 def test_app_bundle_includes_screenshot_annotations(cfg):
     entry = _entry(
         screenshot="shots/sample_f1.png",
@@ -103,6 +131,25 @@ def test_app_bundle_includes_narrated_feedback_when_timings_overlap(cfg):
         "this legend is cramped"
     ) in body
     assert "(mark note: legend area)" in body
+
+
+def test_app_bundle_omits_empty_narrated_feedback_rows(cfg):
+    entry = _entry(
+        annotations=[
+            {"tool": "box", "x1": 0.1, "y1": 0.2, "x2": 0.3, "y2": 0.4,
+             "start_ms": 100, "end_ms": 500,
+             "target": {"selector": "#chart .legend"}},
+        ],
+        transcript_segments=[
+            {"start_ms": 700, "end_ms": 900, "text": "unrelated later comment"},
+        ],
+    )
+
+    body = Path(build_task(cfg, "sample", entry).task_file).read_text()
+    assert "## Screenshot annotations" in body
+    assert "## Voice transcript segments" in body
+    assert "## Narrated feedback" not in body
+    assert "no overlapping transcript" not in body
 
 
 def test_app_bundle_uses_persisted_narrative_rows(cfg):

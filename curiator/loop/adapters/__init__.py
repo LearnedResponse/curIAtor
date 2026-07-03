@@ -17,9 +17,10 @@ import shlex
 from dataclasses import dataclass
 from pathlib import Path
 
+from ...agent_capabilities import browser_smoke_contract
 from ... import ledger
 from ...config import app_spec as _app_spec   # the gallery.yaml schema logic lives in config.py
-from ...narrative import narrative_rows
+from ...narrative import display_narrative_rows
 from .. import runlog
 from . import headless_cc, codex, api as api_adapter, command as command_adapter
 
@@ -234,7 +235,7 @@ def _transcript_block(entry: dict) -> str:
 def _narrative_block(entry: dict) -> str:
     """Prompt-facing ordered tour that pairs timed marks with overlapping speech."""
     rows = []
-    for idx, row in enumerate(narrative_rows(entry), start=1):
+    for idx, row in enumerate(display_narrative_rows(entry), start=1):
         times = f"[start={row['start_ms']:.0f}ms, end={row['end_ms']:.0f}ms]"
         line = f"- {idx}. {row['label']}: `{row['tool']}` {times}"
         target = row.get("target") if isinstance(row.get("target"), dict) else {}
@@ -253,12 +254,14 @@ def _narrative_block(entry: dict) -> str:
             bits.append(f"role `{role}`")
         if bits:
             line += " -> " + "; ".join(bits)
-        if row.get("text"):
-            line += f": {row['text']}"
-        else:
-            line += ": (no overlapping transcript segment)"
-        if row.get("note"):
-            line += f" (mark note: {row['note']})"
+        text = row.get("text")
+        note = row.get("note")
+        if text:
+            line += f": {text}"
+        elif note:
+            line += f": mark note: {note}"
+        if text and note:
+            line += f" (mark note: {note})"
         rows.append(line)
     if not rows:
         return ""
@@ -353,6 +356,70 @@ def _reply_cmd(cfg: dict, key: str, eid: str, message: str, status: str) -> str:
     return f"{_curiator_cmd(cfg, 'reply', key, eid)} \"{message}\" --status {status}"
 
 
+def _app_request_block(cfg: dict, entry: dict) -> tuple[str, str | None]:
+    request = entry.get("app_request")
+    if not isinstance(request, dict) or request.get("kind") != "new_app":
+        return "", None
+    app_key = str(request.get("app_key") or "<app_key>")
+    title = str(request.get("title") or app_key)
+    template = str(request.get("template") or "dash")
+    app_type = str(request.get("app_type_label") or request.get("app_type") or template)
+    raw_app_type = str(request.get("app_type") or "")
+    prompt = str(request.get("prompt") or "").strip()
+    notes = str(request.get("notes") or "").strip()
+    repo_url = str(request.get("repo_url") or "").strip()
+    guidance = str(request.get("guidance") or "").strip()
+    dockerize = bool(request.get("dockerize"))
+    if repo_url:
+        tag_parts = ["imported"]
+    elif raw_app_type == "pyodide_wasm":
+        tag_parts = ["pyodide", "static"]
+    else:
+        tag_parts = [template]
+    if dockerize and "docker" not in tag_parts:
+        tag_parts.append("docker")
+    tags = ",".join(tag_parts)
+    lines = [
+        "## New app wizard request",
+        f"- suggested app key: `{app_key}`",
+        f"- title: {title!r}",
+        f"- app type: {app_type}",
+        f"- scaffold/register template: `{template}`",
+    ]
+    if guidance:
+        lines.append(f"- guidance: {guidance}")
+    if dockerize:
+        lines.append(
+            "- packaging: Docker requested; add a Dockerfile and compose/run documentation when it helps, "
+            "especially if the app needs extra services or non-Python components."
+        )
+    if repo_url:
+        lines.append(f"- source repo: `{repo_url}`")
+        lines.append("- import mode: clone/copy the repo under `apps/` as a nested app repo/subrepo.")
+        ready = _curiator_cmd(
+            cfg, "app", "import", repo_url, app_key, "--template", template, "--title", title, "--tags", tags
+        )
+    else:
+        if raw_app_type == "pyodide_wasm":
+            lines.append(
+                "- runtime: keep compute browser-side with Pyodide/WASM; avoid adding a backend server "
+                "unless the brief explicitly requires one."
+            )
+        if raw_app_type == "other":
+            lines.append(
+                "- template choice: choose the closest supported template from the brief; "
+                f"`{template}` is only the fallback."
+            )
+        ready = _curiator_cmd(
+            cfg, "app", "create", app_key, "--template", template, "--title", title, "--tags", tags
+        )
+    if prompt:
+        lines += ["", "Brief:", prompt]
+    if notes:
+        lines += ["", "Notes:", notes]
+    return "\n".join(lines), ready
+
+
 def _runner_root(cfg: dict) -> str:
     """Where the runner (curiator) source lives, for checkout-mode patching: `runner.path` if set,
     else the package's own checkout root (works for an editable `pip install -e`)."""
@@ -384,6 +451,7 @@ def _collection_bundle(cfg: dict, entry: dict, eid: str, shot_path: str | None, 
     elevated = agent.get("elevated")
     approval_followup = bool(_GENERAL_APPROVAL_REPLY_RE.search(entry.get("comment") or "")
                              and _related_thread_entries(cfg, GENERAL_KEY, entry))
+    app_request, app_request_cmd = _app_request_block(cfg, entry)
     body = [
         "# curIAtor — General collection feedback",
         "",
@@ -405,14 +473,24 @@ def _collection_bundle(cfg: dict, entry: dict, eid: str, shot_path: str | None, 
         "  context now. Do not spend this run improving curIAtor routing/classification.",
         "- For new apps, start with `curiator app create <app_key> --template dash|static|python|node|flask|fastapi|rust|react|svelte|vue|next|streamlit|gradio` so",
         "  app directories, proxy commands, smoke hooks, and `gallery.yaml` stay consistent; then edit the generated files.",
+        "- For existing repos, start with `curiator app import <repo-or-url> <app_key> --template <template>` so",
+        "  the cloned source lands under `apps/` and is registered in `gallery.yaml` consistently.",
         "- Smoke-test changed or newly added apps before replying.",
         "",
         "## Ready-to-run (fill in the message text)",
-        f"- create an app scaffold: `{_curiator_cmd(cfg, 'app', 'create', '<app_key>', '--template', 'dash', '--title', '<title>', '--tags', 'dash')}`",
+        (f"- wizard app command: `{app_request_cmd}`" if app_request_cmd
+         else f"- create an app scaffold: `{_curiator_cmd(cfg, 'app', 'create', '<app_key>', '--template', 'dash', '--title', '<title>', '--tags', 'dash')}`"),
         "- quick smoke option: `python -m compileall -q apps`",
         f"- reply after a fix:  `{_reply_cmd(cfg, GENERAL_KEY, eid, '<what changed + why>', 'done')}`",
         f"- reply with a plan:  `{_reply_cmd(cfg, GENERAL_KEY, eid, '<plan + recommendation>', 'awaiting_approval')}`",
     ]
+    if app_request:
+        body.append(app_request)
+        app_key = (entry.get("app_request") or {}).get("app_key") if isinstance(entry.get("app_request"), dict) else None
+        if app_key:
+            browser_contract = browser_smoke_contract(cfg, str(app_key), eid)
+            if browser_contract:
+                body.append(browser_contract)
     annotations = _annotation_block(entry)
     if annotations:
         body.append(annotations)
@@ -558,6 +636,9 @@ def _app_bundle(cfg: dict, key: str, entry: dict, eid: str, shot_path: str | Non
     if context:
         body.append("\n" + context)
     body.append("\n" + _feedback_tooling(cfg, key))
+    browser_contract = browser_smoke_contract(cfg, key, eid)
+    if browser_contract:
+        body.append("\n" + browser_contract)
     body.append("\n## Ready-to-run (fill in the message text)")
     if smoke:
         body.append(f"- smoke-test the edit: `{smoke}`  (run from `{root_display}`)")

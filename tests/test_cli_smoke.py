@@ -155,8 +155,14 @@ def test_smoke_browser_opens_apps_through_shell(collection, capsys, monkeypatch)
 
     calls = []
 
-    def fake_browser_smoke_apps(cfg, apps, *, browser_bin=None, timeout=15.0):
-        calls.append({"gallery": cfg["gallery_path"], "apps": apps, "browser_bin": browser_bin, "timeout": timeout})
+    def fake_browser_smoke_apps(cfg, apps, *, browser_bin=None, timeout=15.0, artifact_dir=None):
+        calls.append({
+            "gallery": cfg["gallery_path"],
+            "apps": apps,
+            "browser_bin": browser_bin,
+            "timeout": timeout,
+            "artifact_dir": artifact_dir,
+        })
         return {
             app: {
                 "ok": True,
@@ -179,9 +185,49 @@ def test_smoke_browser_opens_apps_through_shell(collection, capsys, monkeypatch)
         "apps": ["sample"],
         "browser_bin": "/usr/bin/brave",
         "timeout": 15.0,
+        "artifact_dir": None,
     }]
     assert payload["results"][0]["browser_smoke"]["ok"] is True
     assert payload["results"][0]["browser_smoke"]["message"] == "Sample app rendered"
+
+
+def test_smoke_browser_writes_json_output_and_passes_artifact_dir(collection, capsys, monkeypatch):
+    from curiator import browser_smoke, cli
+
+    calls = []
+
+    def fake_browser_smoke_apps(cfg, apps, *, browser_bin=None, timeout=15.0, artifact_dir=None):
+        calls.append({"apps": apps, "artifact_dir": artifact_dir})
+        return {
+            "sample": {
+                "ok": True,
+                "url": "http://127.0.0.1:8399/?app=sample",
+                "message": "Sample app rendered",
+                "screenshot": "feedback/replies/f1-browser-smoke/sample.png",
+                "console_log": "feedback/replies/f1-browser-smoke/sample.console.json",
+                "console_errors": 0,
+            }
+        }
+
+    monkeypatch.setattr(browser_smoke, "browser_smoke_apps", fake_browser_smoke_apps)
+    output = collection / "feedback" / "replies" / "f1-browser-smoke" / "result.json"
+
+    assert cli.main([
+        "smoke",
+        "--app", "sample",
+        "--browser",
+        "--artifact-dir", "feedback/replies/f1-browser-smoke",
+        "--output", str(output),
+        "--json",
+    ]) == 0
+    payload = json.loads(capsys.readouterr().out)
+    written = json.loads(output.read_text())
+
+    assert calls == [{"apps": ["sample"], "artifact_dir": "feedback/replies/f1-browser-smoke"}]
+    assert payload == written
+    browser = payload["results"][0]["browser_smoke"]
+    assert browser["screenshot"] == "feedback/replies/f1-browser-smoke/sample.png"
+    assert browser["console_log"] == "feedback/replies/f1-browser-smoke/sample.console.json"
 
 
 def test_smoke_browser_failure_fails_app_result(collection, capsys, monkeypatch):
@@ -190,7 +236,7 @@ def test_smoke_browser_failure_fails_app_result(collection, capsys, monkeypatch)
     monkeypatch.setattr(
         browser_smoke,
         "browser_smoke_apps",
-        lambda cfg, apps, *, browser_bin=None, timeout=15.0: {
+        lambda cfg, apps, *, browser_bin=None, timeout=15.0, artifact_dir=None: {
             app: {"ok": False, "message": "app iframe rendered no visible content"}
             for app in apps
         },

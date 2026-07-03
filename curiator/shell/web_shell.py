@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 import shlex
 import subprocess
@@ -67,7 +68,7 @@ def _general_payload() -> dict:
     return {
         "key": core.GENERAL_KEY,
         "title": "General — gallery & runner",
-        "tags": ["meta"],
+        "tags": [],
         "color": "#8e44ad",
         "kind": "general",
         "metrics": _metrics(core.GENERAL_KEY),
@@ -234,6 +235,155 @@ def _transcribe_allowed() -> tuple[str | None, int]:
         if not auth.allow_anonymous_feedback(core.REG.AUTH_CFG):
             return "sign in required", 401
     return None, 0
+
+
+NEW_APP_TYPES = {
+    "dash": {
+        "label": "Dash",
+        "template": "dash",
+        "guidance": "Use for Python-first research dashboards and Plotly/Dash interaction loops.",
+    },
+    "react_node": {
+        "label": "React + Node",
+        "template": "react",
+        "guidance": "Use for component-heavy frontends or server-rendered JavaScript experiments.",
+    },
+    "rust": {
+        "label": "Rust server",
+        "template": "rust",
+        "guidance": "Use for small compiled HTTP services, algorithm demos, or backend-first prototypes.",
+    },
+    "react_rust": {
+        "label": "React + Rust",
+        "template": "react",
+        "guidance": "Start with a React app and add a Rust service/proxy only if the request needs one.",
+    },
+    "github_repo": {
+        "label": "GitHub repo",
+        "template": "react",
+        "guidance": "Import an existing repository with `curiator app import`, then adapt its host settings.",
+    },
+    "pyodide_wasm": {
+        "label": "Pyodide / WASM",
+        "template": "static",
+        "guidance": "Use a static app that offloads Python or compute-heavy work to Pyodide/WASM in the browser.",
+    },
+    "static": {
+        "label": "Static HTML",
+        "template": "static",
+        "guidance": "Use for lightweight single-file explainers with no runtime server.",
+    },
+    "other": {
+        "label": "Other (will try to accommodate)",
+        "template": "python",
+        "guidance": "Use the brief to choose the closest supported host; Python is only the fallback.",
+    },
+}
+
+
+def _clean_wizard_text(value, limit: int) -> str:
+    return str(value or "").replace("\r\n", "\n").replace("\r", "\n").strip()[:limit]
+
+
+def _wizard_bool(value) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        return value.strip().lower() in {"1", "true", "yes", "on"}
+    return bool(value)
+
+
+def _slug_app_key(value: str) -> str:
+    text = re.sub(r"[^a-zA-Z0-9]+", "_", value.lower()).strip("_")
+    text = re.sub(r"_+", "_", text)
+    if not text or not re.match(r"^[a-z]", text):
+        text = f"app_{text}" if text else "new_app"
+    return text[:60].strip("_") or "new_app"
+
+
+def _available_app_key(seed: str) -> str:
+    base = _slug_app_key(seed)
+    if base not in core.BY_KEY:
+        return base
+    for idx in range(2, 100):
+        key = f"{base}_{idx}"
+        if key not in core.BY_KEY:
+            return key
+    return f"{base}_{uuid.uuid4().hex[:4]}"
+
+
+def _new_app_request(body: dict) -> tuple[dict | None, str | None]:
+    if not isinstance(body, dict):
+        return None, "invalid request"
+    app_type = str(body.get("app_type") or "dash")
+    spec = NEW_APP_TYPES.get(app_type)
+    if not spec:
+        return None, "unknown app type"
+    title = _clean_wizard_text(body.get("title"), 120)
+    prompt = _clean_wizard_text(body.get("prompt"), 5000)
+    notes = _clean_wizard_text(body.get("notes"), 2000)
+    repo_url = _clean_wizard_text(body.get("repo_url"), 500)
+    raw_key = _clean_wizard_text(body.get("app_key"), 80)
+    dockerize = _wizard_bool(body.get("dockerize"))
+    if app_type == "github_repo" and not repo_url:
+        return None, "enter a GitHub repo URL"
+    if not prompt and app_type != "github_repo":
+        return None, "describe the app to create"
+    seed = raw_key or title or Path(repo_url.rstrip("/")).stem.replace(".git", "") or prompt.splitlines()[0][:80]
+    title = title or seed.replace("_", " ").replace("-", " ").strip().title() or spec["label"] + " app"
+    app_key = _available_app_key(seed)
+    request = {
+        "kind": "new_app",
+        "app_key": app_key,
+        "title": title,
+        "app_type": app_type,
+        "app_type_label": spec["label"],
+        "template": spec["template"],
+        "prompt": prompt,
+        "notes": notes,
+        "repo_url": repo_url,
+        "dockerize": dockerize,
+        "guidance": spec["guidance"],
+        "source": "new_app_wizard",
+    }
+    return request, None
+
+
+def _new_app_comment(request: dict) -> str:
+    lines = [
+        "Create a new curIAtor app.",
+        "",
+        "Wizard selections:",
+        f"- suggested app key: `{request['app_key']}`",
+        f"- title: {request['title']}",
+        f"- app type: {request['app_type_label']}",
+        f"- scaffold template: `{request['template']}`",
+        f"- guidance: {request['guidance']}",
+    ]
+    if request.get("repo_url"):
+        lines.append(f"- source repo: {request['repo_url']}")
+    if request.get("dockerize"):
+        lines.append("- packaging: Dockerize requested")
+    lines += [
+        "",
+        "App brief:",
+        request["prompt"] or "Import the source repo, inspect its stack, and host it as a curIAtor app.",
+    ]
+    if request.get("notes"):
+        lines += ["", "Implementation notes:", request["notes"]]
+    lines.append("")
+    if request.get("repo_url"):
+        lines.append(
+            "Please start with `curiator app import` so the repo is cloned under `apps/` as a nested "
+            "app repo/subrepo, proxy/smoke metadata is registered in `gallery.yaml`, and future edits "
+            "stay scoped to that imported app."
+        )
+    else:
+        lines.append(
+            "Please start with `curiator app create` so app directories, proxy commands, smoke hooks, "
+            "and `gallery.yaml` are created consistently; then customize the scaffold for this brief."
+        )
+    return "\n".join(lines)
 
 
 def _index() -> str:
@@ -464,6 +614,25 @@ def build_flask_app() -> Flask:
     @app.route("/api/feedback")
     def _all_feedback():
         return jsonify({key: _feedback_payload(key) for key in core.load_feedback()})
+
+    @app.route("/api/new-app", methods=["POST"])
+    def _new_app():
+        u, status, auth_error, code = _feedback_user_and_status("new-app")
+        if auth_error:
+            return jsonify({"error": auth_error}), code or 401
+        body = request.get_json(silent=True) or {}
+        app_request, error = _new_app_request(body)
+        if error:
+            return jsonify({"error": error}), 400
+        entry_id = ledger.save_entry(
+            core.LEDGER_CFG,
+            core.GENERAL_KEY,
+            comment=_new_app_comment(app_request),
+            user=u,
+            extra={"status": status, "app_request": app_request},
+        )
+        entry = next(e for e in core.load_feedback().get(core.GENERAL_KEY, []) if e.get("id") == entry_id)
+        return jsonify({"entry": _safe_entry(entry), **_feedback_payload(core.GENERAL_KEY)})
 
     @app.route("/api/transcribe", methods=["POST"])
     def _transcribe():

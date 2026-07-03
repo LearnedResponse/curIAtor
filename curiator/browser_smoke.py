@@ -16,10 +16,19 @@ import urllib.parse
 import urllib.request
 from pathlib import Path
 
+from .agent_capabilities import safe_artifact_label
 from .serve_cli import _child_env, _shell_path
 
 
 W, H = 1280, 720
+_BROWSER_CANDIDATES = (
+    "brave-browser",
+    "brave-browser-stable",
+    "chromium",
+    "chromium-browser",
+    "google-chrome",
+    "google-chrome-stable",
+)
 
 
 def _free_port() -> int:
@@ -71,6 +80,7 @@ class CdpClient:
         if b" 101 " not in response.split(b"\r\n", 1)[0]:
             raise RuntimeError(f"websocket handshake failed: {response[:200]!r}")
         self._next_id = 0
+        self.events: list[dict] = []
 
     def close(self) -> None:
         try:
@@ -88,6 +98,8 @@ class CdpClient:
                 if "error" in msg:
                     raise RuntimeError(f"CDP {method} failed: {msg['error']}")
                 return msg.get("result") or {}
+            if msg.get("method"):
+                self.events.append(msg)
 
     def wait_value(self, expression: str, timeout: float) -> dict:
         deadline = time.monotonic() + timeout
@@ -109,6 +121,36 @@ class CdpClient:
     def navigate_and_check(self, url: str, timeout: float) -> dict:
         self.command("Page.navigate", {"url": url})
         return self.wait_value(_BROWSER_CHECK_EXPR, timeout)
+
+    def capture_screenshot(self) -> bytes:
+        result = self.command("Page.captureScreenshot", {
+            "format": "png",
+            "captureBeyondViewport": False,
+        })
+        return base64.b64decode(result.get("data") or "")
+
+    def console_events(self) -> list[dict]:
+        rows: list[dict] = []
+        for event in self.events:
+            method = event.get("method")
+            params = event.get("params") if isinstance(event.get("params"), dict) else {}
+            if method == "Runtime.consoleAPICalled":
+                args = params.get("args") if isinstance(params.get("args"), list) else []
+                text = " ".join(
+                    str(arg.get("value") if "value" in arg else arg.get("description") or "")
+                    for arg in args
+                    if isinstance(arg, dict)
+                ).strip()
+                rows.append({"source": "console", "level": params.get("type"), "text": text})
+            elif method == "Log.entryAdded":
+                entry = params.get("entry") if isinstance(params.get("entry"), dict) else {}
+                rows.append({
+                    "source": entry.get("source") or "log",
+                    "level": entry.get("level"),
+                    "text": entry.get("text") or "",
+                    "url": entry.get("url"),
+                })
+        return rows
 
     def _send_json(self, payload: dict) -> None:
         data = json.dumps(payload, separators=(",", ":")).encode("utf-8")
@@ -249,6 +291,10 @@ def _cdp_client(debug_port: int, timeout: float) -> CdpClient:
     cdp = CdpClient(page["webSocketDebuggerUrl"])
     cdp.command("Page.enable")
     cdp.command("Runtime.enable")
+    try:
+        cdp.command("Log.enable")
+    except RuntimeError:
+        pass
     cdp.command("Emulation.setDeviceMetricsOverride", {
         "width": W,
         "height": H,
@@ -258,17 +304,67 @@ def _cdp_client(debug_port: int, timeout: float) -> CdpClient:
     return cdp
 
 
+def _artifact_path(cfg: dict, artifact_dir: str | Path, app: str, suffix: str) -> Path:
+    base = Path(artifact_dir)
+    if not base.is_absolute():
+        base = Path(cfg["repo_root"]) / base
+    return base / f"{safe_artifact_label(app)}{suffix}"
+
+
+def _repo_rel(cfg: dict, path: Path) -> str:
+    try:
+        return path.resolve().relative_to(Path(cfg["repo_root"]).resolve()).as_posix()
+    except ValueError:
+        return str(path.resolve())
+
+
+def _write_artifacts(cfg: dict, cdp: CdpClient, app: str, artifact_dir: str | Path | None) -> dict:
+    if not artifact_dir:
+        return {}
+    screenshot_path = _artifact_path(cfg, artifact_dir, app, ".png")
+    console_path = _artifact_path(cfg, artifact_dir, app, ".console.json")
+    screenshot_path.parent.mkdir(parents=True, exist_ok=True)
+    written: dict = {}
+    try:
+        png = cdp.capture_screenshot()
+        if png:
+            screenshot_path.write_bytes(png)
+            written["screenshot"] = _repo_rel(cfg, screenshot_path)
+    except Exception as exc:  # noqa: BLE001
+        written["screenshot_error"] = f"{type(exc).__name__}: {exc}"
+    try:
+        console_events = cdp.console_events()
+        console_path.write_text(json.dumps(console_events, indent=2), encoding="utf-8")
+        written["console_log"] = _repo_rel(cfg, console_path)
+        written["console_errors"] = sum(
+            1 for event in console_events if str(event.get("level") or "").lower() in {"error", "exception", "assert"}
+        )
+    except Exception as exc:  # noqa: BLE001
+        written["console_error"] = f"{type(exc).__name__}: {exc}"
+    return written
+
+
 def browser_smoke_apps(
     cfg: dict,
     apps: list[str],
     *,
     browser_bin: str | None = None,
     timeout: float = 15.0,
+    artifact_dir: str | Path | None = None,
 ) -> dict[str, dict]:
     """Open the React shell in a headless browser and verify each app iframe renders."""
-    brave_bin = browser_bin or os.environ.get("CURIATOR_BROWSER") or shutil.which("brave-browser") or shutil.which("brave-browser-stable")
+    brave_bin = browser_bin or os.environ.get("CURIATOR_BROWSER") or next(
+        (path for name in _BROWSER_CANDIDATES if (path := shutil.which(name))),
+        None,
+    )
     if not brave_bin:
-        return {app: {"ok": False, "message": "Brave is required for browser smoke; pass --browser-bin or set CURIATOR_BROWSER"} for app in apps}
+        return {
+            app: {
+                "ok": False,
+                "message": "Brave/Chromium is required for browser smoke; pass --browser-bin or set CURIATOR_BROWSER",
+            }
+            for app in apps
+        }
 
     shell = None
     browser = None
@@ -305,12 +401,14 @@ def browser_smoke_apps(
             for app in apps:
                 url = f"{base_url}/?app={urllib.parse.quote(app)}"
                 checked = cdp.navigate_and_check(url, timeout)
+                artifacts = _write_artifacts(cfg, cdp, app, artifact_dir)
                 results[app] = {
                     "ok": bool(checked.get("ok")),
                     "url": url,
                     "message": str(checked.get("message") or ""),
                     "browser": str(brave_bin),
                     "started_shell": shell is not None,
+                    **artifacts,
                 }
             return results
         except Exception as exc:  # noqa: BLE001

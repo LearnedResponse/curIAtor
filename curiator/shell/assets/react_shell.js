@@ -10,6 +10,16 @@
     rejected: "#555"
   };
   const DICTATION_HINT = "OS dictation can type feedback here.";
+  const NEW_APP_TYPES = [
+    ["dash", "Dash"],
+    ["react_node", "React + Node"],
+    ["rust", "Rust server"],
+    ["react_rust", "React + Rust"],
+    ["github_repo", "GitHub repo"],
+    ["pyodide_wasm", "Pyodide / WASM"],
+    ["static", "Static HTML"],
+    ["other", "Other (will try to accommodate)"]
+  ];
 
   function api(path, opts) {
     return fetch(path, Object.assign({headers: {"content-type": "application/json"}}, opts || {}))
@@ -118,20 +128,8 @@
     return String(idx + 1);
   }
 
-  function annotationTarget(mark) {
-    if (mark.tool === "redact") return "target omitted";
-    const target = mark.target || {};
-    if (target.selector) return target.selector;
-    if (target.data_testid) return "[data-testid=\"" + target.data_testid + "\"]";
-    if (target.id) return "#" + target.id;
-    if (target.role) return "[role=\"" + target.role + "\"]";
-    if (target.tag) return target.tag;
-    return "";
-  }
-
   function AnnotationRows({marks, selectedIndex, onSelect}) {
     return marks.map((mark, idx) => {
-      const target = annotationTarget(mark);
       const selected = selectedIndex === idx;
       const selectable = typeof onSelect === "function";
       const props = {
@@ -153,8 +151,7 @@
         h("span", {className: "rshell-annotation-chip"}, annotationLabel(mark, idx)),
         h("span", {className: "rshell-annotation-copy"},
           mark.tool || "mark",
-          mark.note ? " — " + mark.note : "",
-          target ? h("code", {className: "rshell-annotation-target"}, target) : null));
+          mark.note ? " — " + mark.note : ""));
     });
   }
 
@@ -343,8 +340,17 @@
     }).filter(Boolean).sort((a, b) => (a.start_ms - b.start_ms) || (a.index - b.index));
   }
 
+  function narrativeHasDisplayContent(row) {
+    if (!row || typeof row !== "object") return false;
+    return Boolean(String(row.text || "").trim() || String(row.note || "").trim());
+  }
+
+  function displayNarrativeRows(rows) {
+    return (rows || []).filter(narrativeHasDisplayContent);
+  }
+
   function VoiceSummary({entry}) {
-    const narrative = buildNarrative(entry);
+    const narrative = displayNarrativeRows(buildNarrative(entry));
     const segments = transcriptRows(entry);
     const hasAudio = Boolean(entry && entry.audio_url);
     if (!narrative.length && !segments.length && !hasAudio) return null;
@@ -358,10 +364,8 @@
         const body = isNarrative
           ? h("span", {className: "rshell-voice-copy"},
               h("b", null, row.label + " · " + row.tool),
-              row.note ? " — " + row.note : "",
-              row.target ? h("code", {className: "rshell-annotation-target"}, row.target) : null,
-              h("span", {className: row.text ? "rshell-voice-text" : "rshell-voice-text muted"},
-                row.text || "no overlapping transcript"))
+              row.note ? h("span", {className: "rshell-voice-note"}, row.note) : null,
+              row.text ? h("span", {className: "rshell-voice-text"}, row.text) : null)
           : h("span", {className: "rshell-voice-copy"},
               h("span", {className: "rshell-voice-text"}, row.text));
         return h("div", {className: "rshell-voice-row", key: isNarrative ? "mark-" + row.index : "seg-" + row.index},
@@ -401,15 +405,13 @@
         h("span", {className: "rshell-voice-time"}, timeRange(row.start_ms, row.end_ms)),
         h("span", {className: "rshell-voice-copy"},
           h("b", null, row.label + " · " + row.tool),
-          row.note ? " — " + row.note : "",
-          row.target ? h("code", {className: "rshell-annotation-target"}, row.target) : null,
-          h("span", {className: row.text ? "rshell-voice-text" : "rshell-voice-text muted"},
-            row.text || "no overlapping transcript")))));
+          row.note ? h("span", {className: "rshell-voice-note"}, row.note) : null,
+          row.text ? h("span", {className: "rshell-voice-text"}, row.text) : null))));
   }
 
   function AnnotationPreview({entry, onClose, onUseDraft}) {
     const marks = (entry && entry.annotations) || [];
-    const narrative = useMemo(() => buildNarrative(entry), [entry]);
+    const narrative = useMemo(() => displayNarrativeRows(buildNarrative(entry)), [entry]);
     const [editing, setEditing] = useState(false);
     const [draftMarks, setDraftMarks] = useState(copyAnnotations(marks));
     const [draftSelected, setDraftSelected] = useState(null);
@@ -814,8 +816,102 @@
             onChange: (e) => note(selectedIndex, e.target.value)}))) : null);
   }
 
+  function NewAppWizard({open, onClose, onCreated}) {
+    const [appType, setAppType] = useState("dash");
+    const [title, setTitle] = useState("");
+    const [appKey, setAppKey] = useState("");
+    const [repoUrl, setRepoUrl] = useState("");
+    const [prompt, setPrompt] = useState("");
+    const [notes, setNotes] = useState("");
+    const [dockerize, setDockerize] = useState(false);
+    const [busy, setBusy] = useState(false);
+    const [msg, setMsg] = useState("");
+    useEffect(() => {
+      if (!open) return;
+      setMsg("");
+      setBusy(false);
+    }, [open]);
+    if (!open) return null;
+    const isRepo = appType === "github_repo";
+    const ready = isRepo ? repoUrl.trim() : prompt.trim();
+    function submit(evt) {
+      evt.preventDefault();
+      if (!ready || busy) {
+        setMsg(isRepo ? "Add a GitHub repo URL." : "Describe the app to create.");
+        return;
+      }
+      setBusy(true);
+      setMsg("Creating app request…");
+      api("/api/new-app", {method: "POST", body: JSON.stringify({
+        app_type: appType,
+        title,
+        app_key: appKey,
+        repo_url: repoUrl,
+        dockerize,
+        prompt,
+        notes
+      })}).then((data) => {
+        setBusy(false);
+        setTitle("");
+        setAppKey("");
+        setRepoUrl("");
+        setPrompt("");
+        setNotes("");
+        setDockerize(false);
+        if (onCreated) onCreated(data);
+      }).catch((e) => {
+        setBusy(false);
+        setMsg(e.error || "Could not create app request.");
+      });
+    }
+    return h("div", {className: "rshell-modal-backdrop"},
+      h("form", {className: "rshell-new-app-modal", onSubmit: submit},
+        h("div", {className: "rshell-modal-head"},
+          h("h3", null, "Make a new app"),
+          h("button", {className: "rshell-modal-close", type: "button", title: "Close", onClick: onClose}, "×")),
+        h("div", {className: "rshell-new-app-body"},
+          h("label", {className: "rshell-field"},
+            h("span", null, "type"),
+            h("select", {className: "rshell-select", value: appType, onChange: (e) => setAppType(e.target.value)},
+              NEW_APP_TYPES.map(([value, label]) => h("option", {key: value, value}, label)))),
+          h("label", {className: "rshell-field"},
+            h("span", null, "title"),
+            h("input", {className: "rshell-input", value: title, maxLength: 120,
+              placeholder: isRepo ? "repo title or gallery label" : "working app title",
+              onChange: (e) => setTitle(e.target.value), autoFocus: true})),
+          h("label", {className: "rshell-field"},
+            h("span", null, "app key"),
+            h("input", {className: "rshell-input", value: appKey, maxLength: 80,
+              placeholder: "optional_slug", onChange: (e) => setAppKey(e.target.value)})),
+          isRepo ? h("label", {className: "rshell-field"},
+            h("span", null, "repo URL"),
+            h("input", {className: "rshell-input", value: repoUrl, maxLength: 500,
+              placeholder: "https://github.com/org/project.git", onChange: (e) => setRepoUrl(e.target.value)})) : null,
+          h("label", {className: "rshell-checkbox-field"},
+            h("input", {type: "checkbox", checked: dockerize, onChange: (e) => setDockerize(e.target.checked)}),
+            h("span", null, "Dockerize"),
+            h("small", null, "package/run with Docker when useful")),
+          h("label", {className: "rshell-field"},
+            h("span", null, isRepo ? "brief" : "prompt"),
+            h("textarea", {className: "rshell-textarea rshell-new-app-prompt",
+              value: prompt, maxLength: 5000,
+              placeholder: isRepo ? "what to adapt, expose, or test after import…" : "what should the app do?",
+              onChange: (e) => setPrompt(e.target.value)})),
+          h("label", {className: "rshell-field"},
+            h("span", null, "notes"),
+            h("textarea", {className: "rshell-textarea rshell-new-app-notes",
+              value: notes, maxLength: 2000,
+              placeholder: "data sources, constraints, tags, dependencies…",
+              onChange: (e) => setNotes(e.target.value)}))),
+        h("div", {className: "rshell-modal-actions"},
+          h("button", {className: "rshell-button secondary", type: "button", onClick: onClose}, "Cancel"),
+          h("button", {className: "rshell-button primary", type: "submit", disabled: busy || !ready},
+            busy ? "Creating…" : "Create request")),
+        msg ? h("div", {className: "rshell-new-app-msg"}, msg) : null));
+  }
+
   function Catalog({apps, selected, setSelected, search, setSearch, sort, setSort, reverse, setReverse,
-      open, collapsed, onCollapse}) {
+      open, collapsed, onCollapse, onNewApp}) {
     const rows = useMemo(() => {
       const q = (search || "").toLowerCase();
       const filtered = apps
@@ -847,10 +943,15 @@
       h("div", {style: {overflowY: "auto", flex: 1}},
         general ? h("div", {className: "rshell-row rshell-general-row" + (general.key === selected ? " active" : ""),
           onClick: () => setSelected(general.key)},
-          h("div", {className: "rshell-row-title"}, "◆ General"),
+          h("div", {className: "rshell-general-title-row"},
+            h("div", {className: "rshell-row-title"}, "◆ General"),
+            h("button", {className: "rshell-button secondary rshell-new-app-inline",
+              onClick: (evt) => {
+                evt.stopPropagation();
+                onNewApp();
+              }}, "+ New app")),
           h("div", {className: "rshell-row-meta"}, "gallery & runner feedback",
-            general.metrics && general.metrics.open ? " · ●" + general.metrics.open + " open" : ""),
-          h("div", null, h("span", {className: "rshell-tag", style: {background: general.color || "#8e44ad"}}, "meta"))) : null,
+            general.metrics && general.metrics.open ? " · ●" + general.metrics.open + " open" : "")) : null,
         h("div", {className: "rshell-app-count"}, rows.length + " apps"),
         rows.map((a) => h("div", {key: a.key, className: "rshell-row" + (a.key === selected ? " active" : ""),
           onClick: () => setSelected(a.key)},
@@ -1351,6 +1452,7 @@
     const [fbOpen, setFbOpen] = useState(false);
     const [catCollapsed, setCatCollapsed] = useState(false);
     const [fbCollapsed, setFbCollapsed] = useState(false);
+    const [newAppOpen, setNewAppOpen] = useState(false);
 
     function setSelected(key) {
       setSelectedState(key);
@@ -1366,6 +1468,15 @@
         setApps(data.apps || []);
         if (data.general) setGeneral(data.general);
       });
+    }
+
+    function newAppCreated(data) {
+      const key = boot && boot.general_key;
+      setNewAppOpen(false);
+      if (key) setSelected(key);
+      setFeedback(data || {items: []});
+      setFbOpen(true);
+      return loadApps();
     }
 
     useEffect(() => {
@@ -1395,18 +1506,20 @@
 
     useEffect(() => {
       window.curiatorShell = Object.assign({}, window.curiatorShell || {}, {
-        selectApp: (key) => setSelected(key)
+        selectApp: (key) => setSelected(key),
+        openNewAppWizard: () => setNewAppOpen(true)
       });
     }, [boot]);
 
     if (!boot) return h("div", {style: {padding: 20, color: "#777"}}, "Loading curIAtor…");
-    const generalApp = general || {key: boot.general_key, title: "General — gallery & runner", tags: ["meta"],
+    const generalApp = general || {key: boot.general_key, title: "General — gallery & runner", tags: [],
       color: "#8e44ad", kind: "general", metrics: {open: 0, total: 0}};
     const allApps = [generalApp, ...apps];
     const selectedApp = allApps.find((a) => a.key === selected);
     const src = appSrc(selected, boot.general_key, selectedApp && selectedApp.revision);
 
     return h("div", {className: "rshell"},
+      h(NewAppWizard, {open: newAppOpen, onClose: () => setNewAppOpen(false), onCreated: newAppCreated}),
       h("div", {className: "rshell-mobilebar"},
         h("button", {className: "shell-mbtn", onClick: () => { setCatOpen(!catOpen); setFbOpen(false); }}, "☰ Library"),
         h("div", {style: {flex: 1, textAlign: "center"}}, wordmark(14)),
@@ -1414,7 +1527,8 @@
       h("div", {className: "rshell-main"},
         h("div", {className: "rshell-scrim" + (catOpen || fbOpen ? " open" : ""), onClick: () => { setCatOpen(false); setFbOpen(false); }}),
         h(Catalog, {apps: allApps, selected, setSelected, search, setSearch, sort, setSort, reverse, setReverse,
-          open: catOpen, collapsed: catCollapsed, onCollapse: () => setCatCollapsed(true)}),
+          open: catOpen, collapsed: catCollapsed, onCollapse: () => setCatCollapsed(true),
+          onNewApp: () => setNewAppOpen(true)}),
         catCollapsed ? h("button", {className: "rshell-edge-tab left", title: "Expand library",
           onClick: () => setCatCollapsed(false)}, "Library") : null,
         h("iframe", {id: "app-frame", name: "app-frame", className: "rshell-frame", src}),

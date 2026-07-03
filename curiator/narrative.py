@@ -138,3 +138,15 @@ def narrative_rows(entry: dict) -> list[dict]:
             rows.sort(key=lambda row: (row["start_ms"], row["mark_index"]))
             return rows
     return build_narrative(entry.get("annotations"), entry.get("transcript_segments"))
+
+
+def narrative_has_display_content(row: dict) -> bool:
+    """Whether a narrative row contains human-facing note or transcript text."""
+    if not isinstance(row, dict):
+        return False
+    return bool(str(row.get("text") or "").strip() or str(row.get("note") or "").strip())
+
+
+def display_narrative_rows(entry: dict) -> list[dict]:
+    """Narrative rows suitable for UI summaries and prompt-facing narrated sections."""
+    return [row for row in narrative_rows(entry) if narrative_has_display_content(row)]
