@@ -565,6 +565,10 @@ body {
   color: #333;
 }
 
+.rshell-annotation-summary-count {
+  color: #666;
+}
+
 .rshell-annotation-summary-row {
   display: grid;
   grid-template-columns: 28px minmax(0, 1fr);

@@ -231,12 +231,13 @@
     const marks = (entry && entry.annotations) || [];
     if (!marks.length) return null;
     const canPreview = entry && entry.shot_url && onPreview;
+    const label = marks.length + " annotation" + (marks.length === 1 ? "" : "s");
     return h("div", {className: "rshell-annotation-summary"},
       h("div", {className: "rshell-annotation-summary-title"},
         "Annotations",
         canPreview ? h("button", {className: "rshell-annotation-preview-btn",
           title: "Open annotation preview", onClick: () => onPreview(entry)}, "view") : null),
-      h(AnnotationRows, {marks}));
+      h("div", {className: "rshell-annotation-summary-count"}, label));
   }
 
   function numberValue(value) {
@@ -925,6 +926,7 @@
     const [stars, setStars] = useState("");
     const [comment, setComment] = useState("");
     const [shot, setShot] = useState(null);
+    const [shotApp, setShotApp] = useState(null);
     const [shotSource, setShotSource] = useState(null);
     const [annotations, setAnnotations] = useState([]);
     const [shotEditorOpen, setShotEditorOpen] = useState(false);
@@ -941,6 +943,16 @@
     const audioChunksRef = useRef([]);
     const narrativeClockRef = useRef(null);
     const recordingOffsetRef = useRef(0);
+    const selectedRef = useRef(selected);
+    selectedRef.current = selected;
+
+    function clearShotDraft() {
+      setShot(null);
+      setShotApp(null);
+      setShotSource(null);
+      setAnnotations([]);
+      setShotEditorOpen(false);
+    }
 
     useEffect(() => {
       window.curiatorShell = window.curiatorShell || {};
@@ -965,7 +977,7 @@
       if (retainedAudioRef) setRetainedAudioRef(null);
       narrativeClockRef.current = null;
       if (narrativeClockStart !== null) setNarrativeClockStart(null);
-      setShotEditorOpen(false);
+      if (shot || shotApp || shotSource || annotations.length || shotEditorOpen) clearShotDraft();
     }, [selected]);
 
     const items = feedback.items || [];
@@ -982,15 +994,17 @@
     }
 
     function save() {
-      if (!stars && !comment.trim() && !shot && !retainedAudioRef) {
+      const draftShot = shot && (!shotApp || shotApp === selected) ? shot : null;
+      const draftAnnotations = draftShot ? annotations : [];
+      if (!stars && !comment.trim() && !draftShot && !retainedAudioRef) {
         setMsg("Add a rating, comment, or screenshot.");
         return;
       }
-      setMsg(shot && annotations.length ? "Compositing annotation…" : "");
-      composeShot(shot, annotations).then((screenshot) => {
+      setMsg(draftShot && draftAnnotations.length ? "Compositing annotation…" : "");
+      composeShot(draftShot, draftAnnotations).then((screenshot) => {
         const payload = {stars: stars ? Number(stars) : null, comment, screenshot,
           screenshot_source: screenshot ? shotSource : null,
-          annotations: screenshot ? annotations : [],
+          annotations: screenshot ? draftAnnotations : [],
           transcript_segments: transcriptSegments,
           audio_ref: retainedAudioRef,
           reply_to: target ? [target.id] : []};
@@ -1000,10 +1014,7 @@
           setFeedback(data);
           setStars("");
           setComment("");
-          setShot(null);
-          setShotSource(null);
-          setAnnotations([]);
-          setShotEditorOpen(false);
+          clearShotDraft();
           setTranscriptSegments([]);
           setRetainedAudioRef(null);
           narrativeClockRef.current = null;
@@ -1018,6 +1029,7 @@
     }
 
     function capture() {
+      const captureApp = selected;
       const iframe = document.getElementById("app-frame");
       const doc = iframe && (iframe.contentDocument || (iframe.contentWindow && iframe.contentWindow.document));
       if (!doc || typeof html2canvas === "undefined") {
@@ -1026,7 +1038,9 @@
       }
       html2canvas(doc.body, {logging: false, backgroundColor: "#ffffff"})
         .then((canvas) => {
+          if (captureApp !== selectedRef.current) return;
           setShot(canvas.toDataURL("image/png"));
+          setShotApp(captureApp);
           setShotSource("capture");
           setAnnotations([]);
           setShotEditorOpen(false);
@@ -1039,6 +1053,7 @@
     }
 
     function nativeCapture() {
+      const captureApp = selected;
       const media = navigator.mediaDevices || {};
       if (!media.getDisplayMedia) {
         setMsg("Native capture unavailable in this browser.");
@@ -1074,7 +1089,9 @@
           video.srcObject = stream;
         }).finally(() => stopCaptureStream(stream));
       }).then((dataUrl) => {
+        if (captureApp !== selectedRef.current) return;
         setShot(dataUrl);
+        setShotApp(captureApp);
         setShotSource("native");
         setAnnotations([]);
         setShotEditorOpen(false);
@@ -1227,9 +1244,12 @@
 
     function upload(file) {
       if (!file) return;
+      const captureApp = selected;
       const r = new FileReader();
       r.onload = () => {
+        if (captureApp !== selectedRef.current) return;
         setShot(r.result);
+        setShotApp(captureApp);
         setShotSource("upload");
         setAnnotations([]);
         setShotEditorOpen(false);
@@ -1254,6 +1274,7 @@
     function useAnnotationDraft(entry, marks) {
       if (!entry || !entry.shot_url) return;
       setShot(entry.shot_url);
+      setShotApp(selected);
       setShotSource("replay");
       setAnnotations(copyAnnotations(marks));
       setShotEditorOpen(true);
