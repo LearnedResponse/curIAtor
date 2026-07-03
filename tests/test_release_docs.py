@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import importlib.util
+import re
 import shutil
 from pathlib import Path
 
@@ -38,6 +39,19 @@ def test_release_docs_current_repo_pass():
     module = _load_script()
 
     assert module.check_release_docs(ROOT) == []
+
+
+def test_public_backlog_markdown_links_resolve():
+    missing = []
+    for path in (ROOT / "docs" / "backlog").rglob("*.md"):
+        text = path.read_text(encoding="utf-8")
+        for target in re.findall(r"\[[^\]]+\]\(([^)#]+\.md)(?:#[^)]+)?\)", text):
+            if target.startswith(("http://", "https://")):
+                continue
+            if not (path.parent / target).resolve().exists():
+                missing.append(f"{path.relative_to(ROOT)} -> {target}")
+
+    assert missing == []
 
 
 def test_release_docs_detect_missing_security_language(tmp_path):

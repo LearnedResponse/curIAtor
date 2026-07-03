@@ -122,7 +122,7 @@ budget across their loops (fairness + a global cap); that's v2, per-collection q
 
 ## v1 scope
 
-**One velvet-gated playground collection**: [`galleries/curiator-geometry`](math-geometry-collection.md)
+**One velvet-gated playground collection**: [`galleries/curiator-geometry`](completed/math-geometry-collection.md)
 (now scaffolded) — deterministic, dataless, zero-toolchain, the cheapest to babysit, and its audience
 (researchers/educators) is exactly who to invite first. `curiator-aviato` or `curiator-ot` as a second
 playground only after the moderation load is understood. Phases 1–2 follow the rollout above; nothing

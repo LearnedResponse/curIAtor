@@ -3,9 +3,10 @@
 > **Status:** release infrastructure started 2026-07-01. The decision: release curIAtor externally on
 > GitHub as v0.2.x with **three public example collections** — `curiator-aviato` (mixed frameworks,
 > local, same-machine temp-clone portability, and published-head preflights now pass), `curiator-ot`
-> ([the OT/HMI flagship](ot-hmi-demo.md), scaffolded in `galleries/curiator-ot`), and a
-> [math/geometry explainer collection](math-geometry-collection.md) (scaffolded in `galleries/curiator-geometry`) — plus a Zenodo-archived,
-> DOI-citable release and a companion paper ([zenodo-paper](zenodo-paper.md)).
+> ([the OT/HMI flagship](completed/ot-hmi-demo.md), scaffolded in `galleries/curiator-ot`), and a
+> [math/geometry explainer collection](completed/math-geometry-collection.md) (scaffolded in
+> `galleries/curiator-geometry`) — plus a Zenodo-archived, DOI-citable release and a companion paper
+> ([zenodo-paper](zenodo-paper.md)).
 
 ## The bar
 
@@ -78,9 +79,9 @@ leave feedback → watch the fix land and the ⚙ reply arrive. Every item below
    nothing. `curiator-geometry` now has seven public Dash/Plotly apps (including two algebraic-geometry
    explainers filtered from 4+ star Kwisatz taste signals), one completed convex-hull feedback→fix cycle
    at `30bb155`, and passing `curiator doctor`, `curiator smoke`, direct Dash import/build, and
-   same-machine fresh-clone preflight checks. `curiator-ot` now has a deterministic tank sim, local SQLite historian, rough rainbow Dash HMI,
-   10-item operator feedback queue, repo-local curIAtor skill shims, seed commit `6c5e2d6`, and latest
-   release-hygiene commit `36e21cf`; its
+   same-machine fresh-clone preflight checks. `curiator-ot` now has a deterministic tank sim, local
+   SQLite historian, rough rainbow Dash HMI, 10-item operator feedback queue, repo-local curIAtor skill
+   shims, seed commit `6c5e2d6`, and latest release-hygiene commit `36e21cf`; its
    seeded feedback loop is complete on `curiator/auto` with ten curator commits from rainbow baseline
    toward HP-HMI, and `curiator release-preflight --gallery curiator-ot --fresh-clone --json` passes at
    `36e21cf`.

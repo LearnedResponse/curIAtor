@@ -1,7 +1,8 @@
 # Backlog — OT / HMI-maintenance example collection (flagship demo)
 
-> **Status:** scaffolded 2026-07-01 in nested repo `galleries/curiator-ot`. A flagship cross-domain example and one of the three collections in
-> the [public release](public-release.md). Captured 2026-06-29. **v1 scope cut (2026-07-01): no MING
+> **Status:** scaffolded 2026-07-01 in nested repo `galleries/curiator-ot`. A flagship cross-domain
+> example and one of the three collections in the [public release](../public-release.md). Captured
+> 2026-06-29. **v1 scope cut (2026-07-01): no MING
 > stack in v1.** The sim writes straight to a lightweight local historian (SQLite/parquet); the full
 > Mosquitto → Telegraf → InfluxDB compose moves to v2. Rationale: the curator never touches the data
 > path — the entire rainbow→ISA-101 story lives in the Dash layer, so four infrastructure containers buy

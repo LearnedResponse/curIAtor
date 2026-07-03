@@ -1,7 +1,8 @@
 # Backlog — public roadmap
 
-Scoped-but-not-started ideas and work-orders for the public curiator product. Each is a candidate, not a
-commitment; sequencing is deliberate (ship, let the example demos surface what to prioritize).
+Scoped ideas and work-orders for the public curiator product. Each live item should still need a local
+implementation, release action, or external operating step; shipped items move to
+[`completed/`](completed/) so the backlog keeps reflecting what remains.
 
 > Internal planning (product-direction/moat thinking, engineering refactors, strategy) lives in the
 > **private `curiator-planning` repo**, surfaced to the loop as `.planning/` when present. This file is
@@ -12,14 +13,6 @@ commitment; sequencing is deliberate (ship, let the example demos surface what t
 - [**public-release**](public-release.md) — release curIAtor externally on GitHub as v0.2.x with three
   public example collections (`curiator-aviato`, `curiator-ot`, math/geometry), the hero demo.gif, a
   portability pass (no machine-absolute paths in collections), SECURITY.md, and Zenodo DOI wiring.
-- [**ot-hmi-demo**](ot-hmi-demo.md) — scaffolded in `galleries/curiator-ot` as the OT / HMI-maintenance
-  flagship example: a "rainbow" HMI over a simulated process that curiator drags toward
-  High-Performance-HMI / ISA-101 from operator feedback; the git log is the build story.
-  **v1 = sim + Dash + a local historian; the MING compose is v2.**
-- [**math-geometry-collection**](math-geometry-collection.md) — scaffolded in `galleries/curiator-geometry` as
-  a public collection of interactive math/geometry explainers (public-knowledge classics only — the
-  private research overlay stays private): the origin story made public, and the friction-free
-  quickstart example.
 - [**zenodo-paper**](zenodo-paper.md) — the companion software/systems paper, self-archived on Zenodo
   with a DOI (JOSS as the reviewed follow-up); the public collections are its evaluation, and a small
   `curiator stats` keeps its numbers reproducible.
@@ -42,5 +35,17 @@ commitment; sequencing is deliberate (ship, let the example demos surface what t
   `galleries/curiator-phylogenetics` as a **public-first** interactive companion to the tropical
   displayed-trees paper (displayed trees / tree-of-blobs / NC = D / TINNiK), seeded from an already-built
   Dash explorer **and a working Pyodide static port**. A domain-specialized sibling of
-  `math-geometry-collection` for the phylo-networks community; first client-side-WASM-compute collection;
-  the full eight-item seeded feedback loop is complete through `b1b3586`, and it ships with the paper's outreach.
+  [**math-geometry-collection**](completed/math-geometry-collection.md) for the phylo-networks
+  community; first client-side-WASM-compute collection; the full eight-item seeded feedback loop is
+  complete through `b1b3586`, and it ships with the paper's outreach.
+
+## Shipped
+
+Fully delivered public work-orders, retired to [`completed/`](completed/) for provenance.
+
+- [**ot-hmi-demo**](completed/ot-hmi-demo.md) — OT/HMI v1 collection delivered: deterministic tank sim,
+  local SQLite historian, Dash HMI, 10-item feedback-to-fix arc, and fresh-clone preflight — shipped
+  `curiator-ot@36e21cf`.
+- [**math-geometry-collection**](completed/math-geometry-collection.md) — seven public Dash/Plotly math
+  explainers plus the first feedback-to-fix receipt and fresh-clone preflight — shipped
+  `curiator-geometry@30bb155`.

@@ -25,7 +25,8 @@ phylogeneticist's feedback. It plays **three roles at once**:
 3. **curiator's first client-side-compute (browser-WASM / Pyodide) collection** — the app
    does its math *in the browser*, served same-origin via the already-proven `proxy` mount;
    it stress-tests the overlay + curator loop over a *static-but-computational* page, and
-   it's the domain-specialized sibling of `math-geometry-collection.md`.
+   it's the domain-specialized sibling of
+   [math-geometry-collection](completed/math-geometry-collection.md).
 
 Why public-first is *reachable now*: the hard part is already done — a **validated
 network-coalescent engine runs byte-identical in the browser** (CPython → WASM via
@@ -130,7 +131,8 @@ server, no re-implementation.
 This collection is **part of the displayed-trees paper's outreach, not a side quest**. It
 is the interactive companion the outreach plan named as a differentiator. It slots into the
 **public-release track** as another public collection (a domain-specialized sibling of
-`math-geometry-collection.md`) and as an evaluation collection for `zenodo-paper.md`. Build
+[math-geometry-collection](completed/math-geometry-collection.md)) and as an evaluation collection for
+`zenodo-paper.md`. Build
 it **alongside** the paper's arXiv/timestamp step so the paper can link it on day one.
 
 ## Platform spectrum (roadmap, not scope)
