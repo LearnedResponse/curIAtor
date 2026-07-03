@@ -113,7 +113,7 @@ def test_release_preflight_can_include_optional_public_galleries(tmp_path, monke
     from curiator import cli
 
     required = ["curiator-aviato", "curiator-ot", "curiator-geometry"]
-    optional = ["curiator-finance", "curiator-phylogenetics"]
+    optional = ["curiator-finance", "curiator-phylogenetics", "curiator-ml"]
     for name in [*required, *optional]:
         _make_gallery(tmp_path, name=name)
     monkeypatch.chdir(tmp_path)

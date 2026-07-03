@@ -20,16 +20,16 @@ def _load_script():
 
 
 def _copy_release_doc_fixture(tmp_path: Path) -> None:
-    (tmp_path / "docs" / "backlog" / "skipped").mkdir(parents=True)
+    (tmp_path / "docs" / "backlog").mkdir(parents=True)
     (tmp_path / "docs" / "paper").mkdir(parents=True)
     shutil.copyfile(ROOT / "Makefile", tmp_path / "Makefile")
     shutil.copyfile(ROOT / "README.md", tmp_path / "README.md")
     shutil.copyfile(ROOT / "SECURITY.md", tmp_path / "SECURITY.md")
     shutil.copyfile(ROOT / "docs" / "RELEASE.md", tmp_path / "docs" / "RELEASE.md")
-    shutil.copyfile(ROOT / "docs" / "backlog" / "skipped" / "public-release.md",
-                    tmp_path / "docs" / "backlog" / "skipped" / "public-release.md")
-    shutil.copyfile(ROOT / "docs" / "backlog" / "skipped" / "public-playground.md",
-                    tmp_path / "docs" / "backlog" / "skipped" / "public-playground.md")
+    shutil.copyfile(ROOT / "docs" / "backlog" / "public-release.md",
+                    tmp_path / "docs" / "backlog" / "public-release.md")
+    shutil.copyfile(ROOT / "docs" / "backlog" / "public-playground.md",
+                    tmp_path / "docs" / "backlog" / "public-playground.md")
     shutil.copyfile(ROOT / "docs" / "paper" / "reproducibility.md",
                     tmp_path / "docs" / "paper" / "reproducibility.md")
     shutil.copyfile(ROOT / "docs" / "paper" / "curiator-paper.md",
@@ -58,10 +58,10 @@ def test_public_backlog_markdown_links_resolve():
 
 def test_release_docs_detect_missing_security_language(tmp_path):
     module = _load_script()
-    (tmp_path / "docs" / "backlog" / "skipped").mkdir(parents=True)
+    (tmp_path / "docs" / "backlog").mkdir(parents=True)
     shutil.copyfile(ROOT / "README.md", tmp_path / "README.md")
-    shutil.copyfile(ROOT / "docs" / "backlog" / "skipped" / "public-release.md",
-                    tmp_path / "docs" / "backlog" / "skipped" / "public-release.md")
+    shutil.copyfile(ROOT / "docs" / "backlog" / "public-release.md",
+                    tmp_path / "docs" / "backlog" / "public-release.md")
     (tmp_path / "SECURITY.md").write_text("# Security Policy\n\nToo vague.\n")
 
     failures = module.check_release_docs(tmp_path)
@@ -72,12 +72,12 @@ def test_release_docs_detect_missing_security_language(tmp_path):
 
 def test_release_docs_detect_draft_paper_placeholders(tmp_path):
     module = _load_script()
-    (tmp_path / "docs" / "backlog" / "skipped").mkdir(parents=True)
+    (tmp_path / "docs" / "backlog").mkdir(parents=True)
     (tmp_path / "docs" / "paper").mkdir(parents=True)
     shutil.copyfile(ROOT / "README.md", tmp_path / "README.md")
     shutil.copyfile(ROOT / "SECURITY.md", tmp_path / "SECURITY.md")
-    shutil.copyfile(ROOT / "docs" / "backlog" / "skipped" / "public-release.md",
-                    tmp_path / "docs" / "backlog" / "skipped" / "public-release.md")
+    shutil.copyfile(ROOT / "docs" / "backlog" / "public-release.md",
+                    tmp_path / "docs" / "backlog" / "public-release.md")
     (tmp_path / "docs" / "paper" / "curiator-paper.md").write_text(
         "# Paper\n\nTODO(draft): unresolved related work.\n"
     )
@@ -128,7 +128,7 @@ def test_release_docs_requires_browser_smoke_docs(tmp_path):
     readme = tmp_path / "README.md"
     release = tmp_path / "docs" / "RELEASE.md"
     reproducibility = tmp_path / "docs" / "paper" / "reproducibility.md"
-    playground = tmp_path / "docs" / "backlog" / "skipped" / "public-playground.md"
+    playground = tmp_path / "docs" / "backlog" / "public-playground.md"
     readme.write_text(
         readme.read_text()
         .replace("curiator smoke --browser", "curiator smoke --shell")

@@ -1,8 +1,8 @@
 # Backlog — general app hosting (any framework, multi-file apps)
 
-> **Status: skipped/deferred as of 2026-07-03. Core landed & proven in the wild (2026-07-01); the
-> active backlog is drained. Remaining work is follow-on hardening, HMR ergonomics, engine-backed
-> mounts, and public proof surfacing, all parked until reopened as concrete local work-orders.**
+> **Status: active dogfood hardening as of 2026-07-03. Core landed & proven in the wild (2026-07-01);
+> keep pushing local framework, base-path/HMR, browser-smoke, and engine-backed mount hardening before
+> public release.**
 > App directories, multi-endpoint `mounts:`, the same-origin `proxy` mount, and `curiator app create`
 > scaffolds (dash/static/python/node/flask/fastapi/rust/react/svelte/vue/next/streamlit/gradio) are in the runner, and the **non-Dash proof now exists**:
 > `curiator-aviato` runs a React/Node SSR app and a Rust HTTP server through `proxy` mounts next to

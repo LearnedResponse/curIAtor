@@ -67,7 +67,7 @@ belongs to the external release track:
 - publish the example collections and verify a fresh clone on a machine that is not this one;
 - configure PyPI Trusted Publishing and GitHub-Zenodo archival before pushing the release tag.
 
-Those gates are tracked in [`docs/backlog/skipped/public-release.md`](backlog/skipped/public-release.md) and
+Those gates are tracked in [`docs/backlog/public-release.md`](backlog/public-release.md) and
 [`docs/RELEASE.md`](RELEASE.md). Do not treat this extraction document as the active release checklist.
 
 ## Historical Notes

@@ -1,8 +1,9 @@
 # Backlog — OT v2: a physics digital twin under the HMI
 
-> **Status:** skipped/deferred as of 2026-07-03. This is a post-release engine-backed OT v2 direction,
-> not an active local work-order; reopening it requires a concrete FMU/digital-twin substrate. Original
-> scope: OT **v1 shipped** (deterministic tank sim + SQLite historian + Dash
+> **Status:** active dogfood target as of 2026-07-03. Build as much local engine-backed/digital-twin
+> proof as possible before public release, then mark only true toolchain/substrate blockers such as
+> OpenModelica/FMU availability or licensed Simscape dependencies. OT **v1 shipped** (deterministic tank
+> sim + SQLite historian + Dash
 > HMI, `curiator-ot@36e21cf`). v2 deepens the *substrate*: replace the hand-coded ODE with a credible
 > **physics digital twin (OpenModelica)** under the same HMI the loop iterates — and turn that HMI into a
 > **diagnostics/KPI surface** so feedback drives real backend work, not just layout. Captured 2026-07-03.

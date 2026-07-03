@@ -1,13 +1,14 @@
 # Backlog — public release (GitHub, three example collections, a DOI)
 
-> **Status:** skipped/external as of 2026-07-03. Local release infrastructure is prepared, but the
-> remaining work requires external publication authority: public pushes/tags, PyPI Trusted Publisher,
-> GitHub↔Zenodo wiring, DOI/badge updates, and off-machine release validation. The original scoped
-> release plan follows for provenance. Release infrastructure started 2026-07-01. The decision: release curIAtor externally on
+> **Status:** active release gate as of 2026-07-03. Local release infrastructure is prepared, but a full
+> public release should wait for the dogfood collections in this backlog to be fleshed out and
+> browser-smoked. Continue local hardening until only external publication authority remains: public
+> pushes/tags, PyPI Trusted Publisher, GitHub↔Zenodo wiring, DOI/badge updates, and off-machine release
+> validation. Release infrastructure started 2026-07-01. The decision: release curIAtor externally on
 > GitHub as v0.2.x with **three public example collections** — `curiator-aviato` (mixed frameworks,
 > local, same-machine temp-clone portability, and published-head preflights now pass), `curiator-ot`
-> ([the OT/HMI flagship](../completed/ot-hmi-demo.md), scaffolded in `galleries/curiator-ot`), and a
-> [math/geometry explainer collection](../completed/math-geometry-collection.md) (scaffolded in
+> ([the OT/HMI flagship](completed/ot-hmi-demo.md), scaffolded in `galleries/curiator-ot`), and a
+> [math/geometry explainer collection](completed/math-geometry-collection.md) (scaffolded in
 > `galleries/curiator-geometry`) — plus a Zenodo-archived, DOI-citable release and a companion paper
 > ([zenodo-paper](zenodo-paper.md)).
 
@@ -24,7 +25,7 @@ leave feedback → watch the fix land and the ⚙ reply arrive. Every item below
    release. The release workflow builds/attaches artifacts and has a PyPI trusted-publishing job with
    a tag-vs-`pyproject.toml` version guard; `make release-check` now runs the local gate (lint, tests,
    strict public-gallery fresh-clone preflight, `docs/demo.gif` presence validation, package build, and `twine check`). The
-   human release checklist now lives in [`docs/RELEASE.md`](../../RELEASE.md). Latest local gate evidence
+   human release checklist now lives in [`docs/RELEASE.md`](../RELEASE.md). Latest local gate evidence
    at runner `4e27ece`: `make release-package-smoke` passed, including `make release-check` with 299
    tests, public-gallery
    fresh-clone preflight `3/3` with zero publish-artifact hits, validated the browser-captured
@@ -32,7 +33,9 @@ leave feedback → watch the fix land and the ⚙ reply arrive. Every item below
    hosted-playground restore gate reports SQLite ledger checkpoint posture before copying. Browser
    smoke is now available inside release, playground, and backup-restore gates. The final
    local launch gate, `make release-launch-check`, also passed: strict release docs were clean and
-   required plus optional public-shaped galleries passed fresh-clone preflight `5/5`. Release metadata is cut locally
+   required plus optional public-shaped galleries passed fresh-clone preflight `5/5`. With the local
+   ML dogfood collection added on 2026-07-03, the current optional fresh-clone strict preflight passes
+   `6/6`. Release metadata is cut locally
    for `0.2.0` / `2026-07-02` via `make release-prepare`. Public collection publication is now
    verified for the required three and optional public-shaped collections by the published-head gate,
    and the runner branch publication check is now part of the release preflight. `make
@@ -93,8 +96,10 @@ leave feedback → watch the fix land and the ⚙ reply arrive. Every item below
    the stale machine-local ledger note is sanitized, and
    `curiator release-preflight --gallery curiator-finance --fresh-clone --strict` passes at `d6270bd`.
    `curiator-phylogenetics` is also a verified paper-linked optional collection at `0095229`; its
-   static GitHub Pages publishing path is prepared, with the public URL still external. To check the
-   minimum set plus these optional public-shaped collections, run
+   static GitHub Pages publishing path is prepared, with the public URL still external. `curiator-ml`
+   is now the first diagnostic-driven-backend dogfood collection at `a19184c`: a local benchmark
+   dashboard with a metric JSON smoke and passing fresh-clone strict preflight. To check the minimum set
+   plus these optional public-shaped collections, run
    `curiator release-preflight --include-optional --fresh-clone --strict`. The three above remain the
    minimum release set unless scope expands. On 2026-07-02,
    `curiator release-preflight --include-optional --fresh-clone --strict --require-public-remotes

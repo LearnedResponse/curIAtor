@@ -135,7 +135,7 @@ nested public example galleries under `galleries/` and rejects tracked runtime/a
 local user stores, task traces, screenshots, SQLite sidecars, env files, cache files, and installed
 dependency directories, plus local editable/path dependency pins in requirements files; add `--fresh-clone` to
 verify the committed state survives a same-machine clone, and `--strict` to make doctor warnings fail
-publication gates. Add `--include-optional` when checking finance and phylogenetics alongside the
+publication gates. Add `--include-optional` when checking finance, phylogenetics, and ML alongside the
 minimum release set.
 Screenshot capture details and fidelity tradeoffs are in [`docs/SCREENSHOT_CAPTURE.md`](docs/SCREENSHOT_CAPTURE.md).
 Release gates and publication steps are tracked in [`docs/RELEASE.md`](docs/RELEASE.md).

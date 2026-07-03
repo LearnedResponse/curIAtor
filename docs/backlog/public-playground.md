@@ -1,8 +1,9 @@
 # Backlog — public playground (hosted collections, trust-tiered dispatch)
 
-> **Status:** skipped/external as of 2026-07-03. Local moderation, quota, preflight, and backup-restore
-> primitives are present; remaining work is an actual hosted pilot/deployment. The original scoped plan
-> follows for provenance. Scoped 2026-07-01; phase-2 moderation primitive landed (`held` status,
+> **Status:** active hosted-pilot gate as of 2026-07-03. Local moderation, quota, preflight, and
+> backup-restore primitives are present; keep dogfooding dry-run evidence locally, and mark the actual
+> hosted pilot/deployment as external until hosting credentials/public exposure are available. Scoped
+> 2026-07-01; phase-2 moderation primitive landed (`held` status,
 > `auth.allow_anonymous` held intake for `local`/`oidc`, admin `/queue` shell view, and
 > `curiator queue list|approve|reject|sweep` CLI, per-IP anonymous submission limits, and
 > watcher-enforced account/global dispatch quotas, plus anonymous-upload suppression in the React shell).
@@ -17,7 +18,7 @@
 > the rate limit and the trust vetting. A phase-0 deployment runbook, `curiator playground-preflight`
 > posture gate, and `curiator playground-backup-smoke` restore-copy gate with `--output` evidence
 > snapshots now exist in
-> [`docs/PUBLIC_PLAYGROUND_DEPLOYMENT.md`](../../PUBLIC_PLAYGROUND_DEPLOYMENT.md); the actual hosted pilot
+> [`docs/PUBLIC_PLAYGROUND_DEPLOYMENT.md`](../PUBLIC_PLAYGROUND_DEPLOYMENT.md); the actual hosted pilot
 > remains to run. The anonymous tier + held pool is a later phase, built only after the velvet phase
 > teaches us what hosted moderation actually costs.
 > Local-auth hosted preflight now also rejects inline `auth.users` password hashes plus tracked,
@@ -125,7 +126,7 @@ budget across their loops (fairness + a global cap); that's v2, per-collection q
 
 ## v1 scope
 
-**One velvet-gated playground collection**: [`galleries/curiator-geometry`](../completed/math-geometry-collection.md)
+**One velvet-gated playground collection**: [`galleries/curiator-geometry`](completed/math-geometry-collection.md)
 (now scaffolded) — deterministic, dataless, zero-toolchain, the cheapest to babysit, and its audience
 (researchers/educators) is exactly who to invite first. `curiator-aviato` or `curiator-ot` as a second
 playground only after the moderation load is understood. Phases 1–2 follow the rollout above; nothing

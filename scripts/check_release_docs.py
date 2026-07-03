@@ -42,8 +42,8 @@ def check_release_docs(root: Path = ROOT, *, strict_launch: bool = False) -> lis
     readme = root / "README.md"
     security = root / "SECURITY.md"
     release = root / "docs" / "RELEASE.md"
-    public_release = root / "docs" / "backlog" / "skipped" / "public-release.md"
-    public_playground = root / "docs" / "backlog" / "skipped" / "public-playground.md"
+    public_release = root / "docs" / "backlog" / "public-release.md"
+    public_playground = root / "docs" / "backlog" / "public-playground.md"
     reproducibility = root / "docs" / "paper" / "reproducibility.md"
     paper = root / "docs" / "paper" / "curiator-paper.md"
     demo_gif = root / "docs" / "demo.gif"
@@ -54,9 +54,9 @@ def check_release_docs(root: Path = ROOT, *, strict_launch: bool = False) -> lis
     if not security.exists():
         failures.append("missing SECURITY.md")
     if not public_release.exists():
-        failures.append("missing docs/backlog/skipped/public-release.md")
+        failures.append("missing docs/backlog/public-release.md")
     if not public_playground.exists():
-        failures.append("missing docs/backlog/skipped/public-playground.md")
+        failures.append("missing docs/backlog/public-playground.md")
     if not release.exists():
         failures.append("missing docs/RELEASE.md")
     if not reproducibility.exists():

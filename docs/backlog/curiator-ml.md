@@ -1,12 +1,16 @@
 # Backlog — curiator-ML (import a well-scoped problem as an app)
 
-> **Status:** skipped/deferred as of 2026-07-03. This is a post-release diagnostic-backend direction,
-> not an active local work-order; reopening it requires choosing an external/open benchmark or dataset
-> and a metric contract. Original scope: import a Kaggle competition — or any **well-scoped problem with a
-> clear metric** — as a curiator app whose web surface is **diagnostics / benchmarking / modeling**.
-> Feedback on that surface drives the *modeling backend*. The purest instance of the diagnostic-driven
-> backend, and the strongest single proof of the whole thesis. Post-release direction. Captured
-> 2026-07-03.
+> **Status:** first local dogfood proof landed 2026-07-03 in `galleries/curiator-ml@a19184c`.
+> The initial app is a credential-free Dash diagnostic benchmark with deterministic synthetic data,
+> validation accuracy/log-loss/Brier metrics, confusion matrix, calibration, slice errors, score history,
+> a seeded three-item diagnostic feedback queue, and a JSON metric smoke (`python benchmark_dashboard.py
+> --metrics-json`). Fresh-clone strict preflight and fresh-clone browser-smoke both pass for
+> `curiator-ml@a19184c`. Keep building local feedback rounds before public
+> release; mark only true external blockers such as Kaggle credentials, competition data terms, or API
+> keys. Import a Kaggle competition — or any **well-scoped problem with a clear metric** — as a curiator
+> app whose web surface is **diagnostics / benchmarking / modeling**. Feedback on that surface drives the
+> *modeling backend*. The purest instance of the diagnostic-driven backend, and the strongest single
+> proof of the whole thesis. Captured 2026-07-03.
 
 ## The pitch (and why it's the best proof)
 
@@ -35,23 +39,26 @@ lead), so the demos will be credible.
 
 curiator-ML is an **engine-backed app** (see `general-app-hosting.md`): the dashboard is the front-end
 the loop iterates; the **training/inference process is the engine** (substrate). And it's the ideal
-proving ground for the **agent-capabilities artifact contract** (`.planning/backlog/agent-capabilities.md`):
+proving ground for the **agent-capabilities artifact contract** (`.planning/completed/agent-capabilities.md`):
 here the artifact is a **measured CV score + diagnostics**, and *"reject `done` without a measured
 score"* is the contract's teeth in a domain where the metric is unambiguous. No "compile passed"
 hand-waving is even possible — the score is the ground truth.
 
 ## Work-order
 
-1. **Problem import** — a `curiator ml import` that pulls a well-scoped problem (dataset + metric +
-   splits) into an app directory with a baseline pipeline and a scored dashboard. Prefer **open
-   benchmarks** first (OpenML tasks, classic datasets, a self-hosted problem); wire live Kaggle only
-   within its rules (see guardrails).
-2. **Diagnostic dashboard** — score/leaderboard delta, learning curves, error analysis, feature
-   importance; the front-end the loop iterates.
-3. **One feedback round that moves the metric** — a diagnostic comment → a modeling-backend change → a
-   *measured* score improvement, surfaced as the artifact. This is the demo.
-4. **Async training** — the loop edits code fast; training runs in the background; the dashboard updates
-   from the last completed run. Don't block the feedback cadence on a multi-hour fit.
+1. **Problem import / local benchmark — first pass landed.** `galleries/curiator-ml@a19184c` carries a
+   deterministic synthetic binary benchmark with fixed seed, train/validation split, and a scored
+   baseline-vs-interaction recipe. Next: generalize this into `curiator ml import` once one more
+   benchmark shape proves the contract.
+2. **Diagnostic dashboard — first pass landed.** The app exposes score delta, confusion matrix,
+   calibration, slice error, feature recipe, and a JSON metric artifact. Next: add per-slice
+   improvement/regression summaries from the seeded feedback.
+3. **One feedback round that moves the metric — queued.** The app already shows a measured
+   lift from the linear baseline to the interaction model (validation accuracy 79.7% → 88.4%; log loss
+   0.623 → 0.339), and the ledger contains three seeded diagnostic feedback items. Next: service those
+   items and commit the metric movement through git-as-memory.
+4. **Async training — not needed for the first fast benchmark.** Keep this for larger benchmarks once the
+   synchronous metric artifact has been dogfooded.
 
 ## Guardrails
 

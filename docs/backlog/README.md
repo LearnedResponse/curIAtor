@@ -8,34 +8,38 @@ implementation, release action, or external operating step; shipped items move t
 > **private `curiator-planning` repo**, surfaced to the loop as `.planning/` when present. This file is
 > the public half — the release track and example collections.
 
-## Live
+## Release Gate
 
-No live public backlog items. Local implementation work has either shipped or moved out of the active
-public backlog. External publication/hosting/DOI work is parked under [`skipped/`](skipped/) until a
-human chooses to reopen it with concrete credentials, remotes, or deployment targets.
+These stay live until the public-release bar is met. The rule is: make as much local/dogfood progress as
+possible, and mark only the irreducible external blockers (public repo ownership, API keys, paid
+licenses, DOI services, hosted credentials) at the point they are actually reached.
 
-## Skipped / External
+- [**public-release**](public-release.md) — release curIAtor externally on GitHub as v0.2.x after the
+  core examples and dogfood collections are fleshed out, browser-smoked, and reproducible. External
+  blockers remain public pushes/tags, PyPI Trusted Publisher, GitHub/Zenodo wiring, badges, and
+  off-machine release validation.
+- [**zenodo-paper**](zenodo-paper.md) — the companion software/systems paper. Local stats, draft,
+  figures, metadata, and PDF build scaffolding exist; continue refreshing evidence from dogfooded
+  collections until final human review and Zenodo/DOI deposit.
 
-Skipped items are not shipped; they are parked so the local backlog stays drainable.
+## Dogfood Before Release
 
-- [**public-release**](skipped/public-release.md) — local release gates and example-collection
-  publication prep are in place, but the remaining work is external: push/tag/publication, PyPI Trusted
-  Publisher, GitHub/Zenodo wiring, badges, and off-machine release validation.
-- [**zenodo-paper**](skipped/zenodo-paper.md) — local stats, draft, figures, metadata, and PDF build
-  scaffolding exist; final DOI/deposit and human PDF review are external release-time steps.
-- [**public-playground**](skipped/public-playground.md) — moderation, quotas, hosted preflight, and
-  backup/restore gates exist; the actual velvet-gated hosted pilot is an external deployment.
-- [**general-app-hosting**](skipped/general-app-hosting.md) — the core framework-agnostic hosting work is
-  landed and proven locally; remaining items are deeper hardening, HMR ergonomics, engine-backed mounts,
-  and publishing the proof.
-- [**phylogenetics-collection**](skipped/phylogenetics-collection.md) — the collection and seeded loop
-  are complete locally; remaining work is external Pages enable/run/URL wiring plus optional expansion.
-- [**games-collection**](skipped/games-collection.md) — post-release public demo direction requiring
-  external/open-source game app integration and user-supplied game substrates.
-- [**ot-digital-twin**](skipped/ot-digital-twin.md) — post-release engine-backed OT v2 direction that
-  needs a real FMU/digital-twin substrate, beyond the shipped OT v1 local demo.
-- [**curiator-ml**](skipped/curiator-ml.md) — post-release diagnostic-backend direction requiring an
-  external benchmark/dataset choice and metric contract.
+- [**general-app-hosting**](general-app-hosting.md) — framework-agnostic app hosting is landed and proven;
+  keep hardening template/base-path/HMR behavior and dogfood proxy/static/Dash-suite combinations before
+  release.
+- [**phylogenetics-collection**](phylogenetics-collection.md) — local collection and seeded loop are in
+  place; continue dogfooding/static-publish checks and mark only Pages/public-URL wiring as external.
+- [**games-collection**](games-collection.md) — build the local proof as far as possible without bundling
+  commercial game binaries or needing external repo access/licenses.
+- [**ot-digital-twin**](ot-digital-twin.md) — push OT v2 toward a local engine-backed/digital-twin proof;
+  mark OpenModelica/FMU/toolchain or licensed-substrate blockers only when reached.
+- [**curiator-ml**](curiator-ml.md) — build a local open-benchmark diagnostic loop before considering
+  Kaggle/API-key paths.
+
+## Hosted Pilot
+
+- [**public-playground**](public-playground.md) — keep local hosted-pilot gates and dry-run evidence
+  current; the actual external deployment remains blocked on hosting credentials and public exposure.
 
 ## Shipped
 

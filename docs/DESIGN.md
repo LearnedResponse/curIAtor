@@ -17,7 +17,7 @@ thing and replies. *AI-maintained app collections.*
 iframe and acts on ★/comment/screenshot — so it works for *any* app (Dash, React, Svelte, static — anything
 served same-origin). **Dash is the first supported mount, not curiator's identity.** Keep the
 overlay/feedback/loop framework-agnostic; the only framework-specific seam is the *mount* (`dash-inproc`
-today, `proxy` the universal one). See `backlog/skipped/general-app-hosting.md`.
+today, `proxy` the universal one). See `backlog/general-app-hosting.md`.
 
 ## Why OSS, not a company
 

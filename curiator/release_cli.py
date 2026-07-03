@@ -16,7 +16,7 @@ from .config import load_config, load_config_at
 
 
 _PUBLIC_RELEASE_GALLERIES = ("curiator-aviato", "curiator-ot", "curiator-geometry")
-_OPTIONAL_RELEASE_GALLERIES = ("curiator-finance", "curiator-phylogenetics")
+_OPTIONAL_RELEASE_GALLERIES = ("curiator-finance", "curiator-phylogenetics", "curiator-ml")
 _PUBLIC_RELEASE_OWNER = "LearnedResponse"
 _PUBLIC_RUNNER_REPO = "curIAtor"
 _USER_ABS_PATH_RE = re.compile(

@@ -1,8 +1,9 @@
 # Backlog — curiator-games (dr4ft-led)
 
-> **Status:** skipped/deferred as of 2026-07-03. This is a post-release public-demo direction, not an
-> active local work-order; reopening it requires external app/game substrate choices and public repo
-> integration. Original scope: a public collection of game/sim overlays the loop maintains — led by
+> **Status:** active dogfood target as of 2026-07-03. Build as much local proof as possible before public
+> release: start with repo/import scaffolding and engine-backed overlay shape, then mark only true
+> external blockers such as upstream repo access, paid game binaries, or required licenses/API keys. A
+> public collection of game/sim overlays the loop maintains — led by
 > **dr4ft** (an existing open-source MTG draft web app), with engine-backed diagnostic overlays for
 > **Factorio**, **Nethack**, and **Dwarf Fortress**. Sibling to `curiator-geometry` / `phylogenetics`.
 > Post-release direction, not release-track. Captured 2026-07-03.
