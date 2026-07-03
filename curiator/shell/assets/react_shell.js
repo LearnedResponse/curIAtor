@@ -670,6 +670,50 @@
       }
     }
 
+    function segmentDistance(p, ax, ay, bx, by) {
+      const vx = bx - ax;
+      const vy = by - ay;
+      const wx = p.x - ax;
+      const wy = p.y - ay;
+      const denom = vx * vx + vy * vy;
+      const t = denom ? Math.max(0, Math.min(1, (wx * vx + wy * vy) / denom)) : 0;
+      const x = ax + t * vx;
+      const y = ay + t * vy;
+      return Math.hypot(p.x - x, p.y - y);
+    }
+
+    function markDistance(mark, p) {
+      const x1 = numberValue(mark.x1);
+      const y1 = numberValue(mark.y1);
+      const x2 = mark.x2 == null ? x1 : numberValue(mark.x2);
+      const y2 = mark.y2 == null ? y1 : numberValue(mark.y2);
+      if (mark.tool === "pin" || mark.x2 == null || mark.y2 == null) return Math.hypot(p.x - x1, p.y - y1);
+      if (mark.tool === "arrow") return segmentDistance(p, x1, y1, x2, y2);
+      const left = Math.min(x1, x2);
+      const right = Math.max(x1, x2);
+      const top = Math.min(y1, y2);
+      const bottom = Math.max(y1, y2);
+      if (p.x >= left && p.x <= right && p.y >= top && p.y <= bottom) {
+        return Math.min(p.x - left, right - p.x, p.y - top, bottom - p.y);
+      }
+      const dx = p.x < left ? left - p.x : p.x > right ? p.x - right : 0;
+      const dy = p.y < top ? top - p.y : p.y > bottom ? p.y - bottom : 0;
+      return Math.hypot(dx, dy);
+    }
+
+    function selectNearestAnnotation(p) {
+      let best = null;
+      let bestDist = Infinity;
+      annotations.forEach((mark, idx) => {
+        const dist = markDistance(mark, p);
+        if (dist < bestDist) {
+          bestDist = dist;
+          best = idx;
+        }
+      });
+      selectAnnotation(bestDist <= 0.04 ? best : null);
+    }
+
     function point(evt) {
       const rect = canvasRef.current.getBoundingClientRect();
       const width = Math.max(rect.width, 1);
@@ -706,7 +750,10 @@
       const p = point(evt);
       const mark = Object.assign({}, draft, {x2: p.x, y2: p.y, end_ms: elapsedMs()});
       setDraft(null);
-      if (Math.abs(mark.x2 - mark.x1) + Math.abs(mark.y2 - mark.y1) < .015) return;
+      if (Math.abs(mark.x2 - mark.x1) + Math.abs(mark.y2 - mark.y1) < .015) {
+        if (tool === "arrow") selectNearestAnnotation(p);
+        return;
+      }
       const next = annotations.concat([annotate ? annotate(mark) : mark]);
       replaceAnnotations(next, next.length - 1);
     }

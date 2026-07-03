@@ -135,6 +135,9 @@ def test_react_shell_has_burned_screenshot_annotations(web_client):
     assert "drawer-collapsed" in js
     assert "Move annotation earlier" in js
     assert "Move annotation later" in js
+    assert "function selectNearestAnnotation" in js
+    assert "function markDistance" in js
+    assert 'if (tool === "arrow") selectNearestAnnotation(p);' in js
     assert "annotations: screenshot ? annotations : []" in js
     assert "rshell-annotation-note" in js
     assert "rshell-annotation-properties" in js
@@ -156,6 +159,9 @@ def test_react_shell_has_burned_screenshot_annotations(web_client):
     assert ".rshell-annotation-drawer" in css
     assert ".rshell-annotation-modal-body.drawer-collapsed" in css
     assert ".rshell-annotation-properties" in css
+    assert ".rshell-annotation-replay-shot .rshell-annotation-canvas" in css
+    assert "overflow: hidden" in css
+    assert "max-height: 100%" in css
     assert ".rshell-annotation-note input" in css
     assert ".rshell-annotation-summary" in css
     assert ".rshell-annotation-summary-row.selected" in css
