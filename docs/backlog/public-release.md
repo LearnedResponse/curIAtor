@@ -21,16 +21,18 @@ leave feedback → watch the fix land and the ⚙ reply arrive. Every item below
    a tag-vs-`pyproject.toml` version guard; `make release-check` now runs the local gate (lint, tests,
    strict public-gallery fresh-clone preflight, `docs/demo.gif` presence validation, package build, and `twine check`). The
    human release checklist now lives in [`docs/RELEASE.md`](../RELEASE.md). Local gate evidence from
-   July 2, 2026 at runner `b832c5c`: `make release-package-smoke` passed, including `make
+   July 2, 2026 at runner `dad6085`: `make release-package-smoke` passed, including `make
    release-check` with 290 tests, public-gallery
    fresh-clone preflight `3/3` with zero publish-artifact hits, validated the browser-captured
-   `docs/demo.gif`, built sdist/wheel, and `twine check` passed both artifacts. The final local launch
-   gate, `make release-launch-check`, also passed: strict release docs were clean and required plus
-   optional public-shaped galleries passed fresh-clone preflight `5/5`. Release metadata is cut locally
+   `docs/demo.gif`, built sdist/wheel, `twine check` passed both artifacts, and the installed-wheel
+   hosted-playground restore gate reports SQLite ledger checkpoint posture before copying. The final
+   local launch gate, `make release-launch-check`, also passed: strict release docs were clean and
+   required plus optional public-shaped galleries passed fresh-clone preflight `5/5`. Release metadata is cut locally
    for `0.2.0` / `2026-07-02` via `make release-prepare`. Public collection publication is now
    verified for the required three and optional public-shaped collections by the published-head gate,
    and the runner branch publication check is now part of the release preflight. `make
-   release-package-smoke` now adds a local installed-wheel quickstart proof before the off-machine pass.
+   release-package-smoke` now adds a local installed-wheel quickstart and restore-copy proof before the
+   off-machine pass.
    Remaining external setup is configuring the PyPI Trusted Publisher, enabling GitHub-to-Zenodo, and
    pushing the matching `v0.2.0` tag.
 2. **The hero `docs/demo.gif`** (absorbs the old M3) — done locally. The README now has a committed
