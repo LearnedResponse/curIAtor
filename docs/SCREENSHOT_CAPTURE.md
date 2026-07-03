@@ -35,12 +35,12 @@ Captured or uploaded screenshots can be annotated before saving. The composer ke
 with a screenshot thumbnail; opening that thumbnail gives the annotation tools a larger workspace, and
 closing it returns to the thumbnail while preserving the draft marks. The expanded editor keeps the
 structured mark list in a collapsed drawer by default; selecting a mark opens its properties for notes
-and ordering, newly drawn marks become selected immediately, and an arrow-mode click without a drag
-selects the nearest existing mark. The expanded image scales inside the modal instead of introducing
-an inner shot-pane scrollbar. The current v1 tools burn boxes, arrows, numbered pins, and redaction
-rectangles into the PNG in the browser, before it is posted to the feedback ledger. That keeps the
-existing task-bundle path unchanged while letting the agent read a marked-up image directly. In the
-React shell, non-redaction marks also store sanitized normalized
+and ordering, newly drawn marks become selected immediately, and a click without a drag in box, arrow,
+or redaction mode selects the nearest existing mark. The expanded image scales inside the modal instead
+of introducing an inner shot-pane scrollbar. The current v1 tools burn boxes, arrows, numbered pins,
+and redaction rectangles into the PNG in the browser, before it is posted to the feedback ledger. That
+keeps the existing task-bundle path unchanged while letting the agent read a marked-up image directly.
+In the React shell, non-redaction marks also store sanitized normalized
 coordinates, per-mark notes, and same-origin DOM target hints when available. Redactions and unreadable
 or cross-origin app frames intentionally save without DOM targets. Prior feedback threads can reopen
 saved annotated entries as a scrollable preview of the marked screenshot and structured mark list, or

@@ -714,6 +714,10 @@
       selectAnnotation(bestDist <= 0.04 ? best : null);
     }
 
+    function toolSelectsOnClick(value) {
+      return value === "arrow" || value === "box" || value === "redact";
+    }
+
     function point(evt) {
       const rect = canvasRef.current.getBoundingClientRect();
       const width = Math.max(rect.width, 1);
@@ -751,7 +755,7 @@
       const mark = Object.assign({}, draft, {x2: p.x, y2: p.y, end_ms: elapsedMs()});
       setDraft(null);
       if (Math.abs(mark.x2 - mark.x1) + Math.abs(mark.y2 - mark.y1) < .015) {
-        if (tool === "arrow") selectNearestAnnotation(p);
+        if (toolSelectsOnClick(tool)) selectNearestAnnotation(p);
         return;
       }
       const next = annotations.concat([annotate ? annotate(mark) : mark]);

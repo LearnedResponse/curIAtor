@@ -137,7 +137,9 @@ def test_react_shell_has_burned_screenshot_annotations(web_client):
     assert "Move annotation later" in js
     assert "function selectNearestAnnotation" in js
     assert "function markDistance" in js
-    assert 'if (tool === "arrow") selectNearestAnnotation(p);' in js
+    assert "function toolSelectsOnClick" in js
+    assert 'value === "arrow" || value === "box" || value === "redact"' in js
+    assert "if (toolSelectsOnClick(tool)) selectNearestAnnotation(p);" in js
     assert "annotations: screenshot ? annotations : []" in js
     assert "rshell-annotation-note" in js
     assert "rshell-annotation-properties" in js
