@@ -22,11 +22,12 @@ leave feedback → watch the fix land and the ⚙ reply arrive. Every item below
    a tag-vs-`pyproject.toml` version guard; `make release-check` now runs the local gate (lint, tests,
    strict public-gallery fresh-clone preflight, `docs/demo.gif` presence validation, package build, and `twine check`). The
    human release checklist now lives in [`docs/RELEASE.md`](../RELEASE.md). Latest local gate evidence
-   at runner `82d2bb0`: `make release-package-smoke` passed, including `make release-check` with 294
+   at runner `4e27ece`: `make release-package-smoke` passed, including `make release-check` with 299
    tests, public-gallery
    fresh-clone preflight `3/3` with zero publish-artifact hits, validated the browser-captured
    `docs/demo.gif`, built sdist/wheel, `twine check` passed both artifacts, and the installed-wheel
-   hosted-playground restore gate reports SQLite ledger checkpoint posture before copying. The final
+   hosted-playground restore gate reports SQLite ledger checkpoint posture before copying. Browser
+   smoke is now available inside release, playground, and backup-restore gates. The final
    local launch gate, `make release-launch-check`, also passed: strict release docs were clean and
    required plus optional public-shaped galleries passed fresh-clone preflight `5/5`. Release metadata is cut locally
    for `0.2.0` / `2026-07-02` via `make release-prepare`. Public collection publication is now
