@@ -33,7 +33,9 @@ can attach arbitrary pixels.
 
 Captured or uploaded screenshots can be annotated before saving. The composer keeps the rail compact
 with a screenshot thumbnail; opening that thumbnail gives the annotation tools a larger workspace, and
-closing it returns to the thumbnail while preserving the draft marks. The current v1 tools burn boxes,
+closing it returns to the thumbnail while preserving the draft marks. The expanded editor keeps the
+structured mark list in a collapsed drawer by default; selecting a mark opens its properties for notes
+and ordering, and newly drawn marks become selected immediately. The current v1 tools burn boxes,
 arrows, numbered pins, and redaction rectangles into the PNG in the browser, before it is posted to
 the feedback ledger. That keeps the existing task-bundle path unchanged while letting the agent read
 a marked-up image directly. In the React shell, non-redaction marks also store sanitized normalized

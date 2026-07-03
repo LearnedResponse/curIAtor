@@ -129,16 +129,46 @@
     return "";
   }
 
-  function AnnotationRows({marks}) {
+  function AnnotationRows({marks, selectedIndex, onSelect}) {
     return marks.map((mark, idx) => {
       const target = annotationTarget(mark);
-      return h("div", {className: "rshell-annotation-summary-row", key: idx},
+      const selected = selectedIndex === idx;
+      const selectable = typeof onSelect === "function";
+      const props = {
+        className: "rshell-annotation-summary-row" + (selected ? " selected" : ""),
+        key: idx
+      };
+      if (selectable) {
+        props.role = "button";
+        props.tabIndex = 0;
+        props.onClick = () => onSelect(idx);
+        props.onKeyDown = (evt) => {
+          if (evt.key === "Enter" || evt.key === " ") {
+            evt.preventDefault();
+            onSelect(idx);
+          }
+        };
+      }
+      return h("div", props,
         h("span", {className: "rshell-annotation-chip"}, annotationLabel(mark, idx)),
         h("span", {className: "rshell-annotation-copy"},
           mark.tool || "mark",
           mark.note ? " — " + mark.note : "",
           target ? h("code", {className: "rshell-annotation-target"}, target) : null));
     });
+  }
+
+  function AnnotationDrawer({marks, selectedIndex, onSelect, open, onToggle}) {
+    const count = (marks || []).length;
+    return h("div", {className: "rshell-annotation-replay-list rshell-annotation-drawer" + (open ? " open" : " collapsed")},
+      h("button", {className: "rshell-annotation-drawer-tab", type: "button",
+        title: open ? "Hide annotation list" : "Show annotation list", onClick: onToggle},
+        h("span", {className: "rshell-annotation-drawer-icon"}, open ? "›" : "‹"),
+        h("span", {className: "rshell-annotation-drawer-count"}, count)),
+      open ? h("div", {className: "rshell-annotation-drawer-panel"},
+        count
+          ? h(AnnotationRows, {marks, selectedIndex, onSelect})
+          : h("div", {className: "rshell-annotation-empty"}, "No annotations yet.")) : null);
   }
 
   function clamp01(value) {
@@ -381,15 +411,25 @@
     const narrative = useMemo(() => buildNarrative(entry), [entry]);
     const [editing, setEditing] = useState(false);
     const [draftMarks, setDraftMarks] = useState(copyAnnotations(marks));
+    const [draftSelected, setDraftSelected] = useState(null);
+    const [draftDrawerOpen, setDraftDrawerOpen] = useState(false);
     const [activeIndex, setActiveIndex] = useState(null);
     const [playing, setPlaying] = useState(false);
     const audioRef = useRef(null);
     useEffect(() => {
       setEditing(false);
       setDraftMarks(copyAnnotations(marks));
+      setDraftSelected(null);
+      setDraftDrawerOpen(false);
       setActiveIndex(null);
       setPlaying(false);
     }, [entry]);
+    useEffect(() => {
+      if (!draftMarks.length && draftSelected !== null) setDraftSelected(null);
+      else if (draftSelected !== null && draftSelected >= draftMarks.length) {
+        setDraftSelected(draftMarks.length - 1);
+      }
+    }, [draftMarks.length, draftSelected]);
     useEffect(() => {
       if (!playing || !narrative.length) return undefined;
       let pos = narrative.findIndex((row) => row.index === activeIndex);
@@ -424,7 +464,9 @@
     const editor = entry.shot_url ? h(AnnotationEditor, {
       image: entry.shot_url,
       annotations: draftMarks,
-      setAnnotations: setDraftMarks
+      setAnnotations: setDraftMarks,
+      selectedIndex: draftSelected,
+      setSelectedIndex: setDraftSelected
     }) : null;
     return h("div", {className: "rshell-modal-backdrop", onClick: onClose},
       h("div", {className: "rshell-annotation-modal", role: "dialog", "aria-modal": "true",
@@ -437,14 +479,16 @@
             editing && onUseDraft ? h("button", {className: "rshell-button secondary",
               disabled: !draftMarks.length, onClick: () => onUseDraft(entry, draftMarks)}, "Use as reply draft") : null),
           h("button", {className: "rshell-modal-close", title: "Close", onClick: onClose}, "×")),
-        h("div", {className: "rshell-annotation-modal-body"},
+        h("div", {className: "rshell-annotation-modal-body" + (editing && !draftDrawerOpen ? " drawer-collapsed" : "")},
           entry.shot_url ? h("div", {className: "rshell-annotation-replay-shot"},
             editing ? editor : preview) : null,
-          h("div", {className: "rshell-annotation-replay-list"},
-            !editing && entry.audio_url ? h("audio", {className: "rshell-narrative-audio",
-              controls: true, ref: audioRef, src: entry.audio_url}) : null,
-            !editing ? h(NarrativeReplay, {rows: narrative, activeIndex, setActiveIndex, playing, setPlaying}) : null,
-            h(AnnotationRows, {marks: editing ? draftMarks : marks})))));
+          editing ? h(AnnotationDrawer, {marks: draftMarks, selectedIndex: draftSelected,
+            onSelect: setDraftSelected, open: draftDrawerOpen, onToggle: () => setDraftDrawerOpen(!draftDrawerOpen)})
+            : h("div", {className: "rshell-annotation-replay-list"},
+              entry.audio_url ? h("audio", {className: "rshell-narrative-audio",
+                controls: true, ref: audioRef, src: entry.audio_url}) : null,
+              h(NarrativeReplay, {rows: narrative, activeIndex, setActiveIndex, playing, setPlaying}),
+              h(AnnotationRows, {marks})))));
   }
 
   function ShotThumbnail({image, annotations, onOpen}) {
@@ -460,6 +504,14 @@
   }
 
   function DraftAnnotationModal({image, annotations, setAnnotations, annotate, clockStart, onClose}) {
+    const [selectedAnnotation, setSelectedAnnotation] = useState(null);
+    const [drawerOpen, setDrawerOpen] = useState(false);
+    useEffect(() => {
+      if (!annotations.length && selectedAnnotation !== null) setSelectedAnnotation(null);
+      else if (selectedAnnotation !== null && selectedAnnotation >= annotations.length) {
+        setSelectedAnnotation(annotations.length - 1);
+      }
+    }, [annotations.length, selectedAnnotation]);
     if (!image) return null;
     return h("div", {className: "rshell-modal-backdrop", onClick: onClose},
       h("div", {className: "rshell-annotation-modal rshell-draft-annotation-modal",
@@ -468,15 +520,14 @@
           h("b", null, "Screenshot annotations"),
           h("div", {className: "rshell-modal-actions"},
             annotations.length ? h("button", {className: "rshell-button secondary",
-              onClick: () => setAnnotations([])}, "Clear") : null),
+              onClick: () => { setAnnotations([]); setSelectedAnnotation(null); }}, "Clear") : null),
           h("button", {className: "rshell-modal-close", title: "Close", onClick: onClose}, "×")),
-        h("div", {className: "rshell-annotation-modal-body"},
+        h("div", {className: "rshell-annotation-modal-body" + (drawerOpen ? "" : " drawer-collapsed")},
           h("div", {className: "rshell-annotation-replay-shot"},
-            h(AnnotationEditor, {image, annotations, setAnnotations, annotate, clockStart})),
-          h("div", {className: "rshell-annotation-replay-list"},
-            annotations.length
-              ? h(AnnotationRows, {marks: annotations})
-              : h("div", {className: "rshell-annotation-empty"}, "No annotations yet.")))));
+            h(AnnotationEditor, {image, annotations, setAnnotations, annotate, clockStart,
+              selectedIndex: selectedAnnotation, setSelectedIndex: setSelectedAnnotation})),
+          h(AnnotationDrawer, {marks: annotations, selectedIndex: selectedAnnotation,
+            onSelect: setSelectedAnnotation, open: drawerOpen, onToggle: () => setDrawerOpen(!drawerOpen)}))));
   }
 
   function composeShot(dataUrl, annotations) {
@@ -576,7 +627,7 @@
     return target ? Object.assign({}, mark, {target}) : mark;
   }
 
-  function AnnotationEditor({image, annotations, setAnnotations, annotate, clockStart}) {
+  function AnnotationEditor({image, annotations, setAnnotations, annotate, clockStart, selectedIndex, setSelectedIndex}) {
     const canvasRef = useRef(null);
     const imageRef = useRef(null);
     const clockRef = useRef(clockStart || performance.now());
@@ -608,6 +659,17 @@
 
     useEffect(redraw, [image, annotations, draft]);
 
+    function selectAnnotation(idx) {
+      if (typeof setSelectedIndex === "function") setSelectedIndex(idx);
+    }
+
+    function replaceAnnotations(next, nextSelected) {
+      setAnnotations(next);
+      if (typeof setSelectedIndex === "function") {
+        setSelectedIndex(next.length ? nextSelected : null);
+      }
+    }
+
     function point(evt) {
       const rect = canvasRef.current.getBoundingClientRect();
       const width = Math.max(rect.width, 1);
@@ -625,7 +687,8 @@
         const n = annotations.filter((m) => m.tool === "pin").length + 1;
         const t = elapsedMs();
         const mark = {tool, x1: p.x, y1: p.y, n, start_ms: t, end_ms: t};
-        setAnnotations(annotations.concat([annotate ? annotate(mark) : mark]));
+        const next = annotations.concat([annotate ? annotate(mark) : mark]);
+        replaceAnnotations(next, next.length - 1);
         return;
       }
       evt.currentTarget.setPointerCapture(evt.pointerId);
@@ -644,12 +707,26 @@
       const mark = Object.assign({}, draft, {x2: p.x, y2: p.y, end_ms: elapsedMs()});
       setDraft(null);
       if (Math.abs(mark.x2 - mark.x1) + Math.abs(mark.y2 - mark.y1) < .015) return;
-      setAnnotations(annotations.concat([annotate ? annotate(mark) : mark]));
+      const next = annotations.concat([annotate ? annotate(mark) : mark]);
+      replaceAnnotations(next, next.length - 1);
     }
 
     function note(idx, value) {
       setAnnotations(annotations.map((mark, i) => i === idx ? Object.assign({}, mark, {note: value}) : mark));
     }
+
+    function moveAnnotation(delta) {
+      if (selectedIndex === null || selectedIndex === undefined) return;
+      const from = selectedIndex;
+      const to = Math.max(0, Math.min(annotations.length - 1, from + delta));
+      if (from === to) return;
+      const next = annotations.slice();
+      const [mark] = next.splice(from, 1);
+      next.splice(to, 0, mark);
+      replaceAnnotations(next, to);
+    }
+
+    const selectedMark = selectedIndex === null || selectedIndex === undefined ? null : annotations[selectedIndex];
 
     const tools = [["box", "□"], ["arrow", "↗"], ["pin", "①"], ["redact", "█"]];
     return h("div", {className: "rshell-annotator"},
@@ -658,19 +735,31 @@
           className: "rshell-tool" + (tool === value ? " active" : ""),
           title: value, onClick: () => setTool(value)}, label)),
         h("button", {className: "rshell-tool", title: "Undo annotation",
-          disabled: !annotations.length, onClick: () => setAnnotations(annotations.slice(0, -1))}, "↶"),
+          disabled: !annotations.length, onClick: () => {
+            const next = annotations.slice(0, -1);
+            replaceAnnotations(next, next.length ? Math.min(selectedIndex ?? next.length - 1, next.length - 1) : null);
+          }}, "↶"),
         h("button", {className: "rshell-tool", title: "Clear annotations",
-          disabled: !annotations.length, onClick: () => setAnnotations([])}, "×")),
+          disabled: !annotations.length, onClick: () => replaceAnnotations([], null)}, "×")),
       h("div", {className: "rshell-annotation-stage"},
         h("img", {ref: imageRef, src: image, onLoad: redraw, style: {display: "none"}, alt: ""}),
         h("canvas", {ref: canvasRef, className: "rshell-annotation-canvas",
           onPointerDown: down, onPointerMove: move, onPointerUp: up, onPointerCancel: () => setDraft(null)})),
-      annotations.length ? h("div", {className: "rshell-annotation-notes"},
-        annotations.map((mark, idx) => h("label", {className: "rshell-annotation-note", key: idx},
-          h("span", null, annotationLabel(mark, idx)),
-          h("input", {value: mark.note || "", maxLength: 500, placeholder: "note…",
-            "aria-label": "annotation note " + annotationLabel(mark, idx),
-            onChange: (e) => note(idx, e.target.value)})))) : null);
+      selectedMark ? h("div", {className: "rshell-annotation-properties"},
+        h("div", {className: "rshell-annotation-property-head"},
+          h("span", {className: "rshell-annotation-chip"}, annotationLabel(selectedMark, selectedIndex)),
+          h("div", {className: "rshell-annotation-order"},
+            h("button", {className: "rshell-tool", title: "Move annotation earlier",
+              disabled: selectedIndex <= 0, onClick: () => moveAnnotation(-1)}, "↑"),
+            h("button", {className: "rshell-tool", title: "Move annotation later",
+              disabled: selectedIndex >= annotations.length - 1, onClick: () => moveAnnotation(1)}, "↓"),
+            h("button", {className: "rshell-tool", title: "Deselect annotation",
+              onClick: () => selectAnnotation(null)}, "×"))),
+        h("label", {className: "rshell-annotation-note"},
+          h("span", null, "note"),
+          h("input", {value: selectedMark.note || "", maxLength: 500, placeholder: "note…",
+            "aria-label": "annotation note " + annotationLabel(selectedMark, selectedIndex),
+            onChange: (e) => note(selectedIndex, e.target.value)}))) : null);
   }
 
   function Catalog({apps, selected, setSelected, search, setSearch, sort, setSort, reverse, setReverse,

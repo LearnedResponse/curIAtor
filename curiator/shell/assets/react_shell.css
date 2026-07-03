@@ -429,6 +429,27 @@ body {
   border-top: 1px solid #e5e5e5;
 }
 
+.rshell-annotation-properties {
+  display: grid;
+  gap: 6px;
+  padding: 7px;
+  border-top: 1px solid #e5e5e5;
+  background: #fcfcfc;
+}
+
+.rshell-annotation-property-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.rshell-annotation-order {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
 .rshell-annotation-note {
   display: grid;
   grid-template-columns: 30px minmax(0, 1fr);
@@ -549,6 +570,19 @@ body {
   grid-template-columns: 28px minmax(0, 1fr);
   align-items: start;
   gap: 6px;
+  padding: 4px;
+  border: 1px solid transparent;
+  border-radius: 5px;
+}
+
+.rshell-annotation-summary-row[role="button"] {
+  cursor: pointer;
+}
+
+.rshell-annotation-summary-row[role="button"]:hover,
+.rshell-annotation-summary-row.selected {
+  border-color: #d6bee2;
+  background: #faf6fc;
 }
 
 .rshell-annotation-chip {
@@ -688,6 +722,10 @@ body {
   grid-template-columns: minmax(0, 1fr) 260px;
 }
 
+.rshell-annotation-modal-body.drawer-collapsed {
+  grid-template-columns: minmax(0, 1fr) 44px;
+}
+
 .rshell-annotation-replay-shot {
   min-height: 0;
   overflow: auto;
@@ -797,6 +835,71 @@ body {
   max-height: 72vh;
   overflow: auto;
   padding: 10px;
+}
+
+.rshell-annotation-drawer {
+  background: #fbfbfb;
+}
+
+.rshell-annotation-drawer.collapsed {
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 0;
+  overflow: hidden;
+}
+
+.rshell-annotation-drawer.open {
+  display: grid;
+  align-content: start;
+  gap: 8px;
+}
+
+.rshell-annotation-drawer-tab {
+  display: inline-grid;
+  grid-template-columns: 12px 1fr;
+  align-items: center;
+  justify-items: center;
+  gap: 2px;
+  width: 30px;
+  min-height: 34px;
+  margin: 8px auto;
+  border: 1px solid #d8d8d8;
+  border-radius: 5px;
+  background: #fff;
+  color: #555;
+  cursor: pointer;
+  font: 700 13px/1 system-ui, sans-serif;
+  padding: 4px;
+}
+
+.rshell-annotation-drawer.open .rshell-annotation-drawer-tab {
+  justify-self: end;
+  width: auto;
+  min-width: 42px;
+  margin: 0;
+}
+
+.rshell-annotation-drawer-tab:hover {
+  border-color: #caa9d8;
+  background: #f8f2fb;
+}
+
+.rshell-annotation-drawer-icon {
+  font-size: 16px;
+}
+
+.rshell-annotation-drawer-count {
+  min-width: 16px;
+  border-radius: 999px;
+  background: #f1f1f1;
+  color: #555;
+  font-size: 11px;
+  line-height: 16px;
+}
+
+.rshell-annotation-drawer-panel {
+  min-width: 0;
 }
 
 .rshell-annotation-empty {
@@ -951,10 +1054,28 @@ body {
     grid-template-columns: 1fr;
   }
 
+  .rshell-annotation-modal-body.drawer-collapsed {
+    grid-template-columns: 1fr;
+    grid-template-rows: minmax(0, 1fr) 42px;
+  }
+
   .rshell-annotation-replay-shot {
     max-height: 52vh;
     border-right: 0;
     border-bottom: 1px solid #e5e5e5;
+  }
+
+  .rshell-annotation-drawer {
+    border-left: 0;
+    border-top: 1px solid #e5e5e5;
+  }
+
+  .rshell-annotation-drawer.collapsed {
+    justify-content: flex-start;
+  }
+
+  .rshell-annotation-drawer.collapsed .rshell-annotation-drawer-tab {
+    margin: 4px 8px;
   }
 
   .rshell-scrim {
