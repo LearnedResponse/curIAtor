@@ -87,6 +87,8 @@ def test_react_shell_has_burned_screenshot_annotations(web_client):
     assert "function AnnotationEditor" in js
     assert "function AnnotationSummary" in js
     assert "function AnnotationPreview" in js
+    assert "function ShotThumbnail" in js
+    assert "function DraftAnnotationModal" in js
     assert "function AnnotationReplayOverlay" in js
     assert "function VoiceSummary" in js
     assert "function buildNarrative" in js
@@ -124,6 +126,10 @@ def test_react_shell_has_burned_screenshot_annotations(web_client):
     assert "audio_ref: retainedAudioRef" in js
     assert "Use as reply draft" in js
     assert 'setShotSource("replay")' in js
+    assert "shotEditorOpen" in js
+    assert "Open expanded annotation view" in js
+    assert "rshell-shot-thumb" in js
+    assert "rshell-draft-annotation-modal" in js
     assert "annotations: screenshot ? annotations : []" in js
     assert "rshell-annotation-note" in js
     assert "rshell-annotation-summary" in js
@@ -137,6 +143,10 @@ def test_react_shell_has_burned_screenshot_annotations(web_client):
     assert "tool === \"redact\"" in js
     assert "anonymousHeld ? null" in js
     assert "rshell-annotation-canvas" in css
+    assert ".rshell-shot-thumb" in css
+    assert ".rshell-shot-thumb-frame" in css
+    assert ".rshell-shot-thumb-action" in css
+    assert ".rshell-annotation-empty" in css
     assert ".rshell-annotation-note input" in css
     assert ".rshell-annotation-summary" in css
     assert ".rshell-voice-summary" in css

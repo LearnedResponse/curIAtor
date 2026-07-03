@@ -31,7 +31,9 @@ manual fallback for attaching a cropped screenshot. Anonymous-held feedback only
 **Capture view**; upload and native screen capture are disabled and rejected server-side because they
 can attach arbitrary pixels.
 
-Captured or uploaded screenshots can be annotated before saving. The current v1 tools burn boxes,
+Captured or uploaded screenshots can be annotated before saving. The composer keeps the rail compact
+with a screenshot thumbnail; opening that thumbnail gives the annotation tools a larger workspace, and
+closing it returns to the thumbnail while preserving the draft marks. The current v1 tools burn boxes,
 arrows, numbered pins, and redaction rectangles into the PNG in the browser, before it is posted to
 the feedback ledger. That keeps the existing task-bundle path unchanged while letting the agent read
 a marked-up image directly. In the React shell, non-redaction marks also store sanitized normalized

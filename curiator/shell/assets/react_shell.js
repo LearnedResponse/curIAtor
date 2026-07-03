@@ -447,6 +447,38 @@
             h(AnnotationRows, {marks: editing ? draftMarks : marks})))));
   }
 
+  function ShotThumbnail({image, annotations, onOpen}) {
+    const marks = annotations || [];
+    return h("button", {className: "rshell-shot-thumb", type: "button",
+        title: "Open expanded annotation view", "aria-label": "Open expanded annotation view",
+        onClick: onOpen},
+      h("span", {className: "rshell-shot-thumb-frame"},
+        h("img", {src: image, alt: "captured screenshot"})),
+      h("span", {className: "rshell-shot-thumb-footer"},
+        h("span", null, "Screenshot"),
+        h("span", {className: "rshell-shot-thumb-action"}, marks.length ? "Annotate (" + marks.length + ")" : "Annotate")));
+  }
+
+  function DraftAnnotationModal({image, annotations, setAnnotations, annotate, clockStart, onClose}) {
+    if (!image) return null;
+    return h("div", {className: "rshell-modal-backdrop", onClick: onClose},
+      h("div", {className: "rshell-annotation-modal rshell-draft-annotation-modal",
+          role: "dialog", "aria-modal": "true", onClick: (e) => e.stopPropagation()},
+        h("div", {className: "rshell-modal-head"},
+          h("b", null, "Screenshot annotations"),
+          h("div", {className: "rshell-modal-actions"},
+            annotations.length ? h("button", {className: "rshell-button secondary",
+              onClick: () => setAnnotations([])}, "Clear") : null),
+          h("button", {className: "rshell-modal-close", title: "Close", onClick: onClose}, "×")),
+        h("div", {className: "rshell-annotation-modal-body"},
+          h("div", {className: "rshell-annotation-replay-shot"},
+            h(AnnotationEditor, {image, annotations, setAnnotations, annotate, clockStart})),
+          h("div", {className: "rshell-annotation-replay-list"},
+            annotations.length
+              ? h(AnnotationRows, {marks: annotations})
+              : h("div", {className: "rshell-annotation-empty"}, "No annotations yet.")))));
+  }
+
   function composeShot(dataUrl, annotations) {
     if (!dataUrl || (!annotations.length && String(dataUrl).startsWith("data:image"))) return Promise.resolve(dataUrl);
     return new Promise((resolve) => {
@@ -755,6 +787,7 @@
     const [shot, setShot] = useState(null);
     const [shotSource, setShotSource] = useState(null);
     const [annotations, setAnnotations] = useState([]);
+    const [shotEditorOpen, setShotEditorOpen] = useState(false);
     const [transcriptSegments, setTranscriptSegments] = useState([]);
     const [retainedAudioRef, setRetainedAudioRef] = useState(null);
     const [narrativeClockStart, setNarrativeClockStart] = useState(null);
@@ -792,6 +825,7 @@
       if (retainedAudioRef) setRetainedAudioRef(null);
       narrativeClockRef.current = null;
       if (narrativeClockStart !== null) setNarrativeClockStart(null);
+      setShotEditorOpen(false);
     }, [selected]);
 
     const items = feedback.items || [];
@@ -829,6 +863,7 @@
           setShot(null);
           setShotSource(null);
           setAnnotations([]);
+          setShotEditorOpen(false);
           setTranscriptSegments([]);
           setRetainedAudioRef(null);
           narrativeClockRef.current = null;
@@ -854,6 +889,7 @@
           setShot(canvas.toDataURL("image/png"));
           setShotSource("capture");
           setAnnotations([]);
+          setShotEditorOpen(false);
         })
         .catch((e) => setMsg("Capture failed: " + e));
     }
@@ -901,6 +937,7 @@
         setShot(dataUrl);
         setShotSource("native");
         setAnnotations([]);
+        setShotEditorOpen(false);
         setMsg("Native capture ready.");
       }).catch((e) => setMsg("Native capture failed: " + (e && e.message ? e.message : e)));
     }
@@ -1055,6 +1092,7 @@
         setShot(r.result);
         setShotSource("upload");
         setAnnotations([]);
+        setShotEditorOpen(false);
       };
       r.readAsDataURL(file);
     }
@@ -1078,6 +1116,7 @@
       setShot(entry.shot_url);
       setShotSource("replay");
       setAnnotations(copyAnnotations(marks));
+      setShotEditorOpen(true);
       setReplyTo({key: selected, id: entry.id});
       setPreviewEntry(null);
       setMsg("Loaded annotated screenshot as a reply draft.");
@@ -1096,6 +1135,8 @@
 
     return h("aside", {className: "rshell-feedback" + (open ? " open" : "") + (collapsed ? " collapsed" : "")},
       h(AnnotationPreview, {entry: previewEntry, onClose: () => setPreviewEntry(null), onUseDraft: useAnnotationDraft}),
+      shotEditorOpen ? h(DraftAnnotationModal, {image: shot, annotations, setAnnotations, annotate,
+        clockStart: narrativeClockStart, onClose: () => setShotEditorOpen(false)}) : null,
       h(AccountMenu, {boot}),
       h("div", {className: "rshell-feedback-head"},
         h("h4", null, "Feedback"),
@@ -1125,8 +1166,7 @@
           title: "Browser screen capture", onClick: nativeCapture}, "▣ Native"),
         anonymousHeld ? null : h("label", {className: "rshell-button secondary"}, "⬆ upload",
           h("input", {type: "file", accept: "image/*", style: {display: "none"}, onChange: (e) => upload(e.target.files[0])}))),
-      shot ? h(AnnotationEditor, {image: shot, annotations, setAnnotations, annotate,
-        clockStart: narrativeClockStart}) : null,
+      shot ? h(ShotThumbnail, {image: shot, annotations, onOpen: () => setShotEditorOpen(true)}) : null,
       h("button", {className: "rshell-button primary", onClick: save}, "Save feedback"),
       h("div", {className: "rshell-msg"}, msg),
       h("hr", {style: {border: "none", borderTop: "1px solid #eee"}}),
