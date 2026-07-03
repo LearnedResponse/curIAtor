@@ -1,11 +1,13 @@
 # Backlog — curiator-ML (import a well-scoped problem as an app)
 
-> **Status:** first local dogfood proof landed 2026-07-03 in `galleries/curiator-ml@a19184c`.
+> **Status:** first local dogfood proof landed 2026-07-03 in `galleries/curiator-ml@a19184c`;
+> first seeded feedback round landed at `galleries/curiator-ml@cec9143`.
 > The initial app is a credential-free Dash diagnostic benchmark with deterministic synthetic data,
 > validation accuracy/log-loss/Brier metrics, confusion matrix, calibration, slice errors, score history,
-> a seeded three-item diagnostic feedback queue, and a JSON metric smoke (`python benchmark_dashboard.py
-> --metrics-json`). Fresh-clone strict preflight and fresh-clone browser-smoke both pass for
-> `curiator-ml@a19184c`. Keep building local feedback rounds before public
+> per-slice selected-vs-linear improvement/regression deltas, a seeded diagnostic feedback queue, and a
+> JSON metric smoke (`python benchmark_dashboard.py --metrics-json`). Fresh-clone strict preflight and
+> fresh-clone browser-smoke passed for `curiator-ml@a19184c`; rendered browser smoke passed for
+> `curiator-ml@cec9143` on feedback `7e3612f4`. Keep building local feedback rounds before public
 > release; mark only true external blockers such as Kaggle credentials, competition data terms, or API
 > keys. Import a Kaggle competition — or any **well-scoped problem with a clear metric** — as a curiator
 > app whose web surface is **diagnostics / benchmarking / modeling**. Feedback on that surface drives the
@@ -51,12 +53,13 @@ hand-waving is even possible — the score is the ground truth.
    baseline-vs-interaction recipe. Next: generalize this into `curiator ml import` once one more
    benchmark shape proves the contract.
 2. **Diagnostic dashboard — first pass landed.** The app exposes score delta, confusion matrix,
-   calibration, slice error, feature recipe, and a JSON metric artifact. Next: add per-slice
-   improvement/regression summaries from the seeded feedback.
-3. **One feedback round that moves the metric — queued.** The app already shows a measured
+   calibration, selected-vs-linear slice deltas, feature recipe, and a JSON metric artifact. Next: add
+   the compact measured-score summary and confusion-matrix count/rate view from the remaining seeded
+   feedback.
+3. **Feedback rounds that move and explain the metric — in progress.** The app already shows a measured
    lift from the linear baseline to the interaction model (validation accuracy 79.7% → 88.4%; log loss
-   0.623 → 0.339), and the ledger contains three seeded diagnostic feedback items. Next: service those
-   items and commit the metric movement through git-as-memory.
+   0.623 → 0.339). Feedback `7e3612f4` is closed with per-slice improvement/regression deltas; the
+   remaining seeded items are metric-summary citation text and count+rate confusion-matrix diagnostics.
 4. **Async training — not needed for the first fast benchmark.** Keep this for larger benchmarks once the
    synchronous metric artifact has been dogfooded.
 
