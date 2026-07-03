@@ -165,6 +165,57 @@ def test_proxy_websocket_upgrade_reports_hmr_limit(shell_mod, monkeypatch, tmp_p
     assert "http://127.0.0.1:8700/@vite/client" in body
 
 
+def test_proxy_forwards_public_origin_and_prefix_headers(shell_mod, monkeypatch, tmp_path):
+    from io import BytesIO
+
+    captured = {}
+    monkeypatch.setattr(shell_mod, "_ensure_proxy", lambda key, rec: (True, None))
+
+    class FakeResponse:
+        status = 200
+        reason = "OK"
+        headers = {"Content-Type": "text/plain"}
+
+        def read(self):
+            return b"ok"
+
+    def fake_urlopen(req, timeout=None):
+        captured["url"] = req.full_url
+        captured["headers"] = dict(req.header_items())
+        return FakeResponse()
+
+    monkeypatch.setattr(shell_mod.urllib.request, "urlopen", fake_urlopen)
+    statuses = []
+
+    def start_response(status, headers):
+        statuses.append((status, headers))
+
+    body = b"".join(shell_mod._proxy_call(
+        "react_board",
+        {"root": str(tmp_path), "mount": {"kind": "proxy", "cmd": "npm run dev", "port": 8700}},
+        "/assets/app.js",
+        {
+            "REQUEST_METHOD": "GET",
+            "QUERY_STRING": "v=1",
+            "HTTP_HOST": "curiator.example.test",
+            "HTTP_X_FORWARDED_PROTO": "https",
+            "HTTP_X_FORWARDED_FOR": "203.0.113.10",
+            "REMOTE_ADDR": "127.0.0.1",
+            "wsgi.input": BytesIO(b""),
+        },
+        start_response,
+    ))
+
+    assert statuses[0][0] == "200 OK"
+    assert body == b"ok"
+    assert captured["url"] == "http://127.0.0.1:8700/assets/app.js?v=1"
+    assert captured["headers"]["X-forwarded-host"] == "curiator.example.test"
+    assert captured["headers"]["X-forwarded-proto"] == "https"
+    assert captured["headers"]["X-forwarded-for"] == "203.0.113.10, 127.0.0.1"
+    assert captured["headers"]["X-forwarded-prefix"] == "/app/react_board"
+    assert captured["headers"]["X-script-name"] == "/app/react_board"
+
+
 # ── boot + the pages that crashed ────────────────────────────────────────────
 def test_index_and_general_serve(client):
     assert client.get("/").status_code == 200            # the Dash shell index

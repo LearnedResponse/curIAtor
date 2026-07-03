@@ -147,7 +147,10 @@ only at scaffold/import time.
    proxy failures now render a diagnostic page with
    command/cwd/port/target/process state plus recent stdout/stderr. WebSocket/HMR
    upgrade requests now get an explicit lightweight-proxy diagnostic instead of falling through the
-   HTTP proxy path, and `curiator doctor` warns when proxy commands look like HMR-oriented framework dev
+   HTTP proxy path. Ordinary HTTP proxy requests now forward `X-Forwarded-Host`,
+   `X-Forwarded-Proto`, `X-Forwarded-For`, `X-Forwarded-Prefix`, and `X-Script-Name`, giving
+   mounted apps enough origin and base-path context to generate `/app/<name>`-relative URLs, and
+   `curiator doctor` warns when proxy commands look like HMR-oriented framework dev
    servers or when Vite/Next/FastAPI/Gradio/Streamlit mounts are missing the base-path/root-path config
    needed under `/app/<name>/`. Doctor also warns when optional Python framework apps such as FastAPI,
    Gradio, or Streamlit lack a dependency manifest, which keeps proxy scaffolds portable before

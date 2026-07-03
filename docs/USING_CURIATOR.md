@@ -133,6 +133,9 @@ recent stdout/stderr from the launched process. The built-in proxy is intentiona
 framework dev server sends WebSocket upgrade requests for HMR, curIAtor returns an explicit
 WebSocket/HMR diagnostic rather than silently failing. Use the scaffold `commands.preview` path or put
 a full reverse proxy such as nginx/Caddy in front when live HMR is required.
+For ordinary HTTP requests, the built-in proxy forwards the public mount context with
+`X-Forwarded-Host`, `X-Forwarded-Proto`, `X-Forwarded-For`, `X-Forwarded-Prefix`, and
+`X-Script-Name` so app frameworks can infer their `/app/<name>` base path.
 
 You can also register an existing app manually: drop `apps/<name>.py` (exposing
 `build_app() -> dash.Dash`, plus a module-level `app`), then add an entry to `gallery.yaml`:

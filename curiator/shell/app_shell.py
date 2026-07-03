@@ -1328,6 +1328,26 @@ def _proxy_backend_path(key: str, rest: str, mount_cfg: dict) -> str:
     return path
 
 
+def _proxy_forward_headers(key: str, environ) -> dict[str, str]:
+    """Context headers a path-mounted app can use to discover curIAtor's public origin/prefix."""
+    headers: dict[str, str] = {}
+    host = environ.get("HTTP_HOST") or ""
+    scheme = environ.get("HTTP_X_FORWARDED_PROTO") or environ.get("wsgi.url_scheme") or "http"
+    prefix = f"/app/{key}"
+    remote = environ.get("REMOTE_ADDR") or ""
+    existing_for = environ.get("HTTP_X_FORWARDED_FOR") or ""
+    forwarded_for = ", ".join(part for part in (existing_for, remote) if part)
+    if host:
+        headers["X-Forwarded-Host"] = host
+    if scheme:
+        headers["X-Forwarded-Proto"] = scheme
+    if forwarded_for:
+        headers["X-Forwarded-For"] = forwarded_for
+    headers["X-Forwarded-Prefix"] = prefix
+    headers["X-Script-Name"] = prefix
+    return headers
+
+
 def _proxy_call(key: str, rec: dict, rest: str, environ, start_response):
     ok, err = _ensure_proxy(key, rec)
     if not ok:
@@ -1356,6 +1376,7 @@ def _proxy_call(key: str, rec: dict, rest: str, environ, start_response):
             headers[h] = v
     if environ.get("CONTENT_TYPE"):
         headers["Content-Type"] = environ["CONTENT_TYPE"]
+    headers.update(_proxy_forward_headers(key, environ))
     req = urllib.request.Request(url, data=body, headers=headers, method=method)
     last_exc = None
     for _ in range(20):
