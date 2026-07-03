@@ -88,15 +88,18 @@ leave feedback → watch the fix land and the ⚙ reply arrive. Every item below
    `curiator-finance` is now a verified optional fourth: its public-demo posture is pinned/no-login,
    the stale machine-local ledger note is sanitized, and
    `curiator release-preflight --gallery curiator-finance --fresh-clone --strict` passes at `d6270bd`.
-   `curiator-phylogenetics` is also a verified paper-linked optional collection at `b1b3586`. To check
-   the minimum set plus these optional public-shaped collections, run
+   `curiator-phylogenetics` is also a verified paper-linked optional collection at `0095229`; its
+   static GitHub Pages publishing path is prepared, with the public URL still external. To check the
+   minimum set plus these optional public-shaped collections, run
    `curiator release-preflight --include-optional --fresh-clone --strict`. The three above remain the
    minimum release set unless scope expands. On 2026-07-02,
    `curiator release-preflight --include-optional --fresh-clone --strict --require-public-remotes
    --require-published-head --require-runner-public-remote --require-runner-published-head --no-smoke`
    passed for all five public-shaped galleries plus the published runner branch: required
    `curiator-aviato@3719ac9`, `curiator-ot@36e21cf`, `curiator-geometry@30bb155`, plus optional
-   `curiator-finance@d6270bd` and `curiator-phylogenetics@b1b3586`.
+   `curiator-finance@d6270bd` and `curiator-phylogenetics@b1b3586`. After the local Pages publishing
+   commit, `curiator release-preflight --gallery curiator-phylogenetics --fresh-clone --strict --json`
+   passes at `0095229`; rerun the full published-head gate after pushing that optional repo head.
 5. **SECURITY.md — reviewed against current defaults; re-read once at release cut.** The product auto-runs a coding agent against
    feedback text. The first policy now states: one-container-per-collection as the blast-radius unit,
    the autonomy dial, group-gated elevated profiles, dispatch quotas/trusted dispatch groups as admission

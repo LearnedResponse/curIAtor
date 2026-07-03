@@ -73,7 +73,7 @@ python docs/paper/figures/render_shell_feedback_panel.py
 Markdown source from a published collection with:
 
 ```bash
-git -C galleries/curiator-phylogenetics log --format='%h %s%n%b----' -3
+git -C galleries/curiator-phylogenetics log --grep='^curator' --format='%h %s%n%b----' -3
 ```
 
 Regenerate the OT/HMI rainbow-to-HP-HMI before/after figure with:

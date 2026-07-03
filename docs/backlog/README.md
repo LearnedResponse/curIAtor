@@ -37,7 +37,8 @@ implementation, release action, or external operating step; shipped items move t
   Dash explorer **and a working Pyodide static port**. A domain-specialized sibling of
   [**math-geometry-collection**](completed/math-geometry-collection.md) for the phylo-networks
   community; first client-side-WASM-compute collection; the full eight-item seeded feedback loop is
-  complete through `b1b3586`, and it ships with the paper's outreach.
+  complete through `b1b3586`, the static GitHub Pages publishing path is prepared at `0095229`, and
+  the remaining work is external deploy/URL wiring plus optional expansion apps.
 
 ## Shipped
 

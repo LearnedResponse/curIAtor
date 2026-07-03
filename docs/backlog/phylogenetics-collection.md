@@ -6,8 +6,10 @@
 > explorer (`tinnik_dash`). The seeded feedback loop is complete on `curiator/auto` through `b1b3586`:
 > five static-app receipts and three Dash receipts cover the CF ternary explanation, boot-status
 > phases, network-selector caveat, strictness-witness label, CF triple classifier, gamma-control copy,
-> claim-boundary panel, and paper-story section map. Captured 2026-06-30; first scaffold landed
-> 2026-07-02.
+> claim-boundary panel, and paper-story section map. Static GitHub Pages publishing is now prepared at
+> `0095229` with a Pages workflow, `.nojekyll`, and publishing docs; remaining public-hosting work is
+> external: enable/run Pages, capture the public URL, and link it from the paper/release surfaces.
+> Captured 2026-06-30; first scaffold landed 2026-07-02.
 
 ## The pitch
 
@@ -70,8 +72,11 @@ server, no re-implementation.
    continuous-walls-3D), plus the displayed-trees → tree-of-blobs viewers
    (`viz_displayed_trees`), BHV geodesics, and `walls_3d`. Tag each **instrument** (paper
    evidence) / **explainer** / **toy**, per the same discipline as the paper hygiene lint.
-4. **Public hosting.** Deploy the static / Pyodide apps to GitHub Pages (or a public
-   curiator instance) and **link them from the paper** ("interactive companion at [URL]").
+4. **Public hosting.** Local publishing path is prepared: `.github/workflows/pages.yml` validates the
+   static Python/JS assets, uploads `apps/tinnik_pyodide_static/`, and deploys via GitHub Pages Actions;
+   `.nojekyll` keeps the Python/Pyodide assets served directly. Remaining external work: enable Pages
+   from GitHub Actions, run the workflow on the public repo, capture the URL, and **link it from the
+   paper** ("interactive companion at [URL]").
 5. **Seeded phylogeneticist feedback** (`seed/feedback.yaml`, authored as a
    computational-phylogeneticist — **this is where Adam's domain voice plugs in**): ~8–12
    items such as *"overlay the empirical CFs on the theoretical ternary," "let me paste my
@@ -93,14 +98,17 @@ server, no re-implementation.
   errors or warnings.
 - `CURIATOR_GALLERY=galleries/curiator-phylogenetics/gallery.yaml curiator smoke`: passing for both
   apps (`tinnik_static`, `tinnik_dash`).
-- `curiator stats --json`: 8 cycles, 8 replied/done cycles, 8 curator commits, latest `b1b3586`.
+- `curiator stats --json`: 8 cycles, 8 replied/done cycles, 8 curator commits, latest feedback-loop
+  receipt `b1b3586`.
 - `curiator release-preflight --gallery curiator-phylogenetics --fresh-clone --json`: passing at
-  `b1b3586`; the temp clone runs both app smoke hooks and finds no tracked machine-local paths.
+  `0095229`; the temp clone runs both app smoke hooks and finds no tracked machine-local paths.
 - Static app checks: `python -m py_compile ...` and `node --check app.js` passed; a temporary
   `python -m http.server` on port 8751 returned HTTP 200 for `/`.
+- Static publishing checks: `.github/workflows/pages.yml` parses as YAML, the workflow's Python syntax
+  check avoids writing `__pycache__` into the Pages artifact, and `.nojekyll` is included.
 - Dash app check: `python -m compileall -q apps/tinnik_dash_explorer` passed.
 - `galleries/curiator-phylogenetics` is initialized as its own git repo with seed commit `713b39e`;
-  the current `curiator/auto` head is `b1b3586`.
+  the current head is `0095229`.
 
 ## Expansion apps (beyond the seed)
 

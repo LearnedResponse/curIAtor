@@ -4,7 +4,7 @@ Source command, run from the curIAtor runner checkout after the local `curiator-
 seed loop completed:
 
 ```bash
-git -C galleries/curiator-phylogenetics log --format='%h %s%n%b----' -3
+git -C galleries/curiator-phylogenetics log --grep='^curator' --format='%h %s%n%b----' -3
 ```
 
 Excerpt:
