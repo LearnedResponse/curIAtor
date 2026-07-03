@@ -44,6 +44,8 @@ paper-stats: release-evidence  ## refresh the companion paper's tracked case-stu
 	python scripts/update_paper_stats.py --stats-file release-evidence/case-study-stats.md
 paper-pdf:  ## export the companion paper PDF into ignored release-evidence/
 	mkdir -p release-evidence
+	python docs/paper/figures/render_feedback_loop.py
+	python docs/paper/figures/render_provenance_log_excerpt.py
 	pandoc docs/paper/curiator-paper.md --from markdown --pdf-engine=xelatex --resource-path=docs/paper:. --output release-evidence/curiator-paper.pdf
 reset-demo:     ## rewind for another take: re-break aviato, clear the ledger
 	curiator reset-demo

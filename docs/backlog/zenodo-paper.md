@@ -4,8 +4,10 @@
 > Markdown draft scaffold, draft related-work prose, draft acknowledgements, and command-backed
 > `curiator stats --output` / `curiator release-preflight --output` evidence snapshots have landed.
 > The public-collection publication blocker is cleared at the release-candidate heads; `make paper-stats`
-> now refreshes the paper table from the three published example collections. Paper/DOI publication work
-> is still blocked on the tagged release, Zenodo wiring, and final PDF review/deposit. A citable
+> now refreshes a PDF-friendly paper summary from the three published example collections, while
+> `make paper-pdf` regenerates the loop/provenance figures and exports a locally reviewed manuscript
+> PDF. Paper/DOI publication work is still blocked on the tagged release, Zenodo wiring, and final
+> human PDF review/deposit. A citable
 > software/systems paper, self-archived on **Zenodo** with a DOI. Sequences last:
 > the three public collections are its evaluation, so [public-release](public-release.md) → the
 > collections → this.
@@ -58,9 +60,10 @@ the durable record of that conversation.
    plotting scripts. `curiator stats compare <gallery>...` now emits the cross-collection case-study
    table directly, and `--output <path>` writes any selected stats report as a named paper evidence
    artifact without shell redirection.
-   The release-candidate table in `docs/paper/curiator-paper.md` now cites the exact command-backed
-   snapshot from the three published example collection heads. Remaining paper work: rerun this at tag
-   cut if any release head changes, then archive/cite the final output.
+   The release-candidate summary in `docs/paper/curiator-paper.md` now cites the exact command-backed
+   snapshot from the three published example collection heads while keeping the full wide table in
+   `release-evidence/`. Remaining paper work: rerun this at tag cut if any release head changes, then
+   archive/cite the final output.
 3. Draft in `docs/paper/` (markdown → pandoc PDF) — scaffolded with `curiator-paper.md` and
    `reproducibility.md`, including release-time `curiator stats` commands and a dated
    release-candidate evidence snapshot instead of invented numbers. The loop diagram source has landed at
@@ -70,11 +73,13 @@ the durable record of that conversation.
    `docs/paper/figures/render_shell_feedback_panel.py`. The OT rainbow→ISA-101 before/after figure
    and renderer have landed at `docs/paper/figures/ot-rainbow-before-after.png` and
    `docs/paper/figures/render_ot_before_after.py`. The related-work and acknowledgement draft
-   placeholders have also been filled. The release-candidate case-study table has been refreshed from
-   `make paper-stats` after public-head preflight passed, and `make paper-pdf` now exports the ignored
-   manuscript PDF under `release-evidence/` with Pandoc/XeLaTeX. Remaining paper work is tag-time
-   evidence refresh if needed, citation refresh, final acknowledgements, final PDF review, and Zenodo
-   deposit, not missing draft prose or draft figures.
+   placeholders have also been filled. The release-candidate case-study summary has been refreshed from
+   `make paper-stats` after public-head preflight passed. `make paper-pdf` now regenerates the
+   feedback-loop and provenance-excerpt PNGs from repo-native sources and exports the ignored
+   manuscript PDF under `release-evidence/` with Pandoc/XeLaTeX; the local PDF smoke/review passes at
+   seven pages with embedded Figures 1-4. Remaining paper work is tag-time evidence refresh if needed,
+   citation refresh, final acknowledgements, final human PDF review, and Zenodo deposit, not missing
+   draft prose or draft figures.
 4. Deposit on Zenodo; DOI badge in the README; decide on the JOSS submission after.
 
 ## Guardrails

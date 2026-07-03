@@ -30,17 +30,86 @@ def _stats_body(markdown: str) -> str:
     return "\n".join(lines).strip()
 
 
-def build_block(markdown: str, *, command: str, date: str) -> str:
+def _table_cells(line: str) -> list[str]:
+    return [cell.strip() for cell in line.strip().strip("|").split("|")]
+
+
+def _compact_stats_body(markdown: str) -> str:
     body = _stats_body(markdown)
+    lines = body.splitlines()
+    runner = next((line for line in lines if line.startswith("_Runner:")), "")
+    totals = next((line for line in lines if line.startswith("_Totals:")), "")
+    try:
+        header_idx = next(idx for idx, line in enumerate(lines) if line.startswith("| Collection |"))
+    except StopIteration:
+        return body
+    headers = _table_cells(lines[header_idx])
+    rows = []
+    for line in lines[header_idx + 2:]:
+        if not line.startswith("|"):
+            break
+        cells = _table_cells(line)
+        rows.append(dict(zip(headers, cells)))
+    required = {
+        "Collection",
+        "Git head",
+        "Cycles",
+        "Direct fixes",
+        "Proposals",
+        "Human intervention",
+        "Median reply",
+        "Curator commits",
+    }
+    if not rows or any(not required <= set(row) for row in rows):
+        return body
+    out = []
+    if runner:
+        out.extend([runner, ""])
+    out.extend(["Compact manuscript summary:", ""])
+    for row in rows:
+        out.append(
+            "- `{collection}` (`{head}`): {cycles} cycles; direct/proposal/human "
+            "{direct} / {proposals} / {human}; median reply {median}; {commits} curator commits.".format(
+                collection=row["Collection"],
+                head=row["Git head"],
+                cycles=row["Cycles"],
+                direct=row["Direct fixes"],
+                proposals=row["Proposals"],
+                human=row["Human intervention"],
+                median=row["Median reply"],
+                commits=row["Curator commits"],
+            )
+        )
+    if totals:
+        out.extend(["", totals])
+    out.extend([
+        "",
+        "The full command output, including reply-rate, no-dispatch, and agent-note columns, is kept in "
+        "`release-evidence/case-study-stats.md` and `release-evidence/case-study-stats.json`.",
+    ])
+    return "\n".join(out).strip()
+
+
+def build_block(markdown: str, *, command: str, date: str) -> str:
+    body = _compact_stats_body(markdown)
     return (
         f"{START}\n"
-        f"The current case-study table was generated on {date} with:\n\n"
+        f"The current case-study summary was generated on {date} with:\n\n"
         "```bash\n"
-        f"{command}\n"
+        f"{_format_command(command)}\n"
         "```\n\n"
         f"{body}\n"
         f"{END}"
     )
+
+
+def _format_command(command: str) -> str:
+    prefix = "curiator stats compare "
+    suffix = " --markdown"
+    if len(command) <= 88 or not (command.startswith(prefix) and command.endswith(suffix)):
+        return command
+    galleries = command[len(prefix):-len(suffix)].split()
+    return "curiator stats compare \\\n  " + " \\\n  ".join(galleries) + " \\\n  --markdown"
 
 
 def replace_block(text: str, block: str) -> str:

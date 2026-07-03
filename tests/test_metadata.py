@@ -84,11 +84,15 @@ def test_release_evidence_target_writes_ignored_artifacts():
     assert "paper-pdf:" in makefile
     assert "scripts/smoke_release_package.py" in makefile
     assert "scripts/update_paper_stats.py" in makefile
+    assert "docs/paper/figures/render_feedback_loop.py" in makefile
+    assert "docs/paper/figures/render_provenance_log_excerpt.py" in makefile
     assert "release-evidence/release-preflight.json" in makefile
     assert "release-evidence/release-package-smoke.json" in makefile
     assert "release-evidence/case-study-stats.json" in makefile
     assert "release-evidence/curiator-paper.pdf" in makefile
     assert "release-evidence/" in gitignore
+    assert Path("docs/paper/figures/feedback-loop.png").exists()
+    assert Path("docs/paper/figures/provenance-log-excerpt.png").exists()
 
 
 def test_legacy_live_session_watcher_is_not_shipped():

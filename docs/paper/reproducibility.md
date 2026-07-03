@@ -33,10 +33,11 @@ snapshot because it records the exact command product without shell-specific red
 snapshots under the gitignored `release-evidence/` directory because they include local checkout and
 clone paths; commit only the portable Markdown/table excerpts that the paper actually cites.
 `make release-evidence` refreshes the standard local bundle under `release-evidence/`; `make
-paper-stats` reruns that bundle and refreshes the marked case-study stats block in
-`curiator-paper.md` from the generated Markdown table. `make paper-pdf` exports
-`release-evidence/curiator-paper.pdf` from the tracked Markdown draft with Pandoc/XeLaTeX; keep that
-PDF out of git and attach/review it as the Zenodo manuscript artifact.
+paper-stats` reruns that bundle and refreshes the marked case-study summary block in
+`curiator-paper.md` from the generated Markdown table. `make paper-pdf` regenerates the loop and
+git-log provenance PNG figures, then exports `release-evidence/curiator-paper.pdf` from the tracked
+Markdown draft with Pandoc/XeLaTeX; keep that PDF out of git and attach/review it as the Zenodo
+manuscript artifact.
 
 For per-collection appendix tables:
 
@@ -56,8 +57,9 @@ CURIATOR_GALLERY=galleries/curiator-geometry/gallery.yaml curiator stats --csv
 
 ## Figures
 
-`figures/feedback-loop.mmd` is the source for the feedback-loop diagram. Regenerate or embed it from
-the Mermaid source at release time; do not hand-redraw a divergent copy.
+`figures/feedback-loop.mmd` is the source for the feedback-loop diagram.
+`figures/render_feedback_loop.py` renders it to `figures/feedback-loop.png`; `make paper-pdf` runs this
+renderer before export. Do not hand-redraw a divergent copy.
 
 Regenerate the shell and feedback-panel figure with:
 
@@ -65,8 +67,10 @@ Regenerate the shell and feedback-panel figure with:
 python docs/paper/figures/render_shell_feedback_panel.py
 ```
 
-`figures/provenance-log-excerpt.md` is the source for the git-as-memory excerpt. Refresh it from a
-published collection with:
+`figures/provenance-log-excerpt.md` is the source for the git-as-memory excerpt.
+`figures/render_provenance_log_excerpt.py` renders the first excerpted commit to
+`figures/provenance-log-excerpt.png`; `make paper-pdf` runs this renderer before export. Refresh the
+Markdown source from a published collection with:
 
 ```bash
 git -C galleries/curiator-phylogenetics log --format='%h %s%n%b----' -3
@@ -80,17 +84,17 @@ python docs/paper/figures/render_ot_before_after.py
 
 ## Current release-candidate snapshot
 
-The current tracked paper table is a release-candidate evidence snapshot: the required collection
+The current tracked paper summary is a release-candidate evidence snapshot: the required collection
 heads are public, and the release preflight verifies their published heads from fresh temporary clones.
 It is still not DOI evidence until the tagged GitHub release is archived by Zenodo.
 
-Refresh the tracked Markdown table with:
+Refresh the tracked Markdown summary with:
 
 ```bash
 make paper-stats
 ```
 
-Before publishing, rerun the public-head gate and confirm the collection heads in the paper table still
+Before publishing, rerun the public-head gate and confirm the collection heads in the paper summary still
 match the release repositories:
 
 ```bash

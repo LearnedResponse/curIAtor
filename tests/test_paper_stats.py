@@ -31,9 +31,11 @@ def test_update_paper_stats_replaces_only_marked_block():
     markdown = (
         "# curIAtor Stats Compare\n\n"
         "_Runner: curIAtor 0.2.0, main@abc1234, clean._\n\n"
-        "| Collection | Git head | Cycles |\n"
-        "|---|---|---:|\n"
-        "| demo | main@def5678 | 1 |\n\n"
+        "| Collection | Git head | Cycles | Direct fixes | Proposals | No dispatch | "
+        "Human intervention | Replied | Reply rate | Median reply | Agent notes | Curator commits |\n"
+        "|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|\n"
+        "| demo | main@def5678 | 1 | 1 (100.0%) | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) | "
+        "1 | 100.0% | 1m 2s | 1 | 1 |\n\n"
         "_Totals: 1 collections, 1 cycles, 1 replied (100.0%), "
         "1 direct fixes (100.0%), 0 proposals (0.0%), "
         "0 human intervention (0.0%), 1 curator commits._\n"
@@ -46,7 +48,12 @@ def test_update_paper_stats_replaces_only_marked_block():
     assert "after" in updated
     assert "old table" not in updated
     assert "_Runner: curIAtor 0.2.0, main@abc1234, clean._" in updated
-    assert "| demo | main@def5678 | 1 |" in updated
+    assert "The current case-study summary was generated on 2026-07-02 with:" in updated
+    assert (
+        "- `demo` (`main@def5678`): 1 cycles; direct/proposal/human "
+        "1 (100.0%) / 0 (0.0%) / 0 (0.0%); median reply 1m 2s; 1 curator commits."
+    ) in updated
+    assert "release-evidence/case-study-stats.md" in updated
     assert "curiator stats compare demo --markdown" in updated
 
 
