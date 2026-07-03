@@ -298,7 +298,9 @@ with app counts, General feedback, and ready commands instead of failing.
 
 This is not a second memory system. `curiator work` marks the feedback `working` and writes
 `feedback/tasks/<id>.md`; `curiator done` posts the ⚙ reply, reloads the app, and uses the same
-git-as-memory commit path as the watcher when `git.commit: true`.
+git-as-memory commit path as the watcher when `git.commit: true`. A running React shell also watches
+app source signatures on its normal poll; if the direct reload poke misses the service, the next poll
+invalidates changed app mounts and remounts the iframe without a process restart.
 
 You can also add feedback from the terminal:
 

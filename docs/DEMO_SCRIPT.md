@@ -48,8 +48,9 @@ again (or just `curiator reset-demo` while it's running) — it's idempotent.
   thing competitors literally can't do (cross-origin), so it should read as the "wow."
 - The agent reply is **auto-generated and varies run-to-run** — the wording above is representative.
   Credibility comes from its specificity (it names what it changed), so let the real text show.
-- The fix goes live without a restart: `curiator reply … --status done` pokes the shell's `/reload`
-  endpoint, which rebuilds `aviato` from the edited source. The human just **refreshes** to see it.
+- The fix goes live without a service restart: `curiator reply … --status done` pokes the shell's
+  `/reload` endpoint, and the React shell's normal poll also invalidates app mounts whose source
+  changed on disk, then remounts the open iframe with a revision-busted URL.
 - A clean agent turn is ~20–60s. If that's long for a live take, pre-warm and trim; the *story*
   (point → fix) is what has to land, not the wall-clock.
 - Title-card music optional; the SV crowd will catch `aviato` with zero help.

@@ -45,6 +45,7 @@ def _metrics(key: str) -> dict:
 
 
 def _apps_payload() -> list[dict]:
+    core.refresh_changed_app_sources()
     apps = []
     for rec in core.REGISTRY:
         apps.append({

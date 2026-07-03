@@ -102,8 +102,9 @@ def _post_reply(cfg: dict, app: str, feedback_id: str, text: str, status: str | 
     # On `done`, the agent has just edited the app — make the fix live in a running shell.
     if status == "done":
         msg = _reload_in_shell(cfg, app)
-        print(f"curiator: {msg}" if msg else "curiator: shell not reachable — reload skipped "
-              "(the fix shows once `curiator up` reloads the app).")
+        print(f"curiator: {msg}" if msg else "curiator: shell not reachable — direct reload skipped "
+              "(a running React shell also picks up changed app sources on its poll; otherwise the fix "
+              "shows once `curiator up` reloads the app).")
     return 0
 
 
@@ -269,7 +270,8 @@ def cmd_revert(args) -> int:
     print(f"curiator: reverted {res['reverted']} → {res['sha']} ({scope}); thread on {res.get('app')} intact")
     if res.get("reverted_source"):
         msg = _reload_in_shell(cfg, res["app"])
-        print(f"curiator: {msg}" if msg else "curiator: shell not reachable — reload skipped.")
+        print(f"curiator: {msg}" if msg else "curiator: shell not reachable — direct reload skipped "
+              "(a running React shell also picks up changed app sources on its poll).")
     return 0
 
 
@@ -556,7 +558,6 @@ def cmd_queue(args) -> int:
     else:
         print(f"curiator: rejected {app}/{entry['id']} → rejected")
     return 0
-
 
 
 

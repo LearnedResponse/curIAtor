@@ -115,7 +115,8 @@ def cmd_reload(args) -> int:
     """Drop a running shell's cached build of <app> so its edited source rebuilds on the next view."""
     cfg = load_config()
     msg = _reload_in_shell(cfg, args.app)
-    print(f"curiator: {msg}" if msg else "curiator: shell not reachable on the configured port.")
+    print(f"curiator: {msg}" if msg else "curiator: shell not reachable on the configured port "
+          "(a running React shell also picks up changed app sources on its poll).")
     return 0
 
 
@@ -160,5 +161,4 @@ def cmd_reset_demo(args) -> int:
 def cmd_demo(args) -> int:
     print(Path(__file__).resolve().parents[1].joinpath("docs", "DEMO_SCRIPT.md").read_text())
     return 0
-
 

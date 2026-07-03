@@ -683,6 +683,42 @@ def test_react_shell_trace_and_app_mount(collection, web_mod):
     assert mounted.status_code == 200
 
 
+def test_api_apps_poll_invalidates_changed_dash_source(collection, web_mod):
+    from werkzeug.test import Client
+    from werkzeug.wrappers import Response
+
+    application, flask_app = web_mod.build_application()
+    api_client = flask_app.test_client()
+    api_client.get("/api/bootstrap")
+
+    client = Client(application, Response)
+    mounted = client.get("/app/sample/")
+    assert mounted.status_code == 200
+    assert "sample" in mounted.get_data(as_text=True)
+
+    (collection / "apps" / "sample.py").write_text("""\
+import dash
+from dash import html
+
+
+def build_app():
+    app = dash.Dash(__name__)
+    app.layout = html.Div("updated sample")
+    return app
+
+
+app = build_app()
+""")
+
+    apps = api_client.get("/api/apps").get_json()["apps"]
+    sample = next(a for a in apps if a["key"] == "sample")
+    assert sample["revision"] == 1
+
+    refreshed = client.get("/app/sample/_dash-layout?v=1")
+    assert refreshed.status_code == 200
+    assert "updated sample" in refreshed.get_data(as_text=True)
+
+
 def test_reload_refreshes_registry_for_newly_created_app(collection, web_mod):
     from werkzeug.test import Client
     from werkzeug.wrappers import Response

@@ -1445,6 +1445,92 @@ class LazyDispatcher:
 # goes live without restarting the whole shell.
 _DISPATCHER = None
 APP_REVISIONS: dict[str, int] = {}
+APP_SOURCE_SIGNATURES: dict[str, tuple | None] = {}
+_SOURCE_SKIP_DIRS = {
+    ".git",
+    ".mypy_cache",
+    ".pytest_cache",
+    ".ruff_cache",
+    ".venv",
+    "__pycache__",
+    "build",
+    "dist",
+    "node_modules",
+    "target",
+    "venv",
+}
+_SOURCE_SKIP_SUFFIXES = {".pyc", ".pyo", ".swp", ".tmp"}
+
+
+def _source_signature(path: str | None) -> tuple | None:
+    """Cheap-ish source change signature for the shell's live poll.
+
+    File apps are O(1). Directory apps are bounded and skip dependency/cache outputs so the shell can
+    notice source edits without walking node_modules or virtualenvs on every poll.
+    """
+    if not path:
+        return None
+    p = Path(path)
+    try:
+        if p.is_file():
+            st = p.stat()
+            return ("file", st.st_mtime_ns, st.st_size)
+        if not p.is_dir():
+            return ("missing",)
+        newest = 0
+        total = 0
+        size = 0
+        for root, dirs, files in os.walk(p):
+            dirs[:] = [d for d in dirs if d not in _SOURCE_SKIP_DIRS]
+            for name in files:
+                if Path(name).suffix in _SOURCE_SKIP_SUFFIXES:
+                    continue
+                try:
+                    st = (Path(root) / name).stat()
+                except OSError:
+                    continue
+                newest = max(newest, st.st_mtime_ns)
+                size += st.st_size
+                total += 1
+                if total >= 5000:
+                    return ("dir", newest, total, size, "truncated")
+        return ("dir", newest, total, size)
+    except OSError:
+        return ("missing",)
+
+
+def _app_source_signature(rec: dict) -> tuple | None:
+    return _source_signature(rec.get("source") or rec.get("file") or rec.get("root"))
+
+
+def _bump_app_revision(key: str) -> int:
+    revision = APP_REVISIONS.get(key, 0) + 1
+    APP_REVISIONS[key] = revision
+    return revision
+
+
+def refresh_changed_app_sources() -> list[str]:
+    """Invalidate mounted apps whose source changed since the last shell poll.
+
+    This is the safety net for missed `curiator reload` pokes: if an agent edits a Dash app while the
+    shell is running, the next `/api/apps` poll bumps that app's revision so the iframe remounts.
+    """
+    changed: list[str] = []
+    for rec in REGISTRY:
+        key = rec.get("key")
+        if not key:
+            continue
+        sig = _app_source_signature(rec)
+        if key not in APP_SOURCE_SIGNATURES:
+            APP_SOURCE_SIGNATURES[key] = sig
+            continue
+        old = APP_SOURCE_SIGNATURES[key]
+        APP_SOURCE_SIGNATURES[key] = sig
+        if sig != old:
+            invalidate_app(key)
+            _bump_app_revision(key)
+            changed.append(key)
+    return changed
 
 
 def invalidate_app(key: str) -> bool:
@@ -1472,8 +1558,9 @@ def reload_app(key: str) -> dict:
     """
     count = refresh_registry()
     was_loaded = invalidate_app(key)
-    revision = APP_REVISIONS.get(key, 0) + 1
-    APP_REVISIONS[key] = revision
+    revision = _bump_app_revision(key)
+    rec = BY_KEY.get(key) or {}
+    APP_SOURCE_SIGNATURES[key] = _app_source_signature(rec)
     return {
         "reloaded": key,
         "module_was_loaded": was_loaded,
