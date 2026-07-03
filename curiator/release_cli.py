@@ -11,7 +11,7 @@ import sys
 import tempfile
 from pathlib import Path
 
-from .config import load_config
+from .config import load_config, load_config_at
 
 
 _PUBLIC_RELEASE_GALLERIES = ("curiator-aviato", "curiator-ot", "curiator-geometry")
@@ -1016,8 +1016,7 @@ def _playground_preflight_issues(cfg: dict, user_summary: dict) -> list[dict]:
     return issues
 
 
-def _playground_preflight_payload(args) -> dict:
-    cfg = load_config()
+def _playground_preflight_payload_for_cfg(cfg: dict, args) -> dict:
     user_summary = _playground_user_summary(cfg)
     issues = _playground_preflight_issues(cfg, user_summary)
     cli_mod = _cli_shared()
@@ -1076,6 +1075,10 @@ def _playground_preflight_payload(args) -> dict:
     }
 
 
+def _playground_preflight_payload(args) -> dict:
+    return _playground_preflight_payload_for_cfg(load_config(), args)
+
+
 def cmd_playground_preflight(args) -> int:
     """Check one collection's hosted public-playground posture before an invite-only pilot."""
     if args.no_smoke and args.http_smoke:
@@ -1113,4 +1116,98 @@ def cmd_playground_preflight(args) -> int:
     for r in smoke_results:
         if not r["ok"]:
             print(f"  smoke FAIL {r['app']}: {r['message']}")
+    return 0 if payload["ok"] else 1
+
+
+def _path_is_relative_to(path: Path, parent: Path) -> bool:
+    try:
+        path.relative_to(parent)
+    except ValueError:
+        return False
+    return True
+
+
+def _playground_backup_smoke_payload(args) -> dict:
+    source_cfg = load_config()
+    source = Path(source_cfg["repo_root"]).resolve()
+    restore_parent = None
+    if args.restore_root:
+        restore_parent = Path(args.restore_root).expanduser()
+        restore_parent = restore_parent if restore_parent.is_absolute() else (Path.cwd() / restore_parent).resolve()
+    run_root: Path | None = None
+    restore_path: Path | None = None
+    error = None
+    preflight = None
+    try:
+        if restore_parent and _path_is_relative_to(restore_parent.resolve(), source):
+            raise ValueError("restore root must not live inside the source collection")
+        if restore_parent:
+            restore_parent.mkdir(parents=True, exist_ok=True)
+            run_root = Path(tempfile.mkdtemp(prefix="run-", dir=restore_parent))
+        else:
+            run_root = Path(tempfile.mkdtemp(prefix="curiator-playground-restore-"))
+        restore_path = run_root / source.name
+        shutil.copytree(
+            source,
+            restore_path,
+            symlinks=True,
+            ignore=shutil.ignore_patterns("__pycache__", "*.pyc", ".pytest_cache", ".ruff_cache"),
+        )
+        restore_cfg = load_config_at(restore_path / "gallery.yaml")
+        preflight = _playground_preflight_payload_for_cfg(restore_cfg, args)
+    except (OSError, RuntimeError, ValueError, SystemExit, shutil.Error) as exc:
+        error = str(exc)
+    finally:
+        if run_root and not args.keep_restore:
+            shutil.rmtree(run_root, ignore_errors=True)
+
+    return {
+        "ok": error is None and bool(preflight and preflight.get("ok")),
+        "source": str(source),
+        "restore": {
+            "root": str(run_root) if run_root else None,
+            "path": str(restore_path) if restore_path else None,
+            "kept": bool(args.keep_restore),
+            "error": error,
+        },
+        "checks": {
+            "smoke": not args.no_smoke,
+            "http_smoke": bool(args.http_smoke),
+            "strict": bool(args.strict),
+        },
+        "preflight": preflight,
+    }
+
+
+def cmd_playground_backup_smoke(args) -> int:
+    """Copy the mounted collection to a restore directory and preflight the restored copy."""
+    if args.no_smoke and args.http_smoke:
+        print("curiator: playground-backup-smoke --http-smoke requires smoke checks; remove --no-smoke")
+        return 2
+    payload = _playground_backup_smoke_payload(args)
+    if args.output:
+        _write_json_artifact(payload, args.output)
+    if args.json:
+        if not args.output:
+            print(json.dumps(payload, indent=2))
+        return 0 if payload["ok"] else 1
+
+    status = "OK" if payload["ok"] else "FAILED"
+    restore = payload["restore"]
+    print(f"curiator: playground backup smoke {status}")
+    print(f"  source={payload['source']}")
+    print(f"  restore={restore['path'] or '-'} kept={restore['kept']}")
+    if restore.get("error"):
+        print(f"  ERROR restore: {restore['error']}")
+    preflight = payload.get("preflight") or {}
+    if preflight:
+        print(
+            f"  preflight={'OK' if preflight['ok'] else 'FAILED'} "
+            f"auth={preflight['auth']['mode']} runner={preflight['runner']['mode']} "
+            f"held={preflight['held_queue']['count']}"
+        )
+        for issue in preflight["issues"]:
+            print(f"  {issue['severity'].upper()} {issue['where']}: {issue['message']}")
+        for issue in preflight["doctor"]["issues"]:
+            print(f"  doctor {issue['severity'].upper()} {issue['where']}: {issue['message']}")
     return 0 if payload["ok"] else 1

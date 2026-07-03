@@ -30,6 +30,7 @@ curiator playground-preflight
 curiator playground-preflight --strict
 curiator playground-preflight --http-smoke
 curiator playground-preflight --strict --json --output release-evidence/playground-preflight.json
+curiator playground-backup-smoke --strict --json --output release-evidence/playground-backup-smoke.json
 ```
 
 For release collections from the runner checkout:
@@ -47,6 +48,11 @@ fail the command. Use `--http-smoke` when app dependencies are installed in the 
 you want the gate to start proxy apps briefly and poll their configured HTTP smoke paths or default app
 URLs. Use `--output` to write the full JSON posture report under gitignored `release-evidence/` for
 pre-pilot review notes.
+
+`curiator playground-backup-smoke` makes the backup-restore check executable: it copies the mounted
+collection to a temporary restore directory and runs the same playground preflight against the restored
+copy. Add `--keep-restore --restore-root /tmp/curiator-restores` when you want to inspect the restored
+tree; otherwise the temporary copy is removed after the gate finishes.
 
 ## 2. Gate feedback behind sign-in
 
@@ -216,6 +222,7 @@ CURIATOR_GALLERY=/collection/gallery.yaml curiator stats --markdown
 CURIATOR_GALLERY=/collection/gallery.yaml curiator smoke
 CURIATOR_GALLERY=/collection/gallery.yaml curiator playground-preflight --http-smoke
 CURIATOR_GALLERY=/collection/gallery.yaml curiator playground-preflight
+CURIATOR_GALLERY=/collection/gallery.yaml curiator playground-backup-smoke --no-smoke
 CURIATOR_GALLERY=/collection/gallery.yaml curiator queue sweep --older-than 30
 ```
 

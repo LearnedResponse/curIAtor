@@ -20,6 +20,7 @@
     curiator voice setup # configure local voice transcription
     curiator release-preflight # run doctor/smoke/path checks across release galleries or fresh clones
     curiator playground-preflight # check hosted public-playground posture
+    curiator playground-backup-smoke # restore-copy a hosted playground and preflight the copy
     curiator reset-demo # rewind the demo: re-break aviato, clear the ledger
     curiator demo-up    # reset-demo, then serve — one command, record-ready
     curiator demo       # print the demo walkthrough
@@ -82,6 +83,7 @@ from ..serve_cli import (
 from ..release_cli import (
     _PUBLIC_RELEASE_OWNER,
     _clone_gallery as _clone_gallery,
+    cmd_playground_backup_smoke,
     cmd_playground_preflight,
     cmd_release_preflight,
 )
@@ -311,6 +313,16 @@ def main(argv=None) -> int:
     pp.add_argument("--output", help="write the JSON preflight payload to a file")
     pp.add_argument("--json", action="store_true", help="emit machine-readable diagnostics")
     pp.set_defaults(func=cmd_playground_preflight)
+    pb = sub.add_parser("playground-backup-smoke", help="restore-copy a hosted playground and preflight it")
+    pb.add_argument("--restore-root", help="directory where the temporary restore run should be created")
+    pb.add_argument("--keep-restore", action="store_true", help="keep the restored collection for inspection")
+    pb.add_argument("--no-smoke", action="store_true", help="skip per-app smoke checks on the restored copy")
+    pb.add_argument("--http-smoke", "--http", action="store_true", dest="http_smoke",
+                    help="also start proxy apps briefly and verify configured HTTP smoke paths")
+    pb.add_argument("--strict", action="store_true", help="fail when restored posture or doctor warnings are present")
+    pb.add_argument("--output", help="write the JSON restore/preflight payload to a file")
+    pb.add_argument("--json", action="store_true", help="emit machine-readable diagnostics")
+    pb.set_defaults(func=cmd_playground_backup_smoke)
     cx = sub.add_parser("context", help="print app context and recent feedback for interactive agents")
     cx.add_argument("--app", help="override linked/current app")
     cx.add_argument("--limit", type=int, default=8)

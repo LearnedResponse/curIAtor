@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 import subprocess
 import textwrap
 
@@ -11,6 +12,37 @@ def _ignore_local_users_file(collection):
     current = path.read_text() if path.exists() else ""
     if ".curiator-users.json" not in current.splitlines():
         path.write_text(current + ("\n" if current and not current.endswith("\n") else "") + ".curiator-users.json\n")
+
+
+def _write_phase0_local_auth_config(collection):
+    (collection / "gallery.yaml").write_text(textwrap.dedent("""\
+        apps:
+          - name: sample
+            title: Sample
+            mount: { kind: dash-inproc, module: sample }
+            source: apps/sample.py
+            tags: [demo]
+        runner:
+          mode: pinned
+        git:
+          commit: true
+        auth:
+          mode: local
+          users_file: .curiator-users.json
+          admin_groups: [admin]
+        agent:
+          adapter: headless-cc
+          autonomy: propose-only
+          dispatch:
+            trusted_groups: [trusted]
+          quotas:
+            per_user_daily: 3
+            global_daily: 25
+        feedback:
+          dir: feedback
+        shell:
+          port: 8399
+    """))
 
 
 def test_playground_preflight_fails_unsafe_collection_defaults(collection, capsys):
@@ -563,3 +595,78 @@ def test_playground_preflight_rejects_anonymous_auto_dispatch(collection, capsys
     messages = "\n".join(issue["message"] for issue in payload["issues"])
     assert payload["ok"] is False
     assert "agent.dispatch.anonymous: hold" in messages
+
+
+def test_playground_backup_smoke_restores_collection_and_runs_preflight(collection, capsys, tmp_path):
+    from curiator import auth, cli
+
+    _write_phase0_local_auth_config(collection)
+    _ignore_local_users_file(collection)
+    auth.save_users_file(
+        str(collection / ".curiator-users.json"),
+        {"admin@example.com": {"name": "Admin", "groups": ["admin"], "password_hash": "test-hash"}},
+    )
+    (collection / "feedback" / "tasks").mkdir(parents=True, exist_ok=True)
+    (collection / "feedback" / "tasks" / "abc123.md").write_text("restored task trace\n", encoding="utf-8")
+    restore_root = collection.parent / f"{tmp_path.name}-restores"
+
+    assert cli.main([
+        "playground-backup-smoke",
+        "--no-smoke",
+        "--keep-restore",
+        "--restore-root",
+        str(restore_root),
+        "--json",
+    ]) == 0
+    payload = json.loads(capsys.readouterr().out)
+    restore_path = Path(payload["restore"]["path"])
+
+    assert payload["ok"] is True
+    assert payload["source"] == str(collection.resolve())
+    assert payload["restore"]["kept"] is True
+    assert restore_path.exists()
+    assert payload["preflight"]["gallery"] == str(restore_path / "gallery.yaml")
+    assert payload["preflight"]["user_store"]["users_file_rel"] == ".curiator-users.json"
+    assert payload["preflight"]["checks"] == {"smoke": False, "http_smoke": False}
+    assert (restore_path / ".curiator-users.json").exists()
+    assert (restore_path / "feedback" / "tasks" / "abc123.md").read_text(encoding="utf-8") == "restored task trace\n"
+
+
+def test_playground_backup_smoke_cleans_restore_by_default(collection, capsys, tmp_path):
+    from curiator import auth, cli
+
+    _write_phase0_local_auth_config(collection)
+    _ignore_local_users_file(collection)
+    auth.save_users_file(
+        str(collection / ".curiator-users.json"),
+        {"admin@example.com": {"name": "Admin", "groups": ["admin"], "password_hash": "test-hash"}},
+    )
+
+    assert cli.main([
+        "playground-backup-smoke",
+        "--no-smoke",
+        "--restore-root",
+        str(collection.parent / f"{tmp_path.name}-restores"),
+        "--json",
+    ]) == 0
+    payload = json.loads(capsys.readouterr().out)
+
+    assert payload["ok"] is True
+    assert payload["restore"]["kept"] is False
+    assert not Path(payload["restore"]["root"]).exists()
+
+
+def test_playground_backup_smoke_rejects_restore_root_inside_collection(collection, capsys):
+    from curiator import cli
+
+    assert cli.main([
+        "playground-backup-smoke",
+        "--no-smoke",
+        "--restore-root",
+        str(collection / "restore"),
+        "--json",
+    ]) == 1
+    payload = json.loads(capsys.readouterr().out)
+
+    assert payload["ok"] is False
+    assert payload["restore"]["error"] == "restore root must not live inside the source collection"

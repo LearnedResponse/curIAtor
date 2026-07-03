@@ -359,6 +359,7 @@ curiator playground-preflight  # hosted pilot posture: auth, quotas, queue, doct
 curiator playground-preflight --http-smoke  # also start proxy apps when deps are installed
 curiator playground-preflight --strict  # fail on warnings for CI/final pre-pilot gates
 curiator playground-preflight --strict --json --output release-evidence/playground-preflight.json
+curiator playground-backup-smoke --strict --json --output release-evidence/playground-backup-smoke.json
 make release-prepare VERSION=0.2.0 DATE=2026-07-02  # updates package, citation, Zenodo, changelog
 ```
 
@@ -529,7 +530,8 @@ This maps onto the deployment modes: a **personal container** (`headless-cc`, `a
 
 For a hosted invite-only playground, use the phase-0 deployment runbook in
 [`PUBLIC_PLAYGROUND_DEPLOYMENT.md`](PUBLIC_PLAYGROUND_DEPLOYMENT.md): sign-in first, one container per
-collection, TLS at the edge, backups of the mounted collection, and weekly `curiator stats` review.
+collection, TLS at the edge, `curiator playground-backup-smoke` restore checks for the mounted
+collection, and weekly `curiator stats` review.
 
 ## 7. Adapters & autonomy (recap)
 
