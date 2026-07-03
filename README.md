@@ -124,8 +124,10 @@ moving a collection, `curiator doctor` flags machine-absolute paths, missing app
 smoke coverage, missing command/dependency setup, suspicious proxy commands, framework base/root-path
 misconfiguration, and likely HMR dev-server proxy commands, then `curiator smoke` runs each app's
 configured or inferred smoke command. Add `curiator smoke --http` when you also want proxy apps started
-briefly and checked over HTTP; use `curiator release-preflight --http-smoke` to include the same proxy
-HTTP check in dependency-prepared publication preflights. In this checkout, `curiator release-preflight` runs those checks across the
+briefly and checked over HTTP, or `curiator smoke --browser` when you need headless Brave to prove the
+app renders through the same-origin shell. Use `curiator release-preflight --http-smoke` or
+`curiator release-preflight --browser-smoke` to carry those opt-in checks into dependency-prepared
+publication preflights. In this checkout, `curiator release-preflight` runs those checks across the
 nested public example galleries under `galleries/` and rejects tracked runtime/auth artifacts such as
 local user stores, task traces, screenshots, SQLite sidecars, env files, cache files, and installed
 dependency directories, plus local editable/path dependency pins in requirements files; add `--fresh-clone` to

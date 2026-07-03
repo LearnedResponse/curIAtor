@@ -158,8 +158,9 @@ only at scaffold/import time.
    publication. `curiator smoke` now reports and runs cheap inferred fallback checks for no-smoke
    proxy directories when an obvious `server.py`/`app.py`/`main.py`, Node server file, or `Cargo.toml`
    is present, `curiator smoke --http` adds an opt-in proxy process + HTTP response check, and
-   `curiator release-preflight --http-smoke` carries that check across nested or dependency-prepared
-   publication candidates.
+   `curiator smoke --browser` adds an opt-in headless-Brave shell-render check. The matching
+   `release-preflight --http-smoke` and `--browser-smoke` flags carry those checks across nested or
+   dependency-prepared publication candidates.
    `curiator app import` now surfaces the same visible warnings immediately after registering an
    existing repo, before the user first loads a broken mount. Full live-HMR reverse proxying remains
    demand-paced per framework.

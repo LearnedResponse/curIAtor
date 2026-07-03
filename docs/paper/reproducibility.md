@@ -12,6 +12,8 @@ for draft work:
 
 ```bash
 curiator release-preflight --fresh-clone
+# optional shell-render gate when app dependencies and Brave/Chromium are installed:
+curiator release-preflight --gallery curiator-aviato --browser-smoke
 make release-evidence
 make paper-stats
 make paper-pdf
