@@ -60,3 +60,4 @@ def test_release_package_smoke_runs_installed_quickstart(monkeypatch, tmp_path):
     assert "curiator init" in commands[4] and commands[4].endswith(" --git")
     assert commands[5].endswith("curiator app templates")
     assert commands[6].endswith("curiator smoke --json")
+    assert commands[7].endswith("curiator playground-backup-smoke --no-smoke --json")

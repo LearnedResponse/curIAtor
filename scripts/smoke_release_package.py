@@ -64,6 +64,64 @@ def _assert_venv_import(python: Path, *, cwd: Path) -> dict:
     return json.loads(result["stdout"])
 
 
+def _write_phase0_playground_config(collection: Path) -> None:
+    collection.mkdir(parents=True, exist_ok=True)
+    (collection / "apps").mkdir(exist_ok=True)
+    (collection / "feedback").mkdir(exist_ok=True)
+    (collection / "apps" / "sample.py").write_text(
+        "from dash import Dash, html\n\n"
+        "app = Dash(__name__)\n"
+        "app.layout = html.Div('sample')\n",
+        encoding="utf-8",
+    )
+    (collection / "gallery.yaml").write_text(
+        "\n".join([
+            "apps:",
+            "  - name: sample",
+            "    title: Sample",
+            "    mount: { kind: dash-inproc, module: sample }",
+            "    source: apps/sample.py",
+            "runner:",
+            "  mode: pinned",
+            "git:",
+            "  commit: true",
+            "auth:",
+            "  mode: local",
+            "  users_file: .curiator-users.json",
+            "  admin_groups: [admin]",
+            "agent:",
+            "  autonomy: propose-only",
+            "  dispatch:",
+            "    trusted_groups: [trusted]",
+            "  quotas:",
+            "    per_user_daily: 3",
+            "    global_daily: 25",
+            "",
+        ]),
+        encoding="utf-8",
+    )
+    gitignore = collection / ".gitignore"
+    current_ignore = gitignore.read_text(encoding="utf-8") if gitignore.exists() else ""
+    if ".curiator-users.json" not in current_ignore.splitlines():
+        gitignore.write_text(
+            current_ignore + ("\n" if current_ignore and not current_ignore.endswith("\n") else "")
+            + ".curiator-users.json\n",
+            encoding="utf-8",
+        )
+    users_file = collection / ".curiator-users.json"
+    users_file.write_text(
+        json.dumps({
+            "admin@example.com": {
+                "name": "Admin",
+                "groups": ["admin"],
+                "password_hash": "package-smoke-test-hash",
+            }
+        }, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    users_file.chmod(0o600)
+
+
 def smoke_release_package(wheel: Path) -> dict:
     wheel = wheel.resolve()
     if not wheel.exists():
@@ -85,6 +143,8 @@ def smoke_release_package(wheel: Path) -> dict:
             _run([curiator, "app", "templates"], cwd=collection),
             _run([curiator, "smoke", "--json"], cwd=collection),
         ])
+        _write_phase0_playground_config(collection)
+        steps.append(_run([curiator, "playground-backup-smoke", "--no-smoke", "--json"], cwd=collection))
         return {
             "ok": True,
             "wheel": str(wheel),

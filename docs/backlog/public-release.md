@@ -63,10 +63,10 @@ leave feedback → watch the fix land and the ⚙ reply arrive. Every item below
    dependencies are installed in the tree being checked. `--output <path>` writes the JSON payload as
    a release/paper evidence artifact. The example repos are published at their intended release heads,
    and `--require-runner-published-head` covers the runner branch. The local installed-wheel quickstart
-   smoke now exercises `curiator --help`, `curiator init`, `curiator app templates`, and
-   `curiator smoke` from a temporary venv using the built wheel; remaining release work is tagging the
-   runner and proving a fresh clone on a machine that isn't this one can run the loop with the released
-   package.
+   smoke now exercises `curiator --help`, `curiator init`, `curiator app templates`, `curiator smoke`,
+   and the hosted-playground `curiator playground-backup-smoke --no-smoke --json` restore gate from a
+   temporary venv using the built wheel; remaining release work is tagging the runner and proving a
+   fresh clone on a machine that isn't this one can run the loop with the released package.
 4. **Publish the three example collections** as public sibling repos, each linked from the README's
    Examples section. README links are prepared for `LearnedResponse/curiator-aviato`,
    `LearnedResponse/curiator-ot`, and `LearnedResponse/curiator-geometry`; their release-candidate

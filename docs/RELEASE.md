@@ -138,7 +138,9 @@ make release-package-smoke
 
 This runs `make release-check`, installs the freshly built wheel from `dist/` into a temporary virtual
 environment, verifies `curiator` imports from that installed wheel, initializes a temporary collection,
-lists templates, and runs `curiator smoke`. Its JSON evidence is written to
+lists templates, runs `curiator smoke`, and rewrites the temporary collection into a minimal hosted
+phase-0 config so `curiator playground-backup-smoke --no-smoke --json` proves the restore-copy gate is
+available from the installed package too. Its JSON evidence is written to
 `release-evidence/release-package-smoke.json`.
 
 ## 6. Configure external release services
