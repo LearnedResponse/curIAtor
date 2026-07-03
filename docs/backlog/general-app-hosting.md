@@ -117,8 +117,9 @@ only at scaffold/import time.
   Python module imports." Scaffolded apps carry explicit per-template smoke commands, and no-smoke
   proxy directories now get conservative inferred checks for obvious Python/Node/Rust servers.
   `curiator smoke --http` can also start proxy apps briefly and verify an HTTP response, using
-  `smoke_http` when a collection pins a health path. Full browser-level "the app renders" smoke
-  remains a heavier, demand-paced check.
+  `smoke_http` when a collection pins a health path. `curiator smoke --browser` adds an opt-in
+  headless-Brave pass through the shell itself, catching same-origin iframe render failures and
+  mount/proxy diagnostics without making browser availability a default publication gate.
 - **Static-export synergy** — JS apps are *already* static-buildable, so this direction and the deferred
   static-publish target reinforce each other (a built React app **is** the static export).
 - **Where does it stop?** Hosting arbitrary processes is powerful but widens the security/sandbox surface

@@ -610,10 +610,39 @@ def _smoke_result_for_spec(cfg: dict, spec: dict, *, http: bool = False) -> dict
     return result
 
 
-def _smoke_results(cfg: dict, app: str | None = None, jobs: int = 1, *, http: bool = False) -> list[dict]:
+def _merge_browser_smoke_results(
+    cfg: dict,
+    results: list[dict],
+    *,
+    browser_bin: str | None = None,
+) -> list[dict]:
+    from .browser_smoke import browser_smoke_apps
+
+    by_app = browser_smoke_apps(cfg, [str(r["app"]) for r in results], browser_bin=browser_bin)
+    for result in results:
+        browser = by_app.get(str(result["app"])) or {"ok": False, "message": "browser smoke result missing"}
+        result["browser_smoke"] = browser
+        if browser.get("ok") is False:
+            result["ok"] = False
+            prior = result.get("message") or ""
+            detail = f"browser smoke failed: {browser.get('message')}"
+            result["message"] = f"{prior}; {detail}" if prior else detail
+    return results
+
+
+def _smoke_results(
+    cfg: dict,
+    app: str | None = None,
+    jobs: int = 1,
+    *,
+    http: bool = False,
+    browser: bool = False,
+    browser_bin: str | None = None,
+) -> list[dict]:
     specs = _smoke_work_specs(cfg, app)
     if jobs <= 1 or len(specs) <= 1:
-        return [_smoke_result_for_spec(cfg, spec, http=http) for spec in specs]
+        results = [_smoke_result_for_spec(cfg, spec, http=http) for spec in specs]
+        return _merge_browser_smoke_results(cfg, results, browser_bin=browser_bin) if browser else results
 
     from concurrent.futures import ThreadPoolExecutor, as_completed
 
@@ -626,7 +655,8 @@ def _smoke_results(cfg: dict, app: str | None = None, jobs: int = 1, *, http: bo
         for future in as_completed(futures):
             index = futures[future]
             results[index] = future.result()
-    return [result for result in results if result is not None]
+    merged = [result for result in results if result is not None]
+    return _merge_browser_smoke_results(cfg, merged, browser_bin=browser_bin) if browser else merged
 
 
 def cmd_smoke(args) -> int:
@@ -634,7 +664,14 @@ def cmd_smoke(args) -> int:
     if args.jobs < 1:
         print("curiator: smoke --jobs must be >= 1")
         return 2
-    results = _smoke_results(cfg, args.app, jobs=args.jobs, http=args.http)
+    results = _smoke_results(
+        cfg,
+        args.app,
+        jobs=args.jobs,
+        http=args.http,
+        browser=args.browser,
+        browser_bin=args.browser_bin,
+    )
     ok = all(r["ok"] for r in results)
     if args.json:
         print(json.dumps({"ok": ok, "results": results}, indent=2))
@@ -649,6 +686,10 @@ def cmd_smoke(args) -> int:
             else:
                 http_status = "OK" if http_smoke.get("ok") else "FAIL"
             detail += f" — http {http_status} {http_smoke.get('url') or ''}: {http_smoke.get('message')}"
+        if r.get("browser_smoke"):
+            browser_smoke = r["browser_smoke"]
+            browser_status = "OK" if browser_smoke.get("ok") else "FAIL"
+            detail += f" — browser {browser_status} {browser_smoke.get('url') or ''}: {browser_smoke.get('message')}"
         command = f" [{r['smoke']}]" if r.get("smoke") else ""
         print(f"curiator: smoke {status} {r['app']}{command}{detail}")
     print(f"curiator: smoke {'OK' if ok else 'FAILED'} ({sum(1 for r in results if r['ok'])}/{len(results)} passed)")

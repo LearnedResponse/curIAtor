@@ -150,6 +150,60 @@ def test_smoke_http_starts_proxy_and_checks_configured_path(collection, capsys, 
     assert popen_calls[0]["env"]["CURIATOR_APP"] == "proxy_http"
 
 
+def test_smoke_browser_opens_apps_through_shell(collection, capsys, monkeypatch):
+    from curiator import browser_smoke, cli
+
+    calls = []
+
+    def fake_browser_smoke_apps(cfg, apps, *, browser_bin=None, timeout=15.0):
+        calls.append({"gallery": cfg["gallery_path"], "apps": apps, "browser_bin": browser_bin, "timeout": timeout})
+        return {
+            app: {
+                "ok": True,
+                "url": f"http://127.0.0.1:8300/?app={app}",
+                "message": "Sample app rendered",
+                "browser": browser_bin,
+                "started_shell": True,
+            }
+            for app in apps
+        }
+
+    monkeypatch.setattr(browser_smoke, "browser_smoke_apps", fake_browser_smoke_apps)
+
+    assert cli.main(["smoke", "--browser", "--browser-bin", "/usr/bin/brave", "--json"]) == 0
+    payload = json.loads(capsys.readouterr().out)
+
+    assert payload["ok"] is True
+    assert calls == [{
+        "gallery": str(collection / "gallery.yaml"),
+        "apps": ["sample"],
+        "browser_bin": "/usr/bin/brave",
+        "timeout": 15.0,
+    }]
+    assert payload["results"][0]["browser_smoke"]["ok"] is True
+    assert payload["results"][0]["browser_smoke"]["message"] == "Sample app rendered"
+
+
+def test_smoke_browser_failure_fails_app_result(collection, capsys, monkeypatch):
+    from curiator import browser_smoke, cli
+
+    monkeypatch.setattr(
+        browser_smoke,
+        "browser_smoke_apps",
+        lambda cfg, apps, *, browser_bin=None, timeout=15.0: {
+            app: {"ok": False, "message": "app iframe rendered no visible content"}
+            for app in apps
+        },
+    )
+
+    assert cli.main(["smoke", "--browser", "--json"]) == 1
+    payload = json.loads(capsys.readouterr().out)
+    result = payload["results"][0]
+    assert result["ok"] is False
+    assert result["browser_smoke"]["ok"] is False
+    assert "browser smoke failed: app iframe rendered no visible content" in result["message"]
+
+
 def test_smoke_reports_failing_configured_smoke(collection, capsys):
     from curiator import cli
 

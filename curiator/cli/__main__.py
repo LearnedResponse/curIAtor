@@ -248,6 +248,8 @@ def main(argv=None) -> int:
     sm.add_argument("--app", help="limit smoke checks to one app")
     sm.add_argument("--jobs", type=int, default=1, help="run up to N smoke checks concurrently (default: 1)")
     sm.add_argument("--http", action="store_true", help="also start proxy apps briefly and verify HTTP response")
+    sm.add_argument("--browser", action="store_true", help="also open each app through the shell in headless Brave")
+    sm.add_argument("--browser-bin", help="Brave/Chromium executable for --browser (default: brave-browser on PATH)")
     sm.add_argument("--json", action="store_true", help="emit machine-readable results")
     sm.set_defaults(func=cmd_smoke)
     gl = sub.add_parser("galleries", help="list, clone, or adopt nested curiator-* collection repos")
