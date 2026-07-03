@@ -302,6 +302,13 @@ git-as-memory commit path as the watcher when `git.commit: true`. A running Reac
 app source signatures on its normal poll; if the direct reload poke misses the service, the next poll
 invalidates changed app mounts and remounts the iframe without a process restart.
 
+If `curiator serve` or `curiator watch` is restarted while a headless agent is mid-fix, the watcher
+now treats any watcher-owned `working` item it finds at startup as interrupted: it writes a thread note,
+appends the recovery to `feedback/replies/<id>.md`, and moves the item back to `new` so the loop can
+retry. It skips `curiator work` / interactive claims because those belong to the human CLI session.
+Automatic recovery does **not** reset source files; review the working tree or use `curiator revert`
+for completed git-as-memory runs when you want to undo code.
+
 You can also add feedback from the terminal:
 
 ```bash

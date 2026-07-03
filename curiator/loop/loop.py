@@ -58,6 +58,16 @@ def _new_items(led: dict) -> list[tuple[str, dict]]:
     return out
 
 
+def _working_items(led: dict) -> list[tuple[str, dict]]:
+    """User feedback items claimed by the watcher but not closed by an agent reply."""
+    out = []
+    for key, entries in (led or {}).items():
+        for e in entries if isinstance(entries, list) else []:
+            if e.get("status") == "working" and e.get("kind") != "system" and e.get("author") != "claude":
+                out.append((key, e))
+    return out
+
+
 def _label(key: str) -> str:
     return "◆ General" if key == adapters.GENERAL_KEY else key
 
@@ -140,6 +150,45 @@ def _hold_feedback(cfg: dict, key: str, entry: dict, text: str) -> None:
     ledger.add_system_note(cfg, key, text, reply_to=[eid], agent="curiator quota")
 
 
+def _trace_mentions_interactive(cfg: dict, entry: dict) -> bool:
+    eid = entry.get("id")
+    if not eid:
+        return False
+    try:
+        text = runlog.reply_path(cfg, eid).read_text(encoding="utf-8", errors="replace")[:1000]
+    except OSError:
+        return False
+    return "- adapter: `interactive`" in text
+
+
+def _reset_interrupted_work(cfg: dict, key: str, entry: dict, reason: str) -> None:
+    eid = entry.get("id")
+    if not eid:
+        return
+    text = (
+        f"⚙ watcher recovery: {reason}. The previous agent run did not post a completion reply, "
+        "so this item was requeued for another pass. Review the working tree if partial edits are present."
+    )
+    ledger.add_system_note(cfg, key, text, reply_to=[eid], agent="curiator watcher")
+    ledger.set_status(cfg, key, [eid], "new")
+    runlog.append(runlog.reply_path(cfg, eid), f"\n[{_now()}] {text}\n")
+
+
+def recover_interrupted_working(cfg: dict, reason: str = "watcher started with a stale working claim") -> int:
+    """Requeue watcher-owned `working` items left behind by a prior crashed/restarted watcher.
+
+    Interactive `curiator work` claims are deliberately skipped: those are human-owned and should stay
+    claimed until the human runs `curiator done` or explicitly changes the status.
+    """
+    recovered = 0
+    for key, entry in _working_items(ledger.load(cfg)):
+        if _trace_mentions_interactive(cfg, entry):
+            continue
+        _reset_interrupted_work(cfg, key, entry, reason)
+        recovered += 1
+    return recovered
+
+
 def _dispatch_hold_reason(cfg: dict, led: dict, entry: dict) -> str | None:
     if _explicit_anonymous(entry):
         return "Queued for review - anonymous feedback never auto-dispatches."
@@ -211,6 +260,11 @@ def run_once(cfg: dict) -> int:
             if reply:
                 runlog.note(task, f"agent reply: {reply}")
             print(f"curiator:   {'✓' if st != 'working' else '⚠'} {key}/{eid} → {st}{tail}", flush=True)
+        except runlog.AgentInterrupted as exc:
+            print(f"curiator:   ✗ {key}/{eid} interrupted: {exc}", flush=True)
+            runlog.note(task, f"agent interrupted: {exc}")
+            _reset_interrupted_work(cfg, key, entry, f"agent interrupted by service shutdown ({exc})")
+            raise
         except Exception as exc:                          # never leave an item stuck on 'working'
             print(f"curiator:   ✗ {key}/{eid} failed: {exc}", flush=True)
             runlog.note(task, f"loop error: {exc}")
@@ -225,6 +279,9 @@ def watch(cfg: dict) -> None:
     print(f"curiator: watching {ledger.path(cfg)} every {POLL_SECONDS}s "
           f"(adapter={cfg.get('agent', {}).get('adapter')}, "
           f"autonomy={cfg.get('agent', {}).get('autonomy')}) — Ctrl-C to stop", flush=True)
+    recovered = recover_interrupted_working(cfg)
+    if recovered:
+        print(f"curiator: recovered {recovered} interrupted working item(s); requeued for retry", flush=True)
     mtime = _gallery_mtime(cfg)
     while True:
         try:

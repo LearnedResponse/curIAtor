@@ -6,8 +6,10 @@ import os
 from datetime import datetime, timezone
 from pathlib import Path
 
+import pytest
+
 from curiator import ledger
-from curiator.loop import loop
+from curiator.loop import adapters, loop, runlog
 
 
 def test_new_items_only_user_new(cfg):
@@ -167,6 +169,62 @@ def test_run_once_resets_item_on_adapter_error(cfg, monkeypatch):
     note = next(e for e in data["sample"] if e["author"] == "claude")
     assert "loop error" in (note.get("comment") or "")
     assert note.get("ts"), "loop-error notes must carry a ts — a null ts crashes render_history's sort"
+
+
+def test_run_once_resets_and_reraises_on_agent_interruption(cfg, monkeypatch):
+    fid = ledger.save_entry(cfg, "sample", comment="restart during fix", ts="t")
+
+    class Interrupted:
+        @staticmethod
+        def run(task):
+            raise runlog.AgentInterrupted("agent interrupted by signal 15")
+
+    monkeypatch.setattr("curiator.loop.adapters.get", lambda _cfg: Interrupted)
+    with pytest.raises(runlog.AgentInterrupted):
+        loop.run_once(cfg)
+
+    data = ledger.load(cfg)["sample"]
+    user = next(e for e in data if e["id"] == fid)
+    note = next(e for e in data if e.get("kind") == "system" and fid in (e.get("reply_to") or []))
+    assert user["status"] == "new"
+    assert "watcher recovery" in note["comment"]
+    assert "service shutdown" in note["comment"]
+
+
+def test_recover_interrupted_working_requeues_watcher_claim(cfg):
+    fid = ledger.save_entry(cfg, "sample", comment="left working", ts="t")
+    entry = next(e for e in ledger.load(cfg)["sample"] if e["id"] == fid)
+    ledger.set_status(cfg, "sample", [fid], "working")
+    task = adapters.build_task(cfg, "sample", {**entry, "status": "working"})
+    runlog.init_trace(task, "codex")
+    runlog.note(task, "status set to working; launching codex")
+
+    assert loop.recover_interrupted_working(cfg) == 1
+
+    data = ledger.load(cfg)["sample"]
+    user = next(e for e in data if e["id"] == fid)
+    note = next(e for e in data if e.get("kind") == "system" and fid in (e.get("reply_to") or []))
+    trace = Path(task.reply_file).read_text()
+    assert user["status"] == "new"
+    assert "stale working claim" in note["comment"]
+    assert "requeued for another pass" in trace
+
+
+def test_recover_interrupted_working_skips_interactive_claim(cfg):
+    fid = ledger.save_entry(cfg, "sample", comment="human is working", ts="t")
+    entry = next(e for e in ledger.load(cfg)["sample"] if e["id"] == fid)
+    ledger.set_status(cfg, "sample", [fid], "working")
+    task = adapters.build_task(cfg, "sample", {**entry, "status": "working"})
+    runlog.init_trace(task, "interactive")
+    runlog.note(task, "opened for interactive CLI work")
+
+    assert loop.recover_interrupted_working(cfg) == 0
+
+    data = ledger.load(cfg)["sample"]
+    user = next(e for e in data if e["id"] == fid)
+    notes = [e for e in data if e.get("kind") == "system" and fid in (e.get("reply_to") or [])]
+    assert user["status"] == "working"
+    assert notes == []
 
 
 def test_reload_if_changed_applies_edits_without_restart(cfg, collection):

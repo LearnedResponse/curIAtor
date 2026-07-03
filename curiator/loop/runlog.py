@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import os
 import selectors
+import signal
 import subprocess
 import time
 from dataclasses import dataclass
@@ -75,11 +76,27 @@ class RunResult:
     tail: str
 
 
+class AgentInterrupted(BaseException):
+    """Raised when the watcher is shutting down while an agent subprocess is running."""
+
+
 def _tail_push(parts: list[str], chunk: str, limit: int = 8000) -> None:
     parts.append(chunk)
     total = sum(len(p) for p in parts)
     while parts and total > limit:
         total -= len(parts.pop(0))
+
+
+def _terminate_process_group(proc: subprocess.Popen, sig: int = signal.SIGTERM) -> None:
+    try:
+        os.killpg(proc.pid, sig)
+    except ProcessLookupError:
+        return
+    except OSError:
+        try:
+            proc.terminate() if sig == signal.SIGTERM else proc.kill()
+        except OSError:
+            return
 
 
 def run_streamed(
@@ -104,7 +121,20 @@ def run_streamed(
         stdin=stdin,
         text=True,
         bufsize=1,
+        start_new_session=True,
     )
+    previous_handlers = {
+        sig: signal.getsignal(sig)
+        for sig in (signal.SIGINT, signal.SIGTERM)
+    }
+
+    def _handle_shutdown(signum, _frame):
+        append(task.reply_file, f"\n[interrupted by signal {signum}; terminating agent subprocess]\n")
+        _terminate_process_group(proc, signal.SIGTERM)
+        raise AgentInterrupted(f"agent interrupted by signal {signum}")
+
+    for sig in previous_handlers:
+        signal.signal(sig, _handle_shutdown)
     deadline = time.monotonic() + timeout if timeout else None
     tail: list[str] = []
     sel = selectors.DefaultSelector()
@@ -115,7 +145,7 @@ def run_streamed(
         while True:
             if deadline is not None and time.monotonic() > deadline:
                 timed_out = True
-                proc.kill()
+                _terminate_process_group(proc, signal.SIGKILL)
                 break
             events = sel.select(timeout=0.2)
             for key, _ in events:
@@ -131,6 +161,8 @@ def run_streamed(
                 append(task.reply_file, rest)
                 _tail_push(tail, rest)
     finally:
+        for sig, handler in previous_handlers.items():
+            signal.signal(sig, handler)
         sel.close()
     rc = proc.wait()
     if timed_out:
