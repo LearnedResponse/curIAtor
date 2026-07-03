@@ -599,6 +599,8 @@ def test_playground_preflight_rejects_anonymous_auto_dispatch(collection, capsys
 
 def test_playground_backup_smoke_restores_collection_and_runs_preflight(collection, capsys, tmp_path):
     from curiator import auth, cli
+    from curiator import ledger
+    from curiator.config import load_config, load_config_at
 
     _write_phase0_local_auth_config(collection)
     _ignore_local_users_file(collection)
@@ -606,6 +608,7 @@ def test_playground_backup_smoke_restores_collection_and_runs_preflight(collecti
         str(collection / ".curiator-users.json"),
         {"admin@example.com": {"name": "Admin", "groups": ["admin"], "password_hash": "test-hash"}},
     )
+    ledger.save_entry(load_config(), "sample", comment="restore me", ts="2026-07-02T12:00:00+00:00")
     (collection / "feedback" / "tasks").mkdir(parents=True, exist_ok=True)
     (collection / "feedback" / "tasks" / "abc123.md").write_text("restored task trace\n", encoding="utf-8")
     restore_root = collection.parent / f"{tmp_path.name}-restores"
@@ -624,12 +627,16 @@ def test_playground_backup_smoke_restores_collection_and_runs_preflight(collecti
     assert payload["ok"] is True
     assert payload["source"] == str(collection.resolve())
     assert payload["restore"]["kept"] is True
+    assert payload["ledger"]["checkpoint"]["attempted"] is True
+    assert payload["ledger"]["checkpoint"]["ok"] is True
     assert restore_path.exists()
     assert payload["preflight"]["gallery"] == str(restore_path / "gallery.yaml")
     assert payload["preflight"]["user_store"]["users_file_rel"] == ".curiator-users.json"
     assert payload["preflight"]["checks"] == {"smoke": False, "http_smoke": False}
     assert (restore_path / ".curiator-users.json").exists()
     assert (restore_path / "feedback" / "tasks" / "abc123.md").read_text(encoding="utf-8") == "restored task trace\n"
+    restored = ledger.load(load_config_at(restore_path / "gallery.yaml"))
+    assert restored["sample"][0]["comment"] == "restore me"
 
 
 def test_playground_backup_smoke_cleans_restore_by_default(collection, capsys, tmp_path):
@@ -652,6 +659,7 @@ def test_playground_backup_smoke_cleans_restore_by_default(collection, capsys, t
     payload = json.loads(capsys.readouterr().out)
 
     assert payload["ok"] is True
+    assert payload["ledger"]["checkpoint"]["attempted"] is False
     assert payload["restore"]["kept"] is False
     assert not Path(payload["restore"]["root"]).exists()
 

@@ -49,10 +49,11 @@ you want the gate to start proxy apps briefly and poll their configured HTTP smo
 URLs. Use `--output` to write the full JSON posture report under gitignored `release-evidence/` for
 pre-pilot review notes.
 
-`curiator playground-backup-smoke` makes the backup-restore check executable: it copies the mounted
-collection to a temporary restore directory and runs the same playground preflight against the restored
-copy. Add `--keep-restore --restore-root /tmp/curiator-restores` when you want to inspect the restored
-tree; otherwise the temporary copy is removed after the gate finishes.
+`curiator playground-backup-smoke` makes the backup-restore check executable: it checkpoints any
+existing SQLite feedback ledger, copies the mounted collection to a temporary restore directory, and
+runs the same playground preflight against the restored copy. Add `--keep-restore --restore-root
+/tmp/curiator-restores` when you want to inspect the restored tree; otherwise the temporary copy is
+removed after the gate finishes.
 
 ## 2. Gate feedback behind sign-in
 
@@ -204,7 +205,9 @@ Back up the mounted collection directory, not the container image. The important
 - `.git/` and commits created by git-as-memory
 
 SQLite sidecars can exist while the shell is running. Prefer a filesystem snapshot, or stop the
-container before copying `feedback/app_feedback.sqlite*`.
+container before copying `feedback/app_feedback.sqlite*`. `curiator playground-backup-smoke`
+checkpoints the feedback ledger before its own restore-copy check, but that is a preflight gate, not a
+replacement for your host's real backup mechanism.
 
 ## 7. Operate the pilot
 

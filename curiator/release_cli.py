@@ -11,6 +11,7 @@ import sys
 import tempfile
 from pathlib import Path
 
+from . import ledger
 from .config import load_config, load_config_at
 
 
@@ -1127,6 +1128,29 @@ def _path_is_relative_to(path: Path, parent: Path) -> bool:
     return True
 
 
+def _playground_checkpoint_ledger(cfg: dict) -> dict:
+    db = ledger.db_path(cfg)
+    sidecars = [db.with_name(db.name + suffix) for suffix in ("-wal", "-shm")]
+    existing = [p for p in [db, *sidecars] if p.exists()]
+    payload = {
+        "attempted": bool(existing),
+        "ok": True,
+        "path": str(db),
+        "sidecars": [str(p) for p in sidecars if p.exists()],
+        "message": "no SQLite ledger files present",
+    }
+    if not existing:
+        return payload
+    try:
+        ledger.checkpoint(cfg)
+    except Exception as exc:  # noqa: BLE001 - report any SQLite/filesystem failure as gate evidence
+        payload.update({"ok": False, "message": str(exc)})
+    else:
+        payload["message"] = "SQLite ledger checkpointed before restore copy"
+        payload["sidecars"] = [str(p) for p in sidecars if p.exists()]
+    return payload
+
+
 def _playground_backup_smoke_payload(args) -> dict:
     source_cfg = load_config()
     source = Path(source_cfg["repo_root"]).resolve()
@@ -1138,9 +1162,13 @@ def _playground_backup_smoke_payload(args) -> dict:
     restore_path: Path | None = None
     error = None
     preflight = None
+    checkpoint = {"attempted": False, "ok": True, "path": None, "sidecars": [], "message": "not run"}
     try:
         if restore_parent and _path_is_relative_to(restore_parent.resolve(), source):
             raise ValueError("restore root must not live inside the source collection")
+        checkpoint = _playground_checkpoint_ledger(source_cfg)
+        if not checkpoint["ok"]:
+            raise RuntimeError(f"SQLite checkpoint failed before restore copy: {checkpoint['message']}")
         if restore_parent:
             restore_parent.mkdir(parents=True, exist_ok=True)
             run_root = Path(tempfile.mkdtemp(prefix="run-", dir=restore_parent))
@@ -1170,6 +1198,7 @@ def _playground_backup_smoke_payload(args) -> dict:
             "kept": bool(args.keep_restore),
             "error": error,
         },
+        "ledger": {"checkpoint": checkpoint},
         "checks": {
             "smoke": not args.no_smoke,
             "http_smoke": bool(args.http_smoke),
@@ -1199,6 +1228,9 @@ def cmd_playground_backup_smoke(args) -> int:
     print(f"  restore={restore['path'] or '-'} kept={restore['kept']}")
     if restore.get("error"):
         print(f"  ERROR restore: {restore['error']}")
+    checkpoint = payload.get("ledger", {}).get("checkpoint") or {}
+    if checkpoint.get("attempted"):
+        print(f"  ledger checkpoint={'OK' if checkpoint.get('ok') else 'FAILED'} {checkpoint.get('path')}")
     preflight = payload.get("preflight") or {}
     if preflight:
         print(
