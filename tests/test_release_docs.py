@@ -28,6 +28,8 @@ def _copy_release_doc_fixture(tmp_path: Path) -> None:
     shutil.copyfile(ROOT / "docs" / "RELEASE.md", tmp_path / "docs" / "RELEASE.md")
     shutil.copyfile(ROOT / "docs" / "backlog" / "public-release.md",
                     tmp_path / "docs" / "backlog" / "public-release.md")
+    shutil.copyfile(ROOT / "docs" / "backlog" / "public-playground.md",
+                    tmp_path / "docs" / "backlog" / "public-playground.md")
     shutil.copyfile(ROOT / "docs" / "paper" / "reproducibility.md",
                     tmp_path / "docs" / "paper" / "reproducibility.md")
     shutil.copyfile(ROOT / "docs" / "paper" / "curiator-paper.md",
@@ -113,6 +115,59 @@ def test_release_docs_requires_standard_release_evidence_commands(tmp_path):
     assert (
         "docs/paper/reproducibility.md missing required phrase: "
         "make paper-pdf"
+    ) in failures
+    assert (
+        "docs/paper/reproducibility.md missing required phrase: "
+        "curiator release-preflight --gallery curiator-aviato --browser-smoke"
+    ) in failures
+
+
+def test_release_docs_requires_browser_smoke_docs(tmp_path):
+    module = _load_script()
+    _copy_release_doc_fixture(tmp_path)
+    readme = tmp_path / "README.md"
+    release = tmp_path / "docs" / "RELEASE.md"
+    reproducibility = tmp_path / "docs" / "paper" / "reproducibility.md"
+    playground = tmp_path / "docs" / "backlog" / "public-playground.md"
+    readme.write_text(
+        readme.read_text()
+        .replace("curiator smoke --browser", "curiator smoke --shell")
+        .replace("curiator release-preflight --browser-smoke", "curiator release-preflight --shell-smoke")
+    )
+    release.write_text(
+        release.read_text().replace(
+            "curiator release-preflight --gallery curiator-aviato --browser-smoke",
+            "curiator release-preflight --gallery curiator-aviato --shell-smoke",
+        )
+    )
+    reproducibility.write_text(
+        reproducibility.read_text().replace(
+            "curiator release-preflight --gallery curiator-aviato --browser-smoke",
+            "curiator release-preflight --gallery curiator-aviato --shell-smoke",
+        )
+    )
+    playground.write_text(
+        playground.read_text()
+        .replace("--browser-smoke", "--shell-smoke")
+        .replace("curiator playground-backup-smoke", "curiator playground-restore-smoke")
+    )
+
+    failures = module.check_release_docs(tmp_path)
+
+    assert "README.md missing required phrase: curiator smoke --browser" in failures
+    assert "README.md missing required phrase: curiator release-preflight --browser-smoke" in failures
+    assert (
+        "docs/RELEASE.md missing required phrase: "
+        "curiator release-preflight --gallery curiator-aviato --browser-smoke"
+    ) in failures
+    assert (
+        "docs/paper/reproducibility.md missing required phrase: "
+        "curiator release-preflight --gallery curiator-aviato --browser-smoke"
+    ) in failures
+    assert "public-playground backlog missing required phrase: --browser-smoke" in failures
+    assert (
+        "public-playground backlog missing required phrase: "
+        "curiator playground-backup-smoke"
     ) in failures
 
 

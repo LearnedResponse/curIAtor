@@ -43,6 +43,7 @@ def check_release_docs(root: Path = ROOT, *, strict_launch: bool = False) -> lis
     security = root / "SECURITY.md"
     release = root / "docs" / "RELEASE.md"
     public_release = root / "docs" / "backlog" / "public-release.md"
+    public_playground = root / "docs" / "backlog" / "public-playground.md"
     reproducibility = root / "docs" / "paper" / "reproducibility.md"
     paper = root / "docs" / "paper" / "curiator-paper.md"
     demo_gif = root / "docs" / "demo.gif"
@@ -54,6 +55,8 @@ def check_release_docs(root: Path = ROOT, *, strict_launch: bool = False) -> lis
         failures.append("missing SECURITY.md")
     if not public_release.exists():
         failures.append("missing docs/backlog/public-release.md")
+    if not public_playground.exists():
+        failures.append("missing docs/backlog/public-playground.md")
     if not release.exists():
         failures.append("missing docs/RELEASE.md")
     if not reproducibility.exists():
@@ -65,6 +68,7 @@ def check_release_docs(root: Path = ROOT, *, strict_launch: bool = False) -> lis
     security_text = security.read_text(encoding="utf-8") if security.exists() else ""
     release_text = release.read_text(encoding="utf-8") if release.exists() else ""
     public_release_text = public_release.read_text(encoding="utf-8") if public_release.exists() else ""
+    public_playground_text = public_playground.read_text(encoding="utf-8") if public_playground.exists() else ""
     reproducibility_text = reproducibility.read_text(encoding="utf-8") if reproducibility.exists() else ""
     paper_text = paper.read_text(encoding="utf-8") if paper.exists() else ""
     makefile_text = makefile.read_text(encoding="utf-8") if makefile.exists() else ""
@@ -77,6 +81,18 @@ def check_release_docs(root: Path = ROOT, *, strict_launch: bool = False) -> lis
         failures.append("public-release backlog does not mention SECURITY.md")
     if "docs/RELEASE.md" not in public_release_text:
         failures.append("public-release backlog does not mention docs/RELEASE.md")
+    for phrase in [
+        "curiator smoke --browser",
+        "curiator release-preflight --browser-smoke",
+    ]:
+        if phrase not in readme_text:
+            failures.append(f"README.md missing required phrase: {phrase}")
+    for phrase in [
+        "--browser-smoke",
+        "curiator playground-backup-smoke",
+    ]:
+        if phrase not in public_playground_text:
+            failures.append(f"public-playground backlog missing required phrase: {phrase}")
 
     for phrase in SECURITY_REQUIRED_PHRASES:
         if not _contains(security_text, phrase):
@@ -93,6 +109,7 @@ def check_release_docs(root: Path = ROOT, *, strict_launch: bool = False) -> lis
         "release-evidence/release-preflight-optional.json",
         "release-evidence/release-package-smoke.json",
         "release-evidence/case-study-stats.json",
+        "curiator release-preflight --gallery curiator-aviato --browser-smoke",
         "make paper-stats",
         "make paper-pdf",
         "playground-backup-smoke",
@@ -107,6 +124,7 @@ def check_release_docs(root: Path = ROOT, *, strict_launch: bool = False) -> lis
         "--output release-evidence/release-preflight.json",
         "--output release-evidence/release-preflight-optional.json",
         "--output release-evidence/case-study-stats.json",
+        "curiator release-preflight --gallery curiator-aviato --browser-smoke",
     ]:
         if phrase not in reproducibility_text:
             failures.append(f"docs/paper/reproducibility.md missing required phrase: {phrase}")
