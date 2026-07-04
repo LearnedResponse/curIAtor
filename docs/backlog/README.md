@@ -8,11 +8,11 @@ implementation, release action, or external operating step; shipped items move t
 > **private `curiator-planning` repo**, surfaced to the loop as `.planning/` when present. This file is
 > the public half — the release track and example collections.
 
-## Release Gate
+## External Release Gate
 
-These stay live until the public-release bar is met. The rule is: make as much local/dogfood progress as
-possible, and mark only the irreducible external blockers (public repo ownership, API keys, paid
-licenses, DOI services, hosted credentials) at the point they are actually reached.
+No local implementation backlog remains in this section. These stay live until the public-release bar is
+met, and now represent external/human release operations: public repo/tag pushes, hosted credentials,
+PyPI/Zenodo setup, DOI/badge updates, off-machine validation, and final paper review/deposit.
 
 - [**public-release**](public-release.md) — release curIAtor externally on GitHub as v0.2.x after the
   core examples and dogfood collections are fleshed out, browser-smoked, and reproducible. External
