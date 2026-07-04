@@ -16,7 +16,6 @@ services:
       # headless-cc: reuse your host Claude login (read-only). Omit this line for the `api` adapter.
       - ${HOME}/.claude:/root/.claude:ro
     environment:
-      CURIATOR_GALLERY: /collection/gallery.yaml
       SHELL_HOST: "0.0.0.0"
       # For agent.adapter: api (no Claude login needed), drop the ~/.claude mount and set:
       # ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}

@@ -24,12 +24,13 @@ Run curIAtor against a nested gallery with:
 
 ```bash
 curiator galleries
-CURIATOR_GALLERY=galleries/curiator-geometry/gallery.yaml curiator status
-CURIATOR_GALLERY=galleries/curiator-geometry/gallery.yaml curiator up
+curiator --gallery galleries/curiator-geometry/gallery.yaml status
+curiator --gallery galleries/curiator-geometry/gallery.yaml up
 ```
 
 `curiator galleries` prints each nested repo's branch/head, dirty state, and the exact
-`CURIATOR_GALLERY=...` command to target it from this checkout.
+`curiator --gallery ...` command to target it from this checkout. `CURIATOR_GALLERY` remains a
+compatibility fallback and an internal subprocess pin, not the preferred user-facing selector.
 
 When editing a nested gallery, commit inside that gallery repo, not in the parent runner repo.
 

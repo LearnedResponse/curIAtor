@@ -668,7 +668,6 @@ def build_flask_app() -> Flask:
             env = {
                 **os.environ,
                 "CURIATOR_AUDIO": str(audio_path),
-                "CURIATOR_GALLERY": str(core.REG.GALLERY_YAML),
                 "CURIATOR_COLLECTION_ROOT": str(core.REG.COLLECTION_ROOT),
             }
             try:

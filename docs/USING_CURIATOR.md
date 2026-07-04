@@ -224,8 +224,8 @@ drops the returned transcript into the comment box.
 
 You can also set `voice.transcribe_cmd` manually to any local command that accepts an audio clip path
 either through `{audio}` or as the final argument. The command runs from the collection root with
-`CURIATOR_AUDIO`, `CURIATOR_GALLERY`, and `CURIATOR_COLLECTION_ROOT` in the environment. It can print
-plain transcript text or JSON:
+`CURIATOR_AUDIO` and `CURIATOR_COLLECTION_ROOT` in the environment. It can print plain transcript text
+or JSON:
 
 ```yaml
 voice:

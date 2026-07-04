@@ -87,7 +87,7 @@ All notable changes to curIAtor are documented here. The format follows
   check during nested or dependency-prepared preflight; `make release-check` uses strict fresh-clone mode; and
   `make release-launch-check` rejects final-launch demo/paper placeholders plus optional-gallery drift.
 - `curiator galleries` lists nested `galleries/curiator-*` collection repos with git head, dirty state,
-  and the `CURIATOR_GALLERY=...` command for targeting one from the runner checkout; it now also reports
+  and the `curiator --gallery ...` command for targeting one from the runner checkout; it now also reports
   legacy sibling `curiator-*` checkouts or aliases next to the runner so they can be adopted or archived.
 - `curiator galleries clone <repo>` clones public/example collection repos directly into the nested
   `galleries/` workspace, refusing non-gallery clones and preserving each collection's independent git

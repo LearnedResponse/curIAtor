@@ -6,7 +6,8 @@ legacy Dash-compatible shell, sourced from declarative `gallery.yaml` entries.
 It also registers each app's source directory on `sys.path` so the shell's in-process Dash
 mount (`importlib.import_module(<module>)`) can find the demo apps under `examples/dash/`.
 
-CONFIG RESOLUTION: `$CURIATOR_GALLERY`, else `<repo_root>/gallery.yaml`.
+CONFIG RESOLUTION: internal `$CURIATOR_GALLERY` pin from the parent CLI process, else
+`<repo_root>/gallery.yaml`. User-facing commands should prefer `curiator --gallery ...`.
 """
 from __future__ import annotations
 
@@ -40,7 +41,7 @@ _DEFAULT_PORT_BASE = 8201   # reference IDs only (mounts are in-process, no real
 def _load_yaml() -> dict:
     if not GALLERY_YAML.exists():
         raise SystemExit(f"curIAtor: no gallery config at {GALLERY_YAML} "
-                         f"(set $CURIATOR_GALLERY or create gallery.yaml — see docs/DESIGN.md).")
+                         f"(run `curiator --gallery <path> up` or create gallery.yaml — see docs/DESIGN.md).")
     return yaml.safe_load(GALLERY_YAML.read_text()) or {}
 
 

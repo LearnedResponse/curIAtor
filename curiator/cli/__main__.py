@@ -216,7 +216,7 @@ def _cli_user(cfg: dict) -> dict | None:
 def main(argv=None) -> int:
     p = argparse.ArgumentParser(prog="curiator", description="curIAtor — an AI-maintained app gallery.")
     p.add_argument("--gallery", dest="gallery_override",
-                   help="path to gallery.yaml or a collection directory; overrides CURIATOR_GALLERY")
+                   help="path to gallery.yaml or a collection directory; scoped to this command")
     sub = p.add_subparsers(dest="cmd", required=True)
     up = sub.add_parser("up", help="serve the gallery")
     up.add_argument("--legacy-dash-shell", action="store_true", help="serve the old Dash overlay shell")

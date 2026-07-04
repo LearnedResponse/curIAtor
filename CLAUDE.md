@@ -22,8 +22,9 @@ curiator/
   cli.py                      # the whole CLI: up | serve | watch | reply | reload | revert | reflect |
                               #   link | status | context | work | done | open | commands | feedback |
                               #   seed | app create | init | user | demo*
-  config.py                   # gallery.yaml → cfg. Resolution: $CURIATOR_GALLERY → cwd-up gallery.yaml →
-                              #   a `.curiator/app.yaml` link → packaged default. ALSO the ONE home of the
+  config.py                   # gallery.yaml → cfg. Resolution: explicit `curiator --gallery` override →
+                              #   $CURIATOR_GALLERY fallback → cwd-up gallery.yaml → a `.curiator/app.yaml`
+                              #   link → packaged default. ALSO the ONE home of the
                               #   app/mount schema helpers (mount_entries / app_specs / app_spec /
                               #   infer_current_app) that the shell, adapters, gitmem, and CLI all share.
   ledger.py                   # SQLite feedback ledger (feedback/app_feedback.sqlite, WAL). A legacy

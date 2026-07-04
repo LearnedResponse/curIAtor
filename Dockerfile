@@ -24,13 +24,13 @@ ARG CURIATOR_PIP=curiator
 RUN pip install --no-cache-dir ${CURIATOR_PIP}
 
 # The collection mounts here: apps + gallery.yaml + feedback/ (the ledger) + an optional LESSONS.md
-# (the context bundle the api adapter reads). CURIATOR_GALLERY points the CLI at it.
+# (the context bundle the api adapter reads). The entrypoint passes the gallery explicitly so the
+# selector is scoped to this process invocation instead of ambiently granted to every child tool.
 WORKDIR /collection
-ENV CURIATOR_GALLERY=/collection/gallery.yaml \
-    SHELL_HOST=0.0.0.0 \
+ENV SHELL_HOST=0.0.0.0 \
     PYTHONUNBUFFERED=1
 
 EXPOSE 8300
 
 # `serve` = `up` (gallery) + `watch` (the fix loop) in one process, against the mounted collection.
-ENTRYPOINT ["curiator", "serve"]
+ENTRYPOINT ["curiator", "--gallery", "/collection/gallery.yaml", "serve"]
