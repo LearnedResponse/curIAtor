@@ -227,7 +227,13 @@ _BROWSER_CHECK_EXPR = r"""(() => {
   if (lower === "loading..." || lower === "loading") {
     return {ok: false, message: "app iframe is still on the loading placeholder"};
   }
+  if (lower.startsWith("loading website") ||
+      lower.includes("requires javascript to load and work properly")) {
+    return {ok: false, message: "app iframe is still on a JavaScript loading fallback"};
+  }
   if (lower.includes("could not be mounted") ||
+      lower.includes("proxy is not reachable") ||
+      lower.includes("proxy could not start") ||
       lower.includes("proxy backend did not respond") ||
       lower.includes("websocket/hmr upgrade requests are not supported")) {
     return {ok: false, message: text.slice(0, 220)};

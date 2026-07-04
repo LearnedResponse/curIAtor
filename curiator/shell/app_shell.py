@@ -1664,11 +1664,16 @@ def refresh_changed_app_sources() -> list[str]:
 
     This is the safety net for missed `curiator reload` pokes: if an agent edits a Dash app while the
     shell is running, the next `/api/apps` poll bumps that app's revision so the iframe remounts.
+    Proxy-style apps are process-backed and must use the explicit `/reload/<key>` path; polling their
+    full app directories catches runtime writes and can cause endless iframe remounts.
     """
     changed: list[str] = []
     for rec in REGISTRY:
         key = rec.get("key")
         if not key:
+            continue
+        mount_kind = (rec.get("mount") or {}).get("kind") or rec.get("kind")
+        if mount_kind in {"proxy", "engine-backed"}:
             continue
         sig = _app_source_signature(rec)
         if key not in APP_SOURCE_SIGNATURES:

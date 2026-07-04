@@ -65,6 +65,14 @@ def _git(cfg: dict, *args: str, check: bool = True):
     return _git_in(Path(cfg["repo_root"]), *args, check=check)
 
 
+def _commit_identity_prefix(repo: Path) -> list[str]:
+    name = _git_in(repo, "config", "user.name", check=False).stdout.strip()
+    email = _git_in(repo, "config", "user.email", check=False).stdout.strip()
+    if name and email:
+        return []
+    return ["-c", "user.name=curIAtor", "-c", "user.email=noreply@curiator.dev"]
+
+
 def is_repo(cfg: dict) -> bool:
     return _git(cfg, "rev-parse", "--git-dir", check=False).returncode == 0
 
@@ -538,6 +546,80 @@ def _general_collection_paths(cfg: dict, fb: dict | None, exclude: set[str]) -> 
     return _extra_paths(cfg, globs, exclude)
 
 
+def _nested_app_repos_from_paths(cfg: dict, paths: list[str]) -> list[Path]:
+    """Nested git app repos touched by collection-level dirty paths."""
+    root = Path(cfg["repo_root"]).resolve()
+    repos: list[Path] = []
+    for rel in paths:
+        if not rel:
+            continue
+        path = (root / rel).resolve()
+        if not path.exists():
+            continue
+        probe = path if path.is_dir() else path.parent
+        while probe != root and root in probe.parents:
+            if _is_git_toplevel(probe):
+                if probe not in repos:
+                    repos.append(probe)
+                break
+            probe = probe.parent
+    return sorted(repos, key=lambda p: len(p.relative_to(root).parts))
+
+
+def _app_for_nested_repo(cfg: dict, repo: Path) -> tuple[str, dict, str] | None:
+    from .config import app_specs
+
+    for raw in app_specs(cfg):
+        key = str(raw.get("name") or raw.get("app_name") or raw.get("module") or "")
+        if not key:
+            continue
+        spec = _app_spec(cfg, key)
+        if spec and Path(spec["root"]).resolve() == repo.resolve():
+            return key, spec, _rel_to(spec.get("source"), repo) or "."
+    return None
+
+
+def _commit_general_nested_app_repos(
+    cfg: dict,
+    feedback_id: str,
+    *,
+    paths: list[str],
+    summary: str,
+    comment: str,
+    stars,
+    status: str,
+) -> dict:
+    """Commit dirty nested app repos included in a General collection change before the parent gitlink."""
+    app_commits = []
+    for repo in _nested_app_repos_from_paths(cfg, paths):
+        found = _app_for_nested_repo(cfg, repo)
+        if not found:
+            continue
+        app_key, spec, nested_source = found
+        if not _path_changed_in(repo, nested_source):
+            continue
+        ok, smoke = smoke_app(cfg, app_key, spec.get("source_rel"))
+        if not ok:
+            _git_in(repo, "checkout", "--", nested_source)
+            return {"ok": False, "reason": f"smoke-test failed, reverted nested app edit: {smoke}"}
+        nested_commit = _commit_nested_app_repo(
+            cfg,
+            app_key,
+            feedback_id,
+            repo=repo,
+            source_rel=nested_source,
+            summary=summary,
+            comment=comment,
+            stars=stars,
+            status=status,
+            smoke=smoke,
+        )
+        if not nested_commit.get("committed"):
+            return {"ok": False, "reason": nested_commit.get("reason", "nested app repo was not committed")}
+        app_commits.append(nested_commit)
+    return {"ok": True, "app_commits": app_commits}
+
+
 def _trailers(cfg: dict, sha: str) -> dict:
     body = _git(cfg, "show", "-s", "--format=%B", sha).stdout
     out = {}
@@ -609,7 +691,7 @@ def _commit_nested_memory_repo(
     msg += f"Co-Authored-By: curiator[{_agent_label(cfg)}] <noreply@curiator.dev>\n"
     git = cfg.get("git", {}) or {}
     commit_args = ["commit", "-m", msg] + (["-s"] if git.get("signoff", True) else [])
-    _git_in(repo, *commit_args)
+    _git_in(repo, *_commit_identity_prefix(repo), *commit_args)
     sha = _git_in(repo, "rev-parse", "--short", "HEAD").stdout.strip()
     branch = _git_in(repo, "rev-parse", "--abbrev-ref", "HEAD").stdout.strip()
     return {
@@ -706,7 +788,7 @@ def _commit_nested_app_repo(
         msg += f"Feedback-From: {from_email}\n"
     msg += f"Co-Authored-By: curiator[{_agent_label(cfg)}] <noreply@curiator.dev>\n"
     commit_args = ["commit", "-m", msg] + (["-s"] if git.get("signoff", True) else [])
-    _git_in(repo, *commit_args)
+    _git_in(repo, *_commit_identity_prefix(repo), *commit_args)
     sha = _git_in(repo, "rev-parse", "--short", "HEAD").stdout.strip()
     branch = _git_in(repo, "rev-parse", "--abbrev-ref", "HEAD").stdout.strip()
     return {
@@ -779,6 +861,24 @@ def commit_run(cfg: dict, app: str, feedback_id: str, *, status: str, note_text:
         ledger_rel = _ledger_relpath(cfg)
         exclude = {parent_stage_src or "", ledger_rel}
         general_extra = _general_collection_paths(cfg, fb, exclude) if app == _GENERAL_KEY else []
+        general_nested_commits: list[dict] = []
+        if app == _GENERAL_KEY and general_extra:
+            general_nested = _commit_general_nested_app_repos(
+                cfg,
+                feedback_id,
+                paths=general_extra,
+                summary=summary,
+                comment=comment,
+                stars=stars,
+                status=status,
+            )
+            if not general_nested.get("ok"):
+                return {"committed": False, "reason": general_nested.get("reason", "nested app repo was not committed")}
+            general_nested_commits = general_nested.get("app_commits") or []
+            if general_nested_commits:
+                changed_desc += " (" + ", ".join(
+                    f"nested app {Path(item['repo']).name}@{item['sha']}" for item in general_nested_commits
+                ) + ")"
         exclude.update(general_extra)
         extra = general_extra + _extra_paths(cfg, git.get("also_commit", _DEFAULT_ALSO_COMMIT), exclude)
         if extra:
@@ -799,11 +899,13 @@ def commit_run(cfg: dict, app: str, feedback_id: str, *, status: str, note_text:
                 msg += f"Feedback-From: {from_email}\n"       # provenance → the git record (reputation substrate)
             msg += f"Co-Authored-By: curiator[{_agent_label(cfg)}] <noreply@curiator.dev>\n"
             commit_args = ["commit", "-m", msg] + (["-s"] if git.get("signoff", True) else [])
-            _git(cfg, *commit_args)
+            _git(cfg, *_commit_identity_prefix(Path(cfg["repo_root"])), *commit_args)
             sha = _git(cfg, "rev-parse", "--short", "HEAD").stdout.strip()
             result.update({"committed": True, "sha": sha, "branch": current_branch(cfg)})
         if nested_commit:
             result["app_commits"] = [nested_commit]
+        if general_nested_commits:
+            result.setdefault("app_commits", []).extend(general_nested_commits)
         memory_commits = _commit_nested_memories(
             cfg,
             app,
@@ -871,7 +973,8 @@ def revert_feedback(cfg: dict, target: str, reason: str = "manual revert") -> di
         msg = (f"curator({app}): revert {short}\n\n"
                f"Reverted: {short}   Reason: {reason}\n\n"
                f"{_APP_TRAILER}: {app}\n{_FEEDBACK_TRAILER}: {fid or '-'}\n")
-        _git(cfg, "commit", "-m", msg, *(["-s"] if git.get("signoff", True) else []))
+        _git(cfg, *_commit_identity_prefix(Path(cfg["repo_root"])),
+             "commit", "-m", msg, *(["-s"] if git.get("signoff", True) else []))
         newsha = _git(cfg, "rev-parse", "--short", "HEAD").stdout.strip()
         return {"ok": True, "app": app, "feedback": fid, "reverted": short,
                 "reverted_source": reverted_source, "sha": newsha}

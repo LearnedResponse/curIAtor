@@ -321,6 +321,15 @@ def test_smoke_browser_failure_fails_app_result(collection, capsys, monkeypatch)
     assert "browser smoke failed: app iframe rendered no visible content" in result["message"]
 
 
+def test_browser_smoke_expression_rejects_proxy_start_diagnostic():
+    from curiator import browser_smoke
+
+    expression = browser_smoke._BROWSER_CHECK_EXPR
+    assert 'lower.includes("proxy could not start")' in expression
+    assert 'lower.includes("proxy is not reachable")' in expression
+    assert 'lower.includes("requires javascript to load and work properly")' in expression
+
+
 def test_smoke_reports_failing_configured_smoke(collection, capsys):
     from curiator import cli
 

@@ -913,6 +913,35 @@ app = build_app()
     assert "updated sample" in refreshed.get_data(as_text=True)
 
 
+def test_api_apps_poll_does_not_remount_proxy_app_on_runtime_writes(collection, monkeypatch):
+    appdir = collection / "apps" / "proxy_app"
+    appdir.mkdir()
+    (appdir / "server.js").write_text("console.log('proxy app')\n")
+    (collection / "gallery.yaml").write_text(
+        (collection / "gallery.yaml").read_text().replace(
+            "    tags: [demo]\n",
+            "    tags: [demo]\n"
+            "  - name: proxy_app\n"
+            "    title: Proxy App\n"
+            "    root: apps/proxy_app\n"
+            "    source: .\n"
+            "    mount: { kind: proxy, cmd: \"node server.js\", port: 8701 }\n",
+        )
+    )
+    mod = _load_web_mod(monkeypatch)
+    app = mod.build_flask_app()
+    api_client = app.test_client()
+
+    apps = api_client.get("/api/apps").get_json()["apps"]
+    proxy = next(a for a in apps if a["key"] == "proxy_app")
+    assert proxy["revision"] == 0
+
+    (appdir / "runtime-cache.json").write_text("{}\n")
+    apps = api_client.get("/api/apps").get_json()["apps"]
+    proxy = next(a for a in apps if a["key"] == "proxy_app")
+    assert proxy["revision"] == 0
+
+
 def test_reload_refreshes_registry_for_newly_created_app(collection, web_mod):
     from werkzeug.test import Client
     from werkzeug.wrappers import Response
