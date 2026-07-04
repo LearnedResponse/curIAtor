@@ -1,9 +1,12 @@
 # Backlog — curiator-games (dr4ft-led)
 
-> **Status:** active dogfood target as of 2026-07-03. Build as much local proof as possible before public
-> release: start with repo/import scaffolding and engine-backed overlay shape, then mark only true
-> external blockers such as upstream repo access, paid game binaries, or required licenses/API keys. A
-> public collection of game/sim overlays the loop maintains — led by
+> **Status:** first local proof landed 2026-07-03 in `galleries/curiator-games@6b061f0`;
+> first feedback-to-fix receipt landed at `galleries/curiator-games@918cb58`. Build as much local proof
+> as possible before public release: start with repo/import scaffolding and engine-backed overlay shape,
+> then mark only true external blockers such as upstream repo access, paid game binaries, or required
+> licenses/API keys. The current local proof is a dependency-light Node/proxy draft-table reviewer with
+> synthetic public-domain card data, seeded draft-reviewer feedback, browser-smoke evidence, and no
+> external assets/upstream repo requirement. A public collection of game/sim overlays the loop maintains — led by
 > **dr4ft** (an existing open-source MTG draft web app), with engine-backed diagnostic overlays for
 > **Factorio**, **Nethack**, and **Dwarf Fortress**. Sibling to `curiator-geometry` / `phylogenetics`.
 > Post-release direction, not release-track. Captured 2026-07-03.
@@ -40,13 +43,30 @@ of it. Same pattern the OT digital twin uses. See `.planning/strategy/engine-bac
 
 ## Work-order
 
-1. Scaffold `galleries/curiator-games` (public-first, like geometry/phylo).
-2. **dr4ft first** — fork, mount, seed one feedback round on the drafting UI. Proves the loop on a real,
-   loved app with zero engine complexity.
+1. **Scaffold `galleries/curiator-games` — first pass landed.** `6b061f0` is a public-first nested
+   collection with pinned runner mode, codex auto-small settings, repo-local curIAtor command/skill
+   shims, a Node same-origin proxy app, seeded SQLite feedback ledger, and a synthetic draft table that
+   does not bundle card art or external assets.
+2. **dr4ft first — local stand-in landed; upstream import still pending.** The current `draft_table`
+   app proves the drafting-interface loop shape without cloning upstream code: pack cards, lane signals,
+   pick history, table read, and first feedback item `250840ee` closed with a live selection-impact
+   panel. Remaining seeded items: show neighboring-seat signal provenance and add a compact draft
+   artifact for done replies. Actual dr4ft import/fork is still a true external step until the upstream
+   repository URL/access and license review are pinned.
 3. **Engine-backed mount** — a reusable backend-process mount (RCON / websocket / API); Factorio's
    dashboard is the first engine-backed app on it.
 4. **Nethack + Dwarf Fortress overlays** as follow-ons on the same mount.
 5. Ship as a viral public demo alongside the release.
+
+## Scaffold verification
+
+- `curiator --gallery galleries/curiator-games/gallery.yaml doctor --json`: passing, no errors or
+  warnings.
+- `curiator --gallery galleries/curiator-games/gallery.yaml smoke --json`: passing for
+  `draft_table` (`node --check server.js`).
+- `curiator release-preflight --gallery curiator-games --fresh-clone --strict --browser-smoke --json`:
+  passing at `6b061f0`; no tracked machine-local paths or publish-unsafe runtime artifacts.
+- Feedback `250840ee` closed at `918cb58` with rendered browser-smoke artifacts and zero console errors.
 
 ## Guardrails
 

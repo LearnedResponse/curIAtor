@@ -29,8 +29,8 @@ licenses, DOI services, hosted credentials) at the point they are actually reach
   release.
 - [**phylogenetics-collection**](phylogenetics-collection.md) — local collection and seeded loop are in
   place; continue dogfooding/static-publish checks and mark only Pages/public-URL wiring as external.
-- [**games-collection**](games-collection.md) — build the local proof as far as possible without bundling
-  commercial game binaries or needing external repo access/licenses.
+- [**games-collection**](games-collection.md) — local draft-table proof and first feedback receipt are
+  in place; keep dogfooding the seeded queue before external dr4ft/import or licensed-engine work.
 - [**ot-digital-twin**](ot-digital-twin.md) — push OT v2 toward a local engine-backed/digital-twin proof;
   mark OpenModelica/FMU/toolchain or licensed-substrate blockers only when reached.
 - [**curiator-ml**](curiator-ml.md) — build a local open-benchmark diagnostic loop before considering
