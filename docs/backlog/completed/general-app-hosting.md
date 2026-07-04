@@ -1,8 +1,8 @@
 # Backlog — general app hosting (any framework, multi-file apps)
 
-> **Status: active dogfood hardening as of 2026-07-04. Core landed & proven in the wild (2026-07-01);
-> keep pushing local framework, base-path/HMR, browser-smoke, engine-backed WebSocket handling, and
-> engine-backed dogfood before public release.**
+> **Status: completed local proof as of 2026-07-04. Core landed & proven in the wild (2026-07-01), then
+> hardened through browser smoke, engine-backed lifecycle, engine health checks, HTTP smoke, and the OT
+> `twin_diagnostics` dogfood app (`curiator-ot@ad198e5`).**
 > App directories, multi-endpoint `mounts:`, the same-origin `proxy` mount, and `curiator app create`
 > scaffolds (dash/static/python/node/flask/fastapi/rust/react/svelte/vue/next/streamlit/gradio) are in the runner, and the **non-Dash proof now exists**:
 > `curiator-aviato` runs a React/Node SSR app and a Rust HTTP server through `proxy` mounts next to
@@ -10,13 +10,10 @@
 > is now in the shell/doctor path: curIAtor starts a managed engine sidecar before the proxied front-end,
 > injects `CURIATOR_ENGINE_PORT` / `CURIATOR_ENGINE_URL`, and shows engine stdout/stderr in proxy
 > diagnostics; an optional `engine_health` endpoint now blocks front-end startup until the sidecar is
-> answering. Remaining backlog: framework
-> template hardening beyond the first React/Svelte/Vue/Next/Flask/FastAPI/Rust/Streamlit/Gradio scaffolds, heavier Docker/Compose
-> orchestration, same-origin WebSocket forwarding for browser-to-engine channels, and
-> **surfacing the proof**, which is now the cheapest highest-leverage step: the
-> proof is private/local until [public-release](public-release.md) publishes `curiator-aviato` and links
-> it from the README. **Reframed 2026-06-29 — this is *not* an expansion past Dash; it *realizes* what
-> the overlay already is.**
+> answering. The remaining items are follow-ons, not blockers for this work-order: heavier Docker/Compose
+> orchestration, same-origin WebSocket forwarding for browser-to-engine channels, and public surfacing via
+> the release track. **Reframed 2026-06-29 — this is *not* an expansion past Dash; it *realizes* what the
+> overlay already is.**
 
 ## The reframe: the overlay *is* the product
 
@@ -98,9 +95,9 @@ only at scaffold/import time.
 
 Three roadmap collections want the same thing plain `proxy` did not give: a **persistent backend engine**
 the proxied front-end talks to but the loop never edits — a game server
-([`games-collection`](completed/games-collection.md): Factorio RCON / DFHack / the NetHack Learning
+([`games-collection`](games-collection.md): Factorio RCON / DFHack / the NetHack Learning
 Environment), an FMU co-sim (`ot-digital-twin`), or a
-training/inference process ([`curiator-ml`](completed/curiator-ml.md)). That's the **engine-backed mount**: `proxy` (the front-end
+training/inference process ([`curiator-ml`](curiator-ml.md)). That's the **engine-backed mount**: `proxy` (the front-end
 the loop iterates) **plus a managed backend sidecar** reachable over websocket / RCON / API.
 
 ```yaml
@@ -227,4 +224,4 @@ the FMU/model is the collection's own).
 Dash-first is the *launch wedge* (ship fast, own the data/HMI audience), **not the identity** — the
 overlay stayed framework-agnostic and the non-Dash proof now runs (`curiator-aviato`: React SSR + Rust +
 multi-mount Dash behind one shell). The fast-follow is no longer building the proof but **publishing**
-it ([public-release](public-release.md)) — a private proof shows nothing.
+it ([public-release](../public-release.md)) — a private proof shows nothing.

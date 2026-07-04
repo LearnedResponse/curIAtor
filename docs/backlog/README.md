@@ -24,9 +24,6 @@ licenses, DOI services, hosted credentials) at the point they are actually reach
 
 ## Dogfood Before Release
 
-- [**general-app-hosting**](general-app-hosting.md) — framework-agnostic app hosting is landed and proven;
-  keep hardening template/base-path/HMR behavior, engine-backed WebSocket handling, and dogfood
-  proxy/static/Dash-suite/engine combinations before release.
 - [**ot-digital-twin**](ot-digital-twin.md) — local engine-backed twin diagnostics proof landed; the
   remaining true substrate work is blocked on OpenModelica/FMU runtime availability and a final
   feedback round against that real FMU backend.
@@ -53,3 +50,7 @@ Fully delivered public work-orders, retired to [`completed/`](completed/) for pr
 - [**public-playground**](completed/public-playground.md) — hosted-pilot moderation, auth, quota,
   preflight, backup-restore, and runbook primitives are delivered; actually running a public/velvet-gated
   deployment remains external — shipped runner state `curiator@94f3717`.
+- [**general-app-hosting**](completed/general-app-hosting.md) — app directories, proxy mounts,
+  scaffold/import templates, browser/HTTP smoke, and engine-backed lifecycle/health checks are landed
+  and dogfooded; WebSocket/Docker hardening is demand-paced follow-on work — shipped runner
+  `curiator@2b59bb3` and OT dogfood `curiator-ot@ad198e5`.

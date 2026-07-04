@@ -40,7 +40,7 @@ lead), so the demos will be credible.
 
 ## Engine-backed, with the metric as the enforced artifact
 
-curiator-ML is an **engine-backed app** (see [`general-app-hosting.md`](../general-app-hosting.md)): the dashboard is the front-end
+curiator-ML is an **engine-backed app** (see [`general-app-hosting.md`](general-app-hosting.md)): the dashboard is the front-end
 the loop iterates; the **training/inference process is the engine** (substrate). And it's the ideal
 proving ground for the **agent-capabilities artifact contract** (`.planning/completed/agent-capabilities.md`):
 here the artifact is a **measured CV score + diagnostics**, and *"reject `done` without a measured
