@@ -1,11 +1,11 @@
 # Backlog — curiator-games (dr4ft-led)
 
 > **Status:** first local proof landed 2026-07-03 in `galleries/curiator-games@6b061f0`;
-> first feedback-to-fix receipt landed at `galleries/curiator-games@918cb58`. Build as much local proof
-> as possible before public release: start with repo/import scaffolding and engine-backed overlay shape,
+> seeded draft-table feedback round closed at `galleries/curiator-games@b7abc62`. Build as much local proof
+> as possible before public release: continue with engine-backed overlay shape,
 > then mark only true external blockers such as upstream repo access, paid game binaries, or required
 > licenses/API keys. The current local proof is a dependency-light Node/proxy draft-table reviewer with
-> synthetic public-domain card data, seeded draft-reviewer feedback, browser-smoke evidence, and no
+> synthetic public-domain card data, three feedback-to-fix receipts, browser-smoke evidence, and no
 > external assets/upstream repo requirement. A public collection of game/sim overlays the loop maintains — led by
 > **dr4ft** (an existing open-source MTG draft web app), with engine-backed diagnostic overlays for
 > **Factorio**, **Nethack**, and **Dwarf Fortress**. Sibling to `curiator-geometry` / `phylogenetics`.
@@ -49,9 +49,9 @@ of it. Same pattern the OT digital twin uses. See `.planning/strategy/engine-bac
    does not bundle card art or external assets.
 2. **dr4ft first — local stand-in landed; upstream import still pending.** The current `draft_table`
    app proves the drafting-interface loop shape without cloning upstream code: pack cards, lane signals,
-   pick history, table read, and first feedback item `250840ee` closed with a live selection-impact
-   panel. Remaining seeded items: show neighboring-seat signal provenance and add a compact draft
-   artifact for done replies. Actual dr4ft import/fork is still a true external step until the upstream
+   pick history, table read, neighboring-seat provenance, selection-impact summaries, and a compact
+   draft artifact for done replies. Seeded feedback items `250840ee`, `0665d7f0`, and `88708ebd` are
+   closed through `b7abc62`. Actual dr4ft import/fork is still a true external step until the upstream
    repository URL/access and license review are pinned.
 3. **Engine-backed mount** — a reusable backend-process mount (RCON / websocket / API); Factorio's
    dashboard is the first engine-backed app on it.
@@ -65,8 +65,9 @@ of it. Same pattern the OT digital twin uses. See `.planning/strategy/engine-bac
 - `curiator --gallery galleries/curiator-games/gallery.yaml smoke --json`: passing for
   `draft_table` (`node --check server.js`).
 - `curiator release-preflight --gallery curiator-games --fresh-clone --strict --browser-smoke --json`:
-  passing at `6b061f0`; no tracked machine-local paths or publish-unsafe runtime artifacts.
-- Feedback `250840ee` closed at `918cb58` with rendered browser-smoke artifacts and zero console errors.
+  passing at `b7abc62`; no tracked machine-local paths or publish-unsafe runtime artifacts.
+- Feedback `250840ee` closed at `918cb58`, `0665d7f0` closed at `76c4388`, and `88708ebd` closed at
+  `b7abc62`, each with rendered browser-smoke artifacts and zero console errors.
 
 ## Guardrails
 
