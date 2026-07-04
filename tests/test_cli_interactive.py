@@ -24,7 +24,9 @@ def test_link_file_resolves_gallery_from_external_app_repo(collection, tmp_path,
     assert link.exists()
     link_data = yaml.safe_load(link.read_text())
     assert link_data == {"gallery": "../gallery.yaml", "app": "sample"}
-    assert (app_repo / ".claude" / "commands" / "curiator.md").exists()
+    claude_skill = app_repo / ".claude" / "skills" / "curiator" / "SKILL.md"
+    assert claude_skill.exists()
+    assert not (app_repo / ".claude" / "commands" / "curiator.md").exists()
     skill = app_repo / ".agents" / "skills" / "curiator" / "SKILL.md"
     assert skill.exists()
     assert skill.read_text().startswith("---\nname: curiator\n")
@@ -182,13 +184,49 @@ def test_status_surfaces_nested_app_repo(collection, monkeypatch, capsys):
     assert "clean]" in out
 
 
-def test_commands_install_without_link(collection, monkeypatch):
+def test_commands_install_writes_model_invokable_skills(collection, monkeypatch):
+    """Both Claude Code and Codex get a model-invokable SKILL.md (not a manual slash command)."""
     from curiator import cli
 
     monkeypatch.chdir(collection)
     assert cli.main(["commands", "install"]) == 0
-    assert (collection / ".claude" / "commands" / "curiator.md").exists()
+    claude_skill = collection / ".claude" / "skills" / "curiator" / "SKILL.md"
+    assert claude_skill.exists()
+    assert claude_skill.read_text().startswith("---\nname: curiator\n")
     assert (collection / ".agents" / "skills" / "curiator" / "SKILL.md").exists()
+    # the old Claude *slash command* path is no longer written
+    assert not (collection / ".claude" / "commands" / "curiator.md").exists()
+
+
+def test_commands_install_migrates_generated_legacy_claude_command(collection, monkeypatch, capsys):
+    """A curIAtor-generated `.claude/commands/curiator.md` slash command is relocated to the skill path."""
+    from curiator import cli
+
+    legacy = collection / ".claude" / "commands" / "curiator.md"
+    legacy.parent.mkdir(parents=True)
+    legacy.write_text(cli._legacy_command_markdown())
+
+    monkeypatch.chdir(collection)
+    assert cli.main(["commands", "install"]) == 0
+
+    assert not legacy.exists()
+    assert not (collection / ".claude" / "commands").exists()
+    assert (collection / ".claude" / "skills" / "curiator" / "SKILL.md").exists()  # .claude survives
+    assert "legacy Claude command path" in capsys.readouterr().out
+
+
+def test_commands_install_keeps_customized_legacy_claude_command(collection, monkeypatch, capsys):
+    from curiator import cli
+
+    legacy = collection / ".claude" / "commands" / "curiator.md"
+    legacy.parent.mkdir(parents=True)
+    legacy.write_text("my own /curiator command\n")
+
+    monkeypatch.chdir(collection)
+    assert cli.main(["commands", "install"]) == 0
+
+    assert legacy.read_text() == "my own /curiator command\n"
+    assert "kept customized legacy file" in capsys.readouterr().out
 
 
 def test_commands_install_removes_generated_legacy_codex_skill(collection, monkeypatch, capsys):

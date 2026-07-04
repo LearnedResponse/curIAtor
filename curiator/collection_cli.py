@@ -753,8 +753,21 @@ def cmd_smoke(args) -> int:
     print(f"curiator: smoke {'OK' if ok else 'FAILED'} ({sum(1 for r in results if r['ok'])}/{len(results)} passed)")
     return 0 if ok else 1
 
-def _command_markdown() -> str:
-    return """---
+# The interactive shim curIAtor installs into a linked app repo so a coding-agent session drives the
+# same ledger/task/reply/git path as the headless watcher. It's a SKILL (model-invokable): Claude Code
+# discovers it at `.claude/skills/curiator/SKILL.md`, Codex/`.agents` at `.agents/skills/curiator/SKILL.md`.
+# Only the intro line varies across curIAtor versions; keeping the exact historical variants lets
+# cleanup relocate files WE generated (old Claude slash command, old `.codex` skill) without ever
+# clobbering a shim the user customized.
+_SHIM_INTROS = (
+    "When this skill runs — proactively when the task matches, or when the user invokes it explicitly:",
+    "When the user invokes this shim:",     # prior: Claude slash-command / `.agents` era
+    "When the user invokes this command:",  # oldest generated body
+)
+
+
+def _command_markdown(intro: str = _SHIM_INTROS[0]) -> str:
+    return f"""---
 name: curiator
 description: Use when working in a repo linked to a curIAtor gallery, handling curIAtor feedback IDs, opening task bundles, posting replies, or finishing app changes through curIAtor's ledger, reload, and git-as-memory workflow.
 ---
@@ -772,7 +785,7 @@ Use the `curiator` CLI as the source of truth:
 - Do not edit `feedback/app_feedback.sqlite` directly.
 - Do not run git commit/push/rewrite commands for curator work; `curiator done`/`reply --status done` handles git-as-memory.
 
-When the user invokes this shim:
+{intro}
 1. If they provide no arguments, run `curiator status` and `curiator context`.
 2. If they provide `work` or a feedback id, run `curiator work ...`, read the printed task bundle, and follow it.
 3. If they provide `done`, help formulate and run the appropriate `curiator done ...` command after verifying the change.
@@ -780,10 +793,13 @@ When the user invokes this shim:
 
 
 def _legacy_command_markdown() -> str:
-    return _command_markdown().replace(
-        "When the user invokes this shim:",
-        "When the user invokes this command:",
-    )
+    """The oldest generated shim body (Claude slash-command era) — kept for cleanup recognition/tests."""
+    return _command_markdown(_SHIM_INTROS[-1])
+
+
+def _generated_shim_contents() -> set[str]:
+    """Every shim body curIAtor has ever generated, so cleanup only relocates files WE wrote."""
+    return {_command_markdown(intro) for intro in _SHIM_INTROS}
 
 
 def _prune_empty_dirs(path: Path, stop: Path) -> None:
@@ -797,7 +813,7 @@ def _prune_empty_dirs(path: Path, stop: Path) -> None:
 
 def _install_command_files(root: Path) -> list[Path]:
     paths = [
-        root / ".claude" / "commands" / "curiator.md",
+        root / ".claude" / "skills" / "curiator" / "SKILL.md",
         root / ".agents" / "skills" / "curiator" / "SKILL.md",
     ]
     for path in paths:
@@ -806,34 +822,41 @@ def _install_command_files(root: Path) -> list[Path]:
     return paths
 
 
-def _cleanup_legacy_codex_skill(root: Path) -> tuple[Path, str] | None:
-    legacy = root / ".codex" / "skills" / "curiator" / "SKILL.md"
+def _cleanup_legacy_shim(root: Path, legacy_rel: Path, base_rel: Path, label: str) -> tuple[Path, str, str] | None:
+    """Relocate a superseded generated shim (old Claude slash command / old Codex skill path). A file
+    the user customized (content not one curIAtor generated) is kept and flagged."""
+    legacy = root / legacy_rel
     if not legacy.exists():
         return None
-    generated = {_command_markdown(), _legacy_command_markdown()}
     try:
         text = legacy.read_text()
     except OSError:
-        return legacy, "kept"
-    if text not in generated:
-        return legacy, "kept"
+        return legacy, "kept", label
+    if text not in _generated_shim_contents():
+        return legacy, "kept", label
+    base = root / base_rel
     legacy.unlink()
-    _prune_empty_dirs(legacy.parent, root / ".codex")
-    _prune_empty_dirs(root / ".codex", root)
-    return legacy, "removed"
+    _prune_empty_dirs(legacy.parent, base)
+    _prune_empty_dirs(base, root)
+    return legacy, "removed", label
 
 
 def cmd_commands(args) -> int:
     root = Path(args.root).expanduser().resolve() if args.root else _project_root()
     paths = _install_command_files(root)
-    legacy = _cleanup_legacy_codex_skill(root)
+    legacies = [
+        _cleanup_legacy_shim(root, Path(".claude") / "commands" / "curiator.md", Path(".claude"), "Claude command"),
+        _cleanup_legacy_shim(root, Path(".codex") / "skills" / "curiator" / "SKILL.md", Path(".codex"), "Codex skill"),
+    ]
     print(f"curiator: installed interactive command shims in {root}")
     for path in paths:
         print(f"  + {path.relative_to(root)}")
-    if legacy:
-        legacy_path, action = legacy
+    for legacy in legacies:
+        if not legacy:
+            continue
+        legacy_path, action, label = legacy
         if action == "removed":
-            print(f"  - {legacy_path.relative_to(root)} (legacy Codex skill path)")
+            print(f"  - {legacy_path.relative_to(root)} (legacy {label} path)")
         else:
             print(f"  ! kept customized legacy file: {legacy_path.relative_to(root)}")
     return 0

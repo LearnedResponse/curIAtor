@@ -290,9 +290,10 @@ curiator done <feedback_id> "Changed X and smoke-tested with Y"
 
 `curiator link` writes `.curiator/app.yaml`, using a relative gallery path when possible, so commands
 run from a separate app repo can still find the collection's gallery, ledger, smoke command, and app
-source scope after the repos move together. `--commands` installs lightweight Claude/Codex shims
-(`.claude/commands/curiator.md` and `.agents/skills/curiator/SKILL.md`) so Claude `/curiator`
-or Codex `$curiator` can call `curiator status`, `curiator context`, and `curiator work`. If no app
+source scope after the repos move together. `--commands` installs lightweight, model-invokable
+`curiator` skills for both agents (`.claude/skills/curiator/SKILL.md` for Claude Code and
+`.agents/skills/curiator/SKILL.md` for Codex) so either can reach for `curiator status`,
+`curiator context`, and `curiator work` on its own. If no app
 is selected and the collection has multiple apps, `curiator context` prints a collection-level summary
 with app counts, General feedback, and ready commands instead of failing.
 

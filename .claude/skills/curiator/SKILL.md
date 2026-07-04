@@ -16,7 +16,7 @@ Use the `curiator` CLI as the source of truth:
 - Do not edit `feedback/app_feedback.sqlite` directly.
 - Do not run git commit/push/rewrite commands for curator work; `curiator done`/`reply --status done` handles git-as-memory.
 
-When the user invokes this shim:
+When this skill runs — proactively when the task matches, or when the user invokes it explicitly:
 1. If they provide no arguments, run `curiator status` and `curiator context`.
 2. If they provide `work` or a feedback id, run `curiator work ...`, read the printed task bundle, and follow it.
 3. If they provide `done`, help formulate and run the appropriate `curiator done ...` command after verifying the change.

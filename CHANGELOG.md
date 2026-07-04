@@ -168,9 +168,12 @@ All notable changes to curIAtor are documented here. The format follows
   unlanded; it now records the current Flask/React, proxy, SQLite, scaffold, and release-gate state.
 - `docs/EXTRACTION_SCOPE.md` is now an archival extraction receipt with current package paths and
   launch gates instead of the original prototype-file lift plan.
-- `curiator commands install` now writes the Codex repo skill to `.agents/skills/curiator/SKILL.md`,
-  matching current Codex skill discovery, while keeping Claude's `.claude/commands/curiator.md`;
-  generated legacy `.codex/skills/curiator/SKILL.md` shims are cleaned up on reinstall.
+- `curiator commands install` installs the interactive `curiator` shim as a model-invokable Skill for
+  both agents — `.claude/skills/curiator/SKILL.md` (Claude Code) and `.agents/skills/curiator/SKILL.md`
+  (Codex) — so the coding agent reaches for it on its own when a task matches, rather than only when a
+  user types a slash command. Previously-generated `.claude/commands/curiator.md` slash commands and
+  legacy `.codex/skills/curiator/SKILL.md` shims are relocated to the skill paths on reinstall;
+  user-customized shims at those paths are kept and flagged.
 - Ledger inspection commands now open existing SQLite ledgers read-only, so `curiator status`,
   `context`, and `feedback show` do not dirty git-tracked collection ledgers.
 - Screenshot annotation sanitization now drops empty DOM-target class lists instead of persisting

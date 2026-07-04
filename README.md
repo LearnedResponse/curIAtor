@@ -148,9 +148,9 @@ curiator work <feedback_id>        # prints the exact task bundle for this item
 curiator done <feedback_id> "Changed the picker and smoke-tested it"
 ```
 
-The Claude `/curiator` command and Codex `$curiator` skill installed by `--commands` are thin:
-they call the CLI, which writes the same ledger, task bundle, reply trace, reload, and
-git-as-memory commit as the headless watcher.
+The Claude Code and Codex `curiator` skills installed by `--commands` are thin: the coding agent
+reaches for them on its own when the task matches, and they call the CLI, which writes the same
+ledger, task bundle, reply trace, reload, and git-as-memory commit as the headless watcher.
 
 ## The agent, and where it runs
 
