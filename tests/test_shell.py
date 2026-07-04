@@ -136,6 +136,66 @@ def test_proxy_start_interpolates_command_templates(shell_mod, monkeypatch, tmp_
         shell_mod._discard_proxy_logs("proxy_app")
 
 
+def test_engine_backed_proxy_starts_engine_and_injects_engine_env(shell_mod, monkeypatch, tmp_path):
+    calls = []
+
+    class FakeProc:
+        pid = 456
+
+        def poll(self):
+            return None
+
+        def terminate(self):
+            return None
+
+    class DeadProc:
+        pid = 457
+
+        def poll(self):
+            return 1
+
+    def fake_popen(args, *popen_args, **popen_kwargs):
+        calls.append({"args": args, "cwd": popen_kwargs.get("cwd"), "env": popen_kwargs.get("env")})
+        return FakeProc()
+
+    monkeypatch.setattr(shell_mod.subprocess, "Popen", fake_popen)
+    rec = {
+        "root": str(tmp_path),
+        "source": str(tmp_path),
+        "mount": {
+            "kind": "engine-backed",
+            "cmd": "python ui.py --port {port} --engine {engine_url}",
+            "port": 8799,
+            "engine": "python engine.py --port {engine_port}",
+            "engine_port": 8899,
+        },
+    }
+    try:
+        ok, err = shell_mod._ensure_proxy("twin", rec)
+        assert ok is True and err is None
+        assert calls[0]["args"] == ["python", "engine.py", "--port", "8899"]
+        assert calls[0]["env"]["PORT"] == "8899"
+        assert calls[1]["args"] == [
+            "python", "ui.py", "--port", "8799", "--engine", "http://127.0.0.1:8899",
+        ]
+        assert calls[1]["env"]["CURIATOR_ENGINE_PORT"] == "8899"
+        assert calls[1]["env"]["CURIATOR_ENGINE_URL"] == "http://127.0.0.1:8899"
+        assert shell_mod._PROXY_LOGS["twin"]["engine_cmd"] == "python engine.py --port 8899"
+
+        shell_mod._PROXY_PROCS["twin"] = DeadProc()
+        ok, err = shell_mod._ensure_proxy("twin", rec)
+        assert ok is True and err is None
+        assert len(calls) == 3
+        assert calls[2]["args"] == [
+            "python", "ui.py", "--port", "8799", "--engine", "http://127.0.0.1:8899",
+        ]
+        assert shell_mod._PROXY_LOGS["twin"]["engine_cmd"] == "python engine.py --port 8899"
+    finally:
+        shell_mod._PROXY_PROCS.pop("twin", None)
+        shell_mod._ENGINE_PROCS.pop("twin", None)
+        shell_mod._discard_proxy_logs("twin")
+
+
 def test_proxy_websocket_upgrade_reports_hmr_limit(shell_mod, monkeypatch, tmp_path):
     from io import BytesIO
 

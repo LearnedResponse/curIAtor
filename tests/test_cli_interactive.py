@@ -117,6 +117,37 @@ def test_context_without_selected_app_summarizes_multi_app_collection(collection
     assert "Recent General Feedback" in out
 
 
+def test_doctor_validates_engine_backed_mount(collection, monkeypatch, capsys):
+    import json
+
+    from curiator import cli
+
+    (collection / "gallery.yaml").write_text(
+        (collection / "gallery.yaml").read_text().replace(
+            "    mount: { kind: dash-inproc, module: sample }\n",
+            "    mount:\n"
+            "      kind: engine-backed\n"
+            "      cmd: python apps/sample.py --port {port} --engine {engine_url}\n"
+            "      port: 8810\n"
+            "      engine: python apps/sample.py --engine-port {engine_port}\n"
+            "      engine_port: 8910\n",
+        )
+    )
+    monkeypatch.chdir(collection)
+
+    assert cli.main(["doctor", "--json"]) == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["errors"] == 0
+
+    (collection / "gallery.yaml").write_text(
+        (collection / "gallery.yaml").read_text().replace("      engine_port: 8910\n", "")
+    )
+    assert cli.main(["doctor", "--json"]) == 1
+    payload = json.loads(capsys.readouterr().out)
+    messages = "\n".join(issue["message"] for issue in payload["issues"])
+    assert "engine-backed mount needs engine_port" in messages
+
+
 def test_status_surfaces_nested_app_repo(collection, monkeypatch, capsys):
     import subprocess
 

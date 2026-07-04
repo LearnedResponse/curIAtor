@@ -1,15 +1,18 @@
 # Backlog — general app hosting (any framework, multi-file apps)
 
-> **Status: active dogfood hardening as of 2026-07-03. Core landed & proven in the wild (2026-07-01);
-> keep pushing local framework, base-path/HMR, browser-smoke, and engine-backed mount hardening before
-> public release.**
+> **Status: active dogfood hardening as of 2026-07-04. Core landed & proven in the wild (2026-07-01);
+> keep pushing local framework, base-path/HMR, browser-smoke, and engine-backed dogfood before public
+> release.**
 > App directories, multi-endpoint `mounts:`, the same-origin `proxy` mount, and `curiator app create`
 > scaffolds (dash/static/python/node/flask/fastapi/rust/react/svelte/vue/next/streamlit/gradio) are in the runner, and the **non-Dash proof now exists**:
 > `curiator-aviato` runs a React/Node SSR app and a Rust HTTP server through `proxy` mounts next to
-> Dash, with per-root smoke commands — the loop closed on all of them. Remaining backlog: framework
+> Dash, with per-root smoke commands — the loop closed on all of them. The core `engine-backed` mount
+> is now in the shell/doctor path: curIAtor starts a managed engine sidecar before the proxied front-end,
+> injects `CURIATOR_ENGINE_PORT` / `CURIATOR_ENGINE_URL`, and shows engine stdout/stderr in proxy
+> diagnostics. Remaining backlog: framework
 > template hardening beyond the first React/Svelte/Vue/Next/Flask/FastAPI/Rust/Streamlit/Gradio scaffolds, heavier Docker/Compose
-> orchestration, **engine-backed mounts** (a managed backend engine behind a proxied front-end — the
-> shared substrate for games / OT-twin / ML) — and **surfacing the proof**, which is now the cheapest highest-leverage step: the
+> orchestration, engine-backed health checks / same-origin WebSocket forwarding, and
+> **surfacing the proof**, which is now the cheapest highest-leverage step: the
 > proof is private/local until [public-release](public-release.md) publishes `curiator-aviato` and links
 > it from the README. **Reframed 2026-06-29 — this is *not* an expansion past Dash; it *realizes* what
 > the overlay already is.**
@@ -92,7 +95,7 @@ only at scaffold/import time.
 
 ## Engine-backed mounts (the shared substrate for games, OT twins, and ML)
 
-Three roadmap collections want the same thing `proxy` doesn't yet give: a **persistent backend engine**
+Three roadmap collections want the same thing plain `proxy` did not give: a **persistent backend engine**
 the proxied front-end talks to but the loop never edits — a game server
 ([`games-collection`](completed/games-collection.md): Factorio RCON / DFHack / the NetHack Learning
 Environment), an FMU co-sim (`ot-digital-twin`), or a
@@ -110,9 +113,16 @@ apps:
     source: apps/factory-board/
 ```
 
-What it adds over `proxy`: **lifecycle** (the engine starts/stops + health-checks with the app);
-**wiring** (the front-end gets the engine's connection info; if the browser needs the engine directly,
-the shell proxies that ws under the same origin, so the html2canvas moat stays intact). **The invariant
+Minimal runner support landed 2026-07-04: `kind: engine-backed` starts the `engine` command before the
+proxied UI, injects `CURIATOR_ENGINE_PORT` / `CURIATOR_ENGINE_URL` into both processes, supports
+`{engine_port}` / `{engine_url}` command templates, validates `engine` + `engine_port` in
+`curiator doctor`, and shows engine stdout/stderr on proxy diagnostics. That is the local-process v1; Docker,
+Compose, WebSocket subrouting, health checks, and a real FMU/game/model dogfood are still backlog.
+
+What it adds over `proxy`: **lifecycle** (the engine starts/stops with the app; health checks remain a
+hardening item); **wiring** (the front-end gets the engine's connection info; if the browser needs the
+engine directly, same-origin WebSocket forwarding is still the remaining lightweight-proxy hardening
+piece). **The invariant
 holds:** the loop maintains the *front-end* (dashboard / HMI / diagnostic surface); the engine is
 **substrate it doesn't edit** — screenshot/feedback lands on the front-end, the engine is the data
 source. Factorio-over-RCON, FMU-over-co-sim, and a model-over-API are one shape — **build the mount once;
@@ -196,9 +206,18 @@ the FMU/model is the collection's own).
    `curiator smoke --browser` adds an opt-in headless-Brave shell-render check. The matching
    `release-preflight --http-smoke` and `--browser-smoke` flags carry those checks across nested or
    dependency-prepared publication candidates.
+   The first `engine-backed` shell/doctor support has also landed: the shell starts a configured
+   backend sidecar before the proxy front-end, renders `{engine_port}` / `{engine_url}` templates,
+   injects `CURIATOR_ENGINE_PORT` / `CURIATOR_ENGINE_URL`, terminates the engine with proxy cleanup, and
+   includes engine stdout/stderr in the diagnostic page. Remaining engine hardening is health-check
+   semantics and same-origin WebSocket forwarding for browser-to-engine channels.
    `curiator app import` now surfaces the same visible warnings immediately after registering an
    existing repo, before the user first loads a broken mount. Full live-HMR reverse proxying remains
    demand-paced per framework.
+5. **Engine-backed local lifecycle** landed as a minimal runner primitive: a proxy UI can carry a managed
+   backend command, engine port, and engine URL wiring. The remaining work is dogfooding it against the
+   first OT/FMUs or game/ML substrate, then adding health checks and Docker/Compose only where the
+   collection actually needs them.
 
 Dash-first is the *launch wedge* (ship fast, own the data/HMI audience), **not the identity** — the
 overlay stayed framework-agnostic and the non-Dash proof now runs (`curiator-aviato`: React SSR + Rust +

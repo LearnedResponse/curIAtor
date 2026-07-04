@@ -481,7 +481,8 @@ def _doctor_issues(cfg: dict) -> list[dict]:
                     "where": f"app {name} {label}",
                     "message": f"configured path does not exist: {path}",
                 })
-        if not spec.get("smoke") and (mount.get("kind") == "proxy" or source_path.is_dir()):
+        is_proxy_like = mount.get("kind") in {"proxy", "engine-backed"}
+        if not spec.get("smoke") and (is_proxy_like or source_path.is_dir()):
             issues.append({
                 "severity": "warning",
                 "where": f"app {name} smoke",
@@ -495,7 +496,7 @@ def _doctor_issues(cfg: dict) -> list[dict]:
                 cwd=root_path,
                 label="smoke command",
             )
-        if mount.get("kind") == "proxy":
+        if is_proxy_like:
             cmd = str(mount.get("cmd") or "")
             port = mount.get("port")
             _doctor_warn_missing_executable(
@@ -521,12 +522,34 @@ def _doctor_issues(cfg: dict) -> list[dict]:
                         "commands.preview or a full reverse proxy when live HMR is required"
                     ),
                 })
+            if mount.get("kind") == "engine-backed":
+                engine = str(mount.get("engine") or "")
+                engine_port = mount.get("engine_port")
+                if not engine:
+                    issues.append({
+                        "severity": "error",
+                        "where": f"app {name} engine",
+                        "message": "engine-backed mount needs an engine command",
+                    })
+                if engine_port is None:
+                    issues.append({
+                        "severity": "error",
+                        "where": f"app {name} engine",
+                        "message": "engine-backed mount needs engine_port",
+                    })
+                _doctor_warn_missing_executable(
+                    issues,
+                    where=f"app {name} engine",
+                    command=engine,
+                    cwd=root_path,
+                    label="engine command",
+                )
             _doctor_warn_proxy_base_path(issues, name=name, root=root_path, mount=mount)
         _doctor_warn_missing_manifests(
             issues,
             name=name,
             root=root_path,
-            commands=[spec.get("smoke"), mount.get("cmd")],
+            commands=[spec.get("smoke"), mount.get("cmd"), mount.get("engine")],
         )
     return issues
 

@@ -373,7 +373,7 @@ def _settings_html(agent: dict, gallery_path: str, saved: bool = False) -> str:
 
 # ============================== registry =====================================
 def load_registry():
-    """Normalize ALL_APPS into shell records. kind ∈ {dynamic, static, missing}."""
+    """Normalize ALL_APPS into shell records."""
     recs = []
     for a in REG.ALL_APPS:
         f = a.get("file")
@@ -384,7 +384,7 @@ def load_registry():
         # research-era layout where apps lived next to the shell).
         p = Path(f) if f else None
         mount = a.get("mount") or {}
-        if mount.get("kind") == "proxy":
+        if mount.get("kind") in {"proxy", "engine-backed"}:
             kind = "proxy"
         elif p and p.suffix == ".py" and p.exists():
             kind = "dynamic"
@@ -1133,14 +1133,20 @@ def catalog_rows(search, sortby, tags_sel, reverse):
 
 # ============================== lazy mounting ================================
 _PROXY_PROCS: dict[str, subprocess.Popen] = {}
+_ENGINE_PROCS: dict[str, subprocess.Popen] = {}
 _PROXY_LOGS: dict[str, dict[str, str]] = {}
 _HOP_HEADERS = {"connection", "keep-alive", "proxy-authenticate", "proxy-authorization",
                 "te", "trailers", "transfer-encoding", "upgrade"}
 
 
-def _discard_proxy_logs(key: str) -> None:
+def _discard_proxy_logs(key: str, *, include_engine: bool = True) -> None:
     info = _PROXY_LOGS.pop(key, None) or {}
-    for field in ("stdout", "stderr"):
+    fields = ["stdout", "stderr"]
+    if include_engine:
+        fields.extend(["engine_stdout", "engine_stderr"])
+    else:
+        _PROXY_LOGS[key] = {field: value for field, value in info.items() if field.startswith("engine_")}
+    for field in fields:
         path = info.get(field)
         if not path:
             continue
@@ -1151,7 +1157,7 @@ def _discard_proxy_logs(key: str) -> None:
 
 
 def _cleanup_proxies():
-    for proc in list(_PROXY_PROCS.values()):
+    for proc in [*list(_PROXY_PROCS.values()), *list(_ENGINE_PROCS.values())]:
         if proc.poll() is None:
             proc.terminate()
     for key in list(_PROXY_LOGS):
@@ -1182,13 +1188,78 @@ def resolve_server(key):
 def _render_proxy_template(key: str, rec: dict, value) -> str:
     mount_cfg = rec.get("mount") or {}
     port = mount_cfg.get("port") or rec.get("port") or ""
+    engine_port = mount_cfg.get("engine_port") or ""
+    engine_url = f"http://127.0.0.1:{engine_port}" if engine_port else ""
     root = rec.get("root") or str(REG.COLLECTION_ROOT)
     source = rec.get("source") or root
-    values = {"app": key, "port": port, "root": root, "source": source}
+    values = {
+        "app": key,
+        "port": port,
+        "root": root,
+        "source": source,
+        "engine_port": engine_port,
+        "engine_url": engine_url,
+    }
     try:
         return str(value).format(**values)
     except (KeyError, IndexError, ValueError):
         return str(value)
+
+
+def _proxy_log_paths(key: str, role: str) -> tuple[Path, Path]:
+    safe_key = re.sub(r"[^A-Za-z0-9_.-]+", "_", key)
+    base = Path(tempfile.gettempdir())
+    return (
+        base / f"curiator-{role}-{safe_key}.stdout.log",
+        base / f"curiator-{role}-{safe_key}.stderr.log",
+    )
+
+
+def _proxy_env(key: str, rec: dict, port) -> dict[str, str]:
+    mount_cfg = rec.get("mount") or {}
+    engine_port = mount_cfg.get("engine_port")
+    env = {**os.environ, "PORT": str(port), "CURIATOR_APP": key}
+    if engine_port:
+        env["CURIATOR_ENGINE_PORT"] = str(engine_port)
+        env["CURIATOR_ENGINE_URL"] = f"http://127.0.0.1:{engine_port}"
+    return env
+
+
+def _ensure_engine(key: str, rec: dict) -> tuple[bool, str | None]:
+    """Start an engine-backed app's backend substrate if configured."""
+    mount_cfg = rec.get("mount") or {}
+    raw_engine = mount_cfg.get("engine")
+    if not raw_engine:
+        return True, None
+    engine_port = mount_cfg.get("engine_port")
+    if not engine_port:
+        return False, "engine-backed mount with `engine` needs `engine_port`"
+    proc = _ENGINE_PROCS.get(key)
+    if proc and proc.poll() is None:
+        return True, None
+    raw_cwd = mount_cfg.get("engine_cwd") or mount_cfg.get("cwd") or rec.get("root") or str(REG.COLLECTION_ROOT)
+    cwd = _render_proxy_template(key, rec, raw_cwd)
+    cmd = _render_proxy_template(key, rec, raw_engine)
+    stdout, stderr = _proxy_log_paths(key, "engine")
+    _PROXY_LOGS.setdefault(key, {}).update({
+        "engine_stdout": str(stdout),
+        "engine_stderr": str(stderr),
+        "engine_cmd": str(cmd),
+        "engine_cwd": str(cwd),
+        "engine_port": str(engine_port),
+    })
+    try:
+        with stdout.open("wb") as out, stderr.open("wb") as err:
+            _ENGINE_PROCS[key] = subprocess.Popen(
+                shlex.split(cmd),
+                cwd=cwd,
+                env=_proxy_env(key, rec, engine_port),
+                stdout=out,
+                stderr=err,
+            )
+    except OSError as exc:
+        return False, str(exc)
+    return True, None
 
 
 def _ensure_proxy(key: str, rec: dict) -> tuple[bool, str | None]:
@@ -1201,21 +1272,25 @@ def _ensure_proxy(key: str, rec: dict) -> tuple[bool, str | None]:
     cmd = _render_proxy_template(key, rec, raw_cmd)
     proc = _PROXY_PROCS.get(key)
     if proc and proc.poll() is None:
+        engine_ok, engine_err = _ensure_engine(key, rec)
+        if not engine_ok:
+            return False, f"engine could not start: {engine_err}"
         return True, None
     raw_cwd = mount_cfg.get("cwd") or rec.get("root") or str(REG.COLLECTION_ROOT)
     cwd = _render_proxy_template(key, rec, raw_cwd)
-    env = {**os.environ, "PORT": str(port), "CURIATOR_APP": key}
-    _discard_proxy_logs(key)
-    safe_key = re.sub(r"[^A-Za-z0-9_.-]+", "_", key)
-    stdout = Path(tempfile.gettempdir()) / f"curiator-proxy-{safe_key}.stdout.log"
-    stderr = Path(tempfile.gettempdir()) / f"curiator-proxy-{safe_key}.stderr.log"
-    _PROXY_LOGS[key] = {
+    env = _proxy_env(key, rec, port)
+    _discard_proxy_logs(key, include_engine=False)
+    engine_ok, engine_err = _ensure_engine(key, rec)
+    if not engine_ok:
+        return False, f"engine could not start: {engine_err}"
+    stdout, stderr = _proxy_log_paths(key, "proxy")
+    _PROXY_LOGS.setdefault(key, {}).update({
         "stdout": str(stdout),
         "stderr": str(stderr),
         "cmd": str(cmd),
         "cwd": str(cwd),
         "port": str(port),
-    }
+    })
     try:
         with stdout.open("wb") as out, stderr.open("wb") as err:
             _PROXY_PROCS[key] = subprocess.Popen(shlex.split(cmd), cwd=cwd, env=env, stdout=out, stderr=err)
@@ -1239,15 +1314,31 @@ def _proxy_diagnostics_html(key: str, rec: dict, *, message: str, url: str | Non
     port = mount_cfg.get("port") or rec.get("port")
     cmd = _render_proxy_template(key, rec, mount_cfg.get("cmd") or "")
     cwd = _render_proxy_template(key, rec, mount_cfg.get("cwd") or rec.get("root") or str(REG.COLLECTION_ROOT))
+    engine_cmd = _render_proxy_template(key, rec, mount_cfg.get("engine") or "")
+    engine_cwd = _render_proxy_template(
+        key,
+        rec,
+        mount_cfg.get("engine_cwd") or mount_cfg.get("cwd") or rec.get("root") or str(REG.COLLECTION_ROOT),
+    )
     proc = _PROXY_PROCS.get(key)
     if proc is None:
         state = "not started"
     else:
         code = proc.poll()
         state = f"running pid {proc.pid}" if code is None else f"exited with code {code}"
+    engine_proc = _ENGINE_PROCS.get(key)
+    if not mount_cfg.get("engine"):
+        engine_state = ""
+    elif engine_proc is None:
+        engine_state = "not started"
+    else:
+        engine_code = engine_proc.poll()
+        engine_state = f"running pid {engine_proc.pid}" if engine_code is None else f"exited with code {engine_code}"
     info = _PROXY_LOGS.get(key) or {}
     stderr = _proxy_log_tail(info.get("stderr"))
     stdout = _proxy_log_tail(info.get("stdout"))
+    engine_stderr = _proxy_log_tail(info.get("engine_stderr"))
+    engine_stdout = _proxy_log_tail(info.get("engine_stdout"))
 
     def row(label: str, value: str | int | None) -> str:
         return ("<tr><th style='text-align:left;color:#777;padding:2px 10px 2px 0'>"
@@ -1262,6 +1353,14 @@ def _proxy_diagnostics_html(key: str, rec: dict, *, message: str, url: str | Non
         logs += ("<h4 style='margin:14px 0 4px'>stdout</h4>"
                  f"<pre style='white-space:pre-wrap;background:#fff;border:1px solid #ddd;"
                  f"border-radius:4px;padding:8px;max-width:860px'>{_esc(stdout)}</pre>")
+    if engine_stderr:
+        logs += ("<h4 style='margin:14px 0 4px'>engine stderr</h4>"
+                 f"<pre style='white-space:pre-wrap;background:#fff;border:1px solid #ddd;"
+                 f"border-radius:4px;padding:8px;max-width:860px'>{_esc(engine_stderr)}</pre>")
+    if engine_stdout:
+        logs += ("<h4 style='margin:14px 0 4px'>engine stdout</h4>"
+                 f"<pre style='white-space:pre-wrap;background:#fff;border:1px solid #ddd;"
+                 f"border-radius:4px;padding:8px;max-width:860px'>{_esc(engine_stdout)}</pre>")
     if not logs:
         logs = "<p style='color:#777;font-size:13px'>No proxy stdout/stderr has been captured yet.</p>"
 
@@ -1275,6 +1374,10 @@ def _proxy_diagnostics_html(key: str, rec: dict, *, message: str, url: str | Non
         f"{row('port', port)}"
         f"{row('target', url or '')}"
         f"{row('process', state)}"
+        f"{row('engine command', engine_cmd) if engine_cmd else ''}"
+        f"{row('engine cwd', engine_cwd) if engine_cmd else ''}"
+        f"{row('engine port', mount_cfg.get('engine_port')) if engine_cmd else ''}"
+        f"{row('engine process', engine_state) if engine_cmd else ''}"
         "</table>"
         f"{logs}"
         "<p style='color:#777;font-size:12px;max-width:860px'>"
@@ -1396,7 +1499,7 @@ class LazyDispatcher:
                 mount_cfg = rec.get("mount") or {}
                 mount = self.prefix + key
                 rest = p[len(mount):] or "/"
-                if mount_cfg.get("kind") == "proxy":
+                if mount_cfg.get("kind") in {"proxy", "engine-backed"}:
                     return _proxy_call(key, rec, rest, environ, start_response)
                 app = self._get(key)
                 if app is None:
