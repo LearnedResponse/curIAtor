@@ -46,7 +46,7 @@ preflight (`curiator-ot@36e21cf`). v2 keeps all of it and swaps the process mode
 4. **A feedback round that drives a backend change** (twin fidelity or control logic) via a KPI-surface
    comment — the proof that the loop drives backend work, not just UI.
 5. This is the **first "engine-backed app" with an FMU backend** — it shares the backend mount pattern
-   with `curiator-games` (build the mount once).
+   with [`curiator-games`](completed/games-collection.md) (build the mount once).
 
 ## Guardrails
 

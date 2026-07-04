@@ -93,8 +93,9 @@ only at scaffold/import time.
 ## Engine-backed mounts (the shared substrate for games, OT twins, and ML)
 
 Three roadmap collections want the same thing `proxy` doesn't yet give: a **persistent backend engine**
-the proxied front-end talks to but the loop never edits — a game server (`games-collection`: Factorio
-RCON / DFHack / the NetHack Learning Environment), an FMU co-sim (`ot-digital-twin`), or a
+the proxied front-end talks to but the loop never edits — a game server
+([`games-collection`](completed/games-collection.md): Factorio RCON / DFHack / the NetHack Learning
+Environment), an FMU co-sim (`ot-digital-twin`), or a
 training/inference process (`curiator-ml`). That's the **engine-backed mount**: `proxy` (the front-end
 the loop iterates) **plus a managed backend sidecar** reachable over websocket / RCON / API.
 

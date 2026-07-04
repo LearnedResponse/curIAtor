@@ -29,9 +29,6 @@ licenses, DOI services, hosted credentials) at the point they are actually reach
   release.
 - [**phylogenetics-collection**](phylogenetics-collection.md) — local collection and seeded loop are in
   place; continue dogfooding/static-publish checks and mark only Pages/public-URL wiring as external.
-- [**games-collection**](games-collection.md) — local stand-in breadth is complete across draft,
-  factory, roguelike, and fortress overlays; remaining real-app work is parked on external upstream,
-  licensed-engine, and public-demo operations.
 - [**ot-digital-twin**](ot-digital-twin.md) — push OT v2 toward a local engine-backed/digital-twin proof;
   mark OpenModelica/FMU/toolchain or licensed-substrate blockers only when reached.
 - [**curiator-ml**](curiator-ml.md) — build a local open-benchmark diagnostic loop before considering
@@ -52,3 +49,6 @@ Fully delivered public work-orders, retired to [`completed/`](completed/) for pr
 - [**math-geometry-collection**](completed/math-geometry-collection.md) — seven public Dash/Plotly math
   explainers plus the first feedback-to-fix receipt and fresh-clone preflight — shipped
   `curiator-geometry@30bb155`.
+- [**games-collection**](completed/games-collection.md) — draft-table feedback loop plus synthetic
+  factory, roguelike, and fortress overlays; real-app integrations parked on external upstream,
+  licensed-engine, and public-demo operations — shipped `curiator-games@5314217`.
