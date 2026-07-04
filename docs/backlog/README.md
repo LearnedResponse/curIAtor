@@ -25,8 +25,8 @@ licenses, DOI services, hosted credentials) at the point they are actually reach
 ## Dogfood Before Release
 
 - [**general-app-hosting**](general-app-hosting.md) — framework-agnostic app hosting is landed and proven;
-  keep hardening template/base-path/HMR behavior, engine health/WebSocket handling, and dogfood
-  proxy/static/Dash-suite combinations before release.
+  keep hardening template/base-path/HMR behavior, engine-backed WebSocket handling, and dogfood
+  proxy/static/Dash-suite/engine combinations before release.
 - [**ot-digital-twin**](ot-digital-twin.md) — push OT v2 toward a local engine-backed/digital-twin proof;
   mark OpenModelica/FMU/toolchain or licensed-substrate blockers only when reached.
 

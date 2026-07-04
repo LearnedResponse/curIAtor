@@ -4,8 +4,8 @@
 > proof as possible before public release, then mark only true toolchain/substrate blockers such as
 > OpenModelica/FMU availability or licensed Simscape dependencies. OT **v1 shipped** (deterministic tank
 > sim + SQLite historian + Dash
-> HMI, `curiator-ot@36e21cf`). The runner now has a minimal local `engine-backed` mount primitive
-> (`engine`, `engine_port`, `{engine_url}`, and engine diagnostics), so the next dogfood step is the
+> HMI, `curiator-ot@36e21cf`). The runner now has a local `engine-backed` mount primitive
+> (`engine`, `engine_port`, `{engine_url}`, optional `engine_health`, and engine diagnostics), so the next dogfood step is the
 > OpenModelica/FMU substrate itself. v2 deepens the *substrate*: replace the hand-coded ODE with a credible
 > **physics digital twin (OpenModelica)** under the same HMI the loop iterates — and turn that HMI into a
 > **diagnostics/KPI surface** so feedback drives real backend work, not just layout. Captured 2026-07-04.
@@ -47,9 +47,9 @@ preflight (`curiator-ot@36e21cf`). v2 keeps all of it and swaps the process mode
    alarm rationale — so feedback can reach the *backend*, not only the layout.
 4. **A feedback round that drives a backend change** (twin fidelity or control logic) via a KPI-surface
    comment — the proof that the loop drives backend work, not just UI.
-5. This is the **first FMU-backed dogfood of the `engine-backed` mount** — the minimal runner lifecycle is
-   available, but this still needs the real OpenModelica/FMU substrate and a feedback round that exercises
-   it.
+5. This is the **first FMU-backed dogfood of the `engine-backed` mount** — local runner lifecycle and
+   health polling are available, but this still needs the real OpenModelica/FMU substrate and a feedback
+   round that exercises it.
 
 ## Guardrails
 

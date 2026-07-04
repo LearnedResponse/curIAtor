@@ -196,6 +196,122 @@ def test_engine_backed_proxy_starts_engine_and_injects_engine_env(shell_mod, mon
         shell_mod._discard_proxy_logs("twin")
 
 
+def test_engine_backed_proxy_checks_configured_engine_health(shell_mod, monkeypatch, tmp_path):
+    calls = []
+    health_urls = []
+
+    class FakeProc:
+        pid = 456
+        terminated = False
+
+        def poll(self):
+            return None
+
+        def terminate(self):
+            self.terminated = True
+
+    class FakeResponse:
+        status = 204
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+    def fake_popen(args, *popen_args, **popen_kwargs):
+        proc = FakeProc()
+        calls.append({"args": args, "proc": proc})
+        return proc
+
+    def fake_urlopen(url, timeout=None):
+        health_urls.append(url)
+        return FakeResponse()
+
+    monkeypatch.setattr(shell_mod.subprocess, "Popen", fake_popen)
+    monkeypatch.setattr(shell_mod.urllib.request, "urlopen", fake_urlopen)
+    rec = {
+        "root": str(tmp_path),
+        "source": str(tmp_path),
+        "mount": {
+            "kind": "engine-backed",
+            "cmd": "python ui.py --port {port}",
+            "port": 8799,
+            "engine": "python engine.py --port {engine_port}",
+            "engine_port": 8899,
+            "engine_health": "/ready?app={app}",
+        },
+    }
+    try:
+        ok, err = shell_mod._ensure_proxy("twin", rec)
+        assert ok is True and err is None
+        assert health_urls == ["http://127.0.0.1:8899/ready?app=twin"]
+        assert calls[0]["args"] == ["python", "engine.py", "--port", "8899"]
+        assert calls[1]["args"] == ["python", "ui.py", "--port", "8799"]
+        assert shell_mod._PROXY_LOGS["twin"]["engine_health_status"] == "HTTP 204"
+    finally:
+        shell_mod._PROXY_PROCS.pop("twin", None)
+        shell_mod._ENGINE_PROCS.pop("twin", None)
+        shell_mod._discard_proxy_logs("twin")
+
+
+def test_engine_backed_proxy_blocks_when_engine_health_fails(shell_mod, monkeypatch, tmp_path):
+    calls = []
+
+    class FakeProc:
+        pid = 456
+
+        def __init__(self):
+            self.terminated = False
+
+        def poll(self):
+            return None
+
+        def terminate(self):
+            self.terminated = True
+
+    def fake_popen(args, *popen_args, **popen_kwargs):
+        proc = FakeProc()
+        calls.append({"args": args, "proc": proc})
+        return proc
+
+    monkeypatch.setattr(shell_mod.subprocess, "Popen", fake_popen)
+    monkeypatch.setattr(
+        shell_mod.urllib.request,
+        "urlopen",
+        lambda url, timeout=None: (_ for _ in ()).throw(OSError("connection refused")),
+    )
+    rec = {
+        "root": str(tmp_path),
+        "source": str(tmp_path),
+        "mount": {
+            "kind": "engine-backed",
+            "cmd": "python ui.py --port {port}",
+            "port": 8799,
+            "engine": "python engine.py --port {engine_port}",
+            "engine_port": 8899,
+            "engine_health": "/ready",
+            "engine_health_timeout": 0,
+        },
+    }
+    try:
+        ok, err = shell_mod._ensure_proxy("twin", rec)
+        assert ok is False
+        assert "engine health check failed" in err
+        assert len(calls) == 1
+        assert calls[0]["proc"].terminated is True
+        assert shell_mod._PROXY_LOGS["twin"]["engine_health_status"] == "connection refused"
+        assert "http://127.0.0.1:8899/ready" in shell_mod._proxy_diagnostics_html(
+            "twin",
+            rec,
+            message=f"proxy could not start: {err}",
+        )
+    finally:
+        shell_mod._PROXY_PROCS.pop("twin", None)
+        shell_mod._ENGINE_PROCS.pop("twin", None)
+        shell_mod._discard_proxy_logs("twin")
+
+
 def test_proxy_websocket_upgrade_reports_hmr_limit(shell_mod, monkeypatch, tmp_path):
     from io import BytesIO
 

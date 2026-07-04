@@ -169,7 +169,8 @@ def _resolve(base: Path, value: str | None) -> Path | None:
 # The shell registry, the loop adapters, gitmem, and the CLI all consume these helpers. The schema
 # semantics (mount/mounts merge, root/source resolution) live HERE — don't re-derive them per consumer.
 MOUNT_MERGE_KEYS = (
-    "source", "title", "tags", "color", "smoke", "smoke_timeout", "smoke_http", "cwd", "port", "cmd"
+    "source", "title", "tags", "color", "smoke", "smoke_timeout", "smoke_http", "cwd", "port", "cmd",
+    "engine", "engine_cwd", "engine_port", "engine_health", "engine_health_path", "engine_health_timeout",
 )
 
 

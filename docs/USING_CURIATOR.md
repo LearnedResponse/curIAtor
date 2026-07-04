@@ -411,6 +411,24 @@ The same browser pass is available in release and hosted-pilot gates as `--brows
 For publication gates, `curiator release-preflight --http-smoke` applies the same HTTP pass across the
 selected nested galleries, or across fresh clones after app dependencies are installed there.
 
+For an `engine-backed` mount, add an optional engine health endpoint when the sidecar exposes HTTP:
+
+```yaml
+mount:
+  kind: engine-backed
+  cmd: "python ui.py --port {port} --engine {engine_url}"
+  port: 8810
+  engine: "python engine.py --port {engine_port}"
+  engine_port: 8910
+  engine_health: /ready
+  engine_health_timeout: 5
+```
+
+The shell starts the engine first, polls `engine_health` at
+`http://127.0.0.1:<engine_port><path>`, and only starts the front-end proxy after a 2xx/3xx response.
+Use a full URL if the health check lives somewhere else. Engine health failures show in the proxy
+diagnostic page with engine stdout/stderr.
+
 ## 4. Two install profiles
 
 | profile | install | `gallery.yaml` | who |

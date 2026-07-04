@@ -1225,6 +1225,72 @@ def _proxy_env(key: str, rec: dict, port) -> dict[str, str]:
     return env
 
 
+def _engine_health_settings(key: str, rec: dict) -> dict | None:
+    mount_cfg = rec.get("mount") or {}
+    raw = mount_cfg.get("engine_health", mount_cfg.get("engine_health_path"))
+    if raw in (None, False, ""):
+        return None
+    if isinstance(raw, dict):
+        settings = dict(raw)
+        target = settings.get("url") or settings.get("path")
+    elif raw is True:
+        settings = {}
+        target = "/healthz"
+    else:
+        settings = {}
+        target = raw
+    if not target:
+        return None
+    url = _render_proxy_template(key, rec, target)
+    if not url.startswith(("http://", "https://")):
+        if not url.startswith("/"):
+            url = "/" + url
+        engine_port = mount_cfg.get("engine_port")
+        if not engine_port:
+            return {"url": url, "timeout": 0.0, "error": "engine health check needs engine_port"}
+        url = f"http://127.0.0.1:{engine_port}{url}"
+    try:
+        timeout = float(settings.get("timeout", mount_cfg.get("engine_health_timeout", 5.0)))
+    except (TypeError, ValueError):
+        timeout = 5.0
+    return {"url": url, "timeout": max(timeout, 0.0)}
+
+
+def _wait_for_engine_health(key: str, rec: dict, proc: subprocess.Popen) -> tuple[bool, str | None]:
+    settings = _engine_health_settings(key, rec)
+    if not settings:
+        return True, None
+    info = _PROXY_LOGS.setdefault(key, {})
+    url = settings["url"]
+    info["engine_health_url"] = url
+    if settings.get("error"):
+        info["engine_health_status"] = str(settings["error"])
+        return False, str(settings["error"])
+    deadline = time.monotonic() + float(settings.get("timeout") or 0.0)
+    last_error = "not attempted"
+    while True:
+        code = proc.poll()
+        if code is not None:
+            last_error = f"engine exited with code {code}"
+            break
+        try:
+            with urllib.request.urlopen(url, timeout=0.25) as response:
+                status = int(getattr(response, "status", 200))
+                last_error = f"HTTP {status}"
+                if 200 <= status < 400:
+                    info["engine_health_status"] = last_error
+                    return True, None
+        except urllib.error.HTTPError as exc:
+            last_error = f"HTTP {exc.code}"
+        except OSError as exc:
+            last_error = str(exc)
+        if time.monotonic() >= deadline:
+            break
+        time.sleep(0.1)
+    info["engine_health_status"] = last_error
+    return False, f"{url}: {last_error}"
+
+
 def _ensure_engine(key: str, rec: dict) -> tuple[bool, str | None]:
     """Start an engine-backed app's backend substrate if configured."""
     mount_cfg = rec.get("mount") or {}
@@ -1236,7 +1302,7 @@ def _ensure_engine(key: str, rec: dict) -> tuple[bool, str | None]:
         return False, "engine-backed mount with `engine` needs `engine_port`"
     proc = _ENGINE_PROCS.get(key)
     if proc and proc.poll() is None:
-        return True, None
+        return _wait_for_engine_health(key, rec, proc)
     raw_cwd = mount_cfg.get("engine_cwd") or mount_cfg.get("cwd") or rec.get("root") or str(REG.COLLECTION_ROOT)
     cwd = _render_proxy_template(key, rec, raw_cwd)
     cmd = _render_proxy_template(key, rec, raw_engine)
@@ -1259,6 +1325,12 @@ def _ensure_engine(key: str, rec: dict) -> tuple[bool, str | None]:
             )
     except OSError as exc:
         return False, str(exc)
+    ok, err = _wait_for_engine_health(key, rec, _ENGINE_PROCS[key])
+    if not ok:
+        proc = _ENGINE_PROCS.get(key)
+        if proc and proc.poll() is None:
+            proc.terminate()
+        return False, f"engine health check failed: {err}"
     return True, None
 
 
@@ -1339,6 +1411,8 @@ def _proxy_diagnostics_html(key: str, rec: dict, *, message: str, url: str | Non
     stdout = _proxy_log_tail(info.get("stdout"))
     engine_stderr = _proxy_log_tail(info.get("engine_stderr"))
     engine_stdout = _proxy_log_tail(info.get("engine_stdout"))
+    engine_health = info.get("engine_health_status") or ""
+    engine_health_url = info.get("engine_health_url") or ""
 
     def row(label: str, value: str | int | None) -> str:
         return ("<tr><th style='text-align:left;color:#777;padding:2px 10px 2px 0'>"
@@ -1378,6 +1452,8 @@ def _proxy_diagnostics_html(key: str, rec: dict, *, message: str, url: str | Non
         f"{row('engine cwd', engine_cwd) if engine_cmd else ''}"
         f"{row('engine port', mount_cfg.get('engine_port')) if engine_cmd else ''}"
         f"{row('engine process', engine_state) if engine_cmd else ''}"
+        f"{row('engine health', engine_health) if engine_health else ''}"
+        f"{row('engine health URL', engine_health_url) if engine_health_url else ''}"
         "</table>"
         f"{logs}"
         "<p style='color:#777;font-size:12px;max-width:860px'>"

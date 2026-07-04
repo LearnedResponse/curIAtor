@@ -142,6 +142,29 @@ def test_app_spec_carries_mount_smoke_timeout(collection, monkeypatch):
     assert spec["smoke_timeout"] == 1.5
 
 
+def test_app_spec_merges_engine_backed_mount_fields(collection, monkeypatch):
+    from curiator.config import app_spec
+
+    (collection / "gallery.yaml").write_text(textwrap.dedent('''\
+        apps:
+          - name: twin_suite
+            root: apps/twin_suite
+            mounts:
+              - name: hmi
+                source: .
+                engine: python engine.py --port {engine_port}
+                engine_port: 8910
+                engine_health: /ready
+                mount: { kind: engine-backed, cmd: "python ui.py --port {port}", port: 8810 }
+    '''))
+    monkeypatch.setenv("CURIATOR_GALLERY", str(collection / "gallery.yaml"))
+    cfg = load_config()
+    spec = app_spec(cfg, "hmi")
+    assert spec["mount"]["engine"] == "python engine.py --port {engine_port}"
+    assert spec["mount"]["engine_port"] == 8910
+    assert spec["mount"]["engine_health"] == "/ready"
+
+
 def test_agent_label_names_the_provider():
     from curiator.config import agent_label
     assert agent_label({"agent": {"adapter": "headless-cc"}}) == "Claude"
