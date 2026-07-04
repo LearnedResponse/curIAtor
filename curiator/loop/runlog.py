@@ -108,11 +108,30 @@ def run_streamed(
     label: str,
     display_cmd: list[str] | None = None,
     stdin=None,
+    line_formatter=None,
 ) -> RunResult:
-    """Run a command while streaming stdout/stderr into the task's markdown trace."""
+    """Run a command while streaming stdout/stderr into the task's markdown trace.
+
+    `line_formatter`, if given, maps each raw output line to a human-readable trace line (return None
+    to drop a line). Used to turn `claude -p --output-format stream-json` JSONL events into readable
+    progress instead of dumping raw JSON — or nothing, as plain `--output-format text` does until it
+    finishes. Without it, raw output is streamed verbatim (the default; codex/command adapters)."""
     shown = display_cmd or cmd
     note(task, f"running `{label}`")
     append(task.reply_file, "```text\n$ " + " ".join(shown) + "\n")
+
+    def _emit(raw: str) -> None:
+        if line_formatter is None:
+            append(task.reply_file, raw)
+            _tail_push(tail, raw)
+            return
+        for chunk in raw.splitlines():
+            shown_line = line_formatter(chunk)
+            if shown_line is None:
+                continue
+            text = shown_line if shown_line.endswith("\n") else shown_line + "\n"
+            append(task.reply_file, text)
+            _tail_push(tail, text)
     proc = subprocess.Popen(
         cmd,
         cwd=str(cwd),
@@ -151,15 +170,13 @@ def run_streamed(
             for key, _ in events:
                 line = key.fileobj.readline()
                 if line:
-                    append(task.reply_file, line)
-                    _tail_push(tail, line)
+                    _emit(line)
             if proc.poll() is not None:
                 break
         if proc.stdout is not None:
             rest = proc.stdout.read()
             if rest:
-                append(task.reply_file, rest)
-                _tail_push(tail, rest)
+                _emit(rest)
     finally:
         for sig, handler in previous_handlers.items():
             signal.signal(sig, handler)

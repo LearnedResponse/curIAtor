@@ -293,6 +293,77 @@ def test_short_unlinked_action_reply_gets_recent_thread_context(cfg, collection)
     assert "feedback/shots/sample_f1.png" in body
 
 
+def test_headless_cc_streams_json_events_with_a_formatter(cfg, monkeypatch, tmp_path):
+    """The default headless run uses `--output-format stream-json --verbose` + the event formatter, so
+    the trace shows live progress instead of sitting silent until `--output-format text` finishes."""
+    from curiator.loop.adapters import headless_cc
+
+    task_file = tmp_path / "task.md"
+    task_file.write_text("do the thing")
+    cap = {}
+    monkeypatch.setattr(headless_cc, "available", lambda: True)
+    monkeypatch.setattr(headless_cc.runlog, "run_streamed",
+                        lambda task, c, **k: cap.update(cmd=c, kwargs=k) or headless_cc.runlog.RunResult(0, ""))
+
+    headless_cc.run(Task(key="sample", entry={"id": "x"}, source="apps/sample.py",
+                         task_file=str(task_file), reply_file=str(tmp_path / "r.md"), cfg=cfg))
+    assert cap["cmd"][:3] == ["claude", "-p", "do the thing"]
+    assert "--verbose" in cap["cmd"]
+    assert cap["cmd"][cap["cmd"].index("--output-format") + 1] == "stream-json"
+    assert cap["kwargs"]["line_formatter"] is headless_cc._format_stream_event
+    assert cap["cmd"][-7:] == ["--allowedTools", "Read", "Edit", "Write", "Bash", "Glob", "Grep"]  # tools LAST
+
+
+def test_headless_cc_stream_can_be_disabled(cfg, monkeypatch, tmp_path):
+    from curiator.loop.adapters import headless_cc
+
+    task_file = tmp_path / "task.md"
+    task_file.write_text("x")
+    cap = {}
+    monkeypatch.setattr(headless_cc, "available", lambda: True)
+    monkeypatch.setattr(headless_cc.runlog, "run_streamed",
+                        lambda task, c, **k: cap.update(cmd=c, kwargs=k) or headless_cc.runlog.RunResult(0, ""))
+    cfg2 = {**cfg, "agent": {"adapter": "headless-cc", "stream": False}}
+    headless_cc.run(Task(key="sample", entry={"id": "x"}, source=None,
+                         task_file=str(task_file), reply_file=str(tmp_path / "r.md"), cfg=cfg2))
+    assert "--output-format" not in cap["cmd"]
+    assert cap["kwargs"]["line_formatter"] is None
+
+
+def test_format_stream_event_renders_readable_progress():
+    from curiator.loop.adapters import headless_cc as h
+    f = h._format_stream_event
+
+    assert f("") is None
+    assert "session started" in f('{"type":"system","subtype":"init","model":"opus","tools":["Read","Bash"]}')
+    assert f('{"type":"assistant","message":{"content":[{"type":"text","text":" Reading the scope "}]}}') == "Reading the scope"
+    assert f('{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Read","input":{"file_path":"a.py"}}]}}') == "▸ Read(a.py)"
+    assert f('{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Bash","input":{"command":"curiator reply x y"}}]}}') == "▸ Bash: curiator reply x y"
+    assert f('{"type":"user","message":{"content":[{"type":"tool_result","content":"ok"}]}}') is None
+    assert "error" in f('{"type":"user","message":{"content":[{"type":"tool_result","is_error":true}]}}')
+    r = f('{"type":"result","subtype":"success","num_turns":5,"duration_ms":12000,"total_cost_usd":0.1234}')
+    assert "result: success" in r and "5 turns" in r and "12.0s" in r and "$0.1234" in r
+    assert f("not json at all") == "not json at all"
+
+
+def test_run_streamed_applies_line_formatter(tmp_path):
+    """A formatter can drop lines (return None) and rewrite others; multi-line reads are split."""
+    import sys
+    import types
+
+    from curiator.loop import runlog
+
+    task = types.SimpleNamespace(reply_file=str(tmp_path / "trace.md"))
+    runlog.run_streamed(
+        task, [sys.executable, "-c", "print('drop'); print('keep')"],
+        cwd=str(tmp_path), timeout=30, label="x", display_cmd=["py", "..."],
+        line_formatter=lambda line: None if line.strip() == "drop" else line.strip().upper(),
+    )
+    text = Path(task.reply_file).read_text()
+    assert "KEEP" in text
+    assert "drop" not in text          # dropped by the formatter, and not in the display header
+
+
 def test_command_adapter_substitutes(cfg, monkeypatch):
     captured = {}
     monkeypatch.setattr(command.runlog, "run_streamed",

@@ -37,6 +37,11 @@ All notable changes to curIAtor are documented here. The format follows
   toolchain, and intended use, and exposes the same metadata as JSON for agents and docs.
 - Per-feedback run artifacts: task bundles live under `feedback/tasks/<id>.md`, agent stdout/stderr
   streams live to `feedback/replies/<id>.md`, and feedback status badges link to a scrollable trace view.
+- The `headless-cc` adapter runs `claude -p` with `--output-format stream-json --verbose` and renders
+  the JSONL events into the trace as readable progress — session start (visible within a second, so a
+  launched run no longer looks hung), each tool use (`▸ Read(...)`, `▸ Bash: …`, `▸ Edit(...)`), and a
+  final `● result` with turn count, duration, and cost. Set `agent.stream: false` for the old
+  emit-only-at-the-end `--output-format text` behavior.
 - Screenshot feedback can be annotated in-browser with boxes, arrows, numbered pins, and redaction
   blocks; annotations are burned into the PNG before it is saved to the ledger, and structured
   annotation metadata records per-mark notes plus same-origin DOM target hints for task bundles and
