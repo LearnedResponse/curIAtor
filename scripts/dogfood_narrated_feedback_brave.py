@@ -116,9 +116,9 @@ tags:
 
 def _start_shell(gallery: Path) -> subprocess.Popen:
     env = os.environ.copy()
-    env["CURIATOR_GALLERY"] = str(gallery)
+    env.pop("CURIATOR_GALLERY", None)
     return subprocess.Popen(
-        [sys.executable, "-m", "curiator.cli", "up"],
+        [sys.executable, "-m", "curiator.cli", "--gallery", str(gallery), "up"],
         cwd=ROOT,
         env=env,
         stdout=subprocess.DEVNULL,

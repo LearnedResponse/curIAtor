@@ -30,7 +30,7 @@ curiator --gallery galleries/curiator-geometry/gallery.yaml up
 
 `curiator galleries` prints each nested repo's branch/head, dirty state, and the exact
 `curiator --gallery ...` command to target it from this checkout. `CURIATOR_GALLERY` remains a
-compatibility fallback and an internal subprocess pin, not the preferred user-facing selector.
+compatibility fallback only; curIAtor-spawned shell/watch processes pass the gallery as a CLI argument.
 
 When editing a nested gallery, commit inside that gallery repo, not in the parent runner repo.
 

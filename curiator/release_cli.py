@@ -210,18 +210,7 @@ def _runner_release_result(
 
 def _load_config_for_gallery(gallery: Path) -> dict:
     """Load exactly this gallery, insulated from a caller's linked-app cwd."""
-    old_gallery = os.environ.get("CURIATOR_GALLERY")
-    old_cwd = Path.cwd()
-    os.environ["CURIATOR_GALLERY"] = str(gallery)
-    try:
-        os.chdir(gallery.parent)
-        return load_config()
-    finally:
-        os.chdir(old_cwd)
-        if old_gallery is None:
-            os.environ.pop("CURIATOR_GALLERY", None)
-        else:
-            os.environ["CURIATOR_GALLERY"] = old_gallery
+    return load_config_at(gallery)
 
 
 def _tracked_files(repo: Path) -> list[str]:

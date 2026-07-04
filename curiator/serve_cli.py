@@ -26,10 +26,18 @@ def _shell_path(kind: str | None = None) -> Path:
 
 
 def _child_env(cfg: dict) -> dict:
-    """Env for child processes (the shell, the watcher): pin CURIATOR_GALLERY so the shell's registry
-    resolves the SAME gallery — and therefore the same collection root for app sources + the ledger —
-    that config.py resolved here. Without this, running from a collection dir mounts nothing."""
-    return {**os.environ, "CURIATOR_GALLERY": cfg["gallery_path"]}
+    """Env for child processes.
+
+    Gallery authority is passed as `--gallery`, not as inherited ambient environment. Strip the legacy
+    fallback so a parent shell's CURIATOR_GALLERY cannot silently retarget children.
+    """
+    env = dict(os.environ)
+    env.pop("CURIATOR_GALLERY", None)
+    return env
+
+
+def _gallery_cli_args(cfg: dict) -> list[str]:
+    return ["--gallery", str(Path(cfg["gallery_path"]).resolve())]
 
 
 def _reload_in_shell(cfg: dict, app: str) -> str | None:
@@ -51,7 +59,7 @@ def cmd_up(args) -> int:
     port = (cfg.get("shell", {}) or {}).get("port", 8200)
     print(f"curiator: serving the gallery at http://127.0.0.1:{port}  (Ctrl-C to stop)")
     kind = "legacy-dash" if getattr(args, "legacy_dash_shell", False) else None
-    return subprocess.run([sys.executable, str(_shell_path(kind))], cwd=cfg["repo_root"],
+    return subprocess.run([sys.executable, str(_shell_path(kind)), *_gallery_cli_args(cfg)], cwd=cfg["repo_root"],
                           env=_child_env(cfg)).returncode
 
 
@@ -72,7 +80,7 @@ def _serve(cfg: dict, *, reset: bool = False, shell_kind: str | None = None) -> 
     env = _child_env(cfg)
     # -u: unbuffered, so the watcher's ●/▶/✓ feedback+agent lines stream out immediately (not block-buffered
     # behind the shell when serve's stdout isn't a TTY).
-    watcher = subprocess.Popen([sys.executable, "-u", "-m", "curiator.cli", "watch"],
+    watcher = subprocess.Popen([sys.executable, "-u", "-m", "curiator.cli", *_gallery_cli_args(cfg), "watch"],
                                cwd=cfg["repo_root"], env=env)
     bar = "─" * 56
     print(f"\n{bar}\n  ◆ curIAtor is up")
@@ -85,7 +93,8 @@ def _serve(cfg: dict, *, reset: bool = False, shell_kind: str | None = None) -> 
     print(f"    stop    : Ctrl-C\n{bar}\n")
     sys.stdout.flush()   # the shell child writes straight to fd1; flush so our banner isn't buffered behind it
     try:
-        return subprocess.run([sys.executable, str(_shell_path(shell_kind))], cwd=cfg["repo_root"], env=env).returncode
+        return subprocess.run([sys.executable, str(_shell_path(shell_kind)), *_gallery_cli_args(cfg)],
+                              cwd=cfg["repo_root"], env=env).returncode
     finally:
         watcher.terminate()
         try:
@@ -161,4 +170,3 @@ def cmd_reset_demo(args) -> int:
 def cmd_demo(args) -> int:
     print(Path(__file__).resolve().parents[1].joinpath("docs", "DEMO_SCRIPT.md").read_text())
     return 0
-

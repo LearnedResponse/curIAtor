@@ -57,9 +57,11 @@ sys.path.insert(0, str(HERE.parents[1]))
 sys.path.insert(0, str(HERE))
 PORT = 8200  # default; overridden by gallery.yaml shell.port just below (after the registry import)
 
+from curiator.config import set_gallery_override_from_argv  # noqa: E402
 from curiator.annotations import clean_annotations  # noqa: E402
 from curiator.narrative import build_narrative, display_narrative_rows  # noqa: E402
 from curiator.transcripts import clean_transcript_segments  # noqa: E402
+set_gallery_override_from_argv()
 import registry as REG  # gallery.yaml-backed registry
 from curiator import auth, ledger  # identity/provenance + shared SQLite feedback ledger
 PORT = REG.SHELL_CFG.get("port", PORT)  # honor gallery.yaml: shell.port

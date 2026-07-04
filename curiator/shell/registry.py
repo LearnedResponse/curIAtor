@@ -6,46 +6,42 @@ legacy Dash-compatible shell, sourced from declarative `gallery.yaml` entries.
 It also registers each app's source directory on `sys.path` so the shell's in-process Dash
 mount (`importlib.import_module(<module>)`) can find the demo apps under `examples/dash/`.
 
-CONFIG RESOLUTION: internal `$CURIATOR_GALLERY` pin from the parent CLI process, else
-`<repo_root>/gallery.yaml`. User-facing commands should prefer `curiator --gallery ...`.
+CONFIG RESOLUTION: explicit `--gallery` pin from the parent CLI process, else the shared config fallback
+chain. User-facing commands should prefer `curiator --gallery ...`.
 """
 from __future__ import annotations
 
-import os
 import sys
 from pathlib import Path
-
-try:
-    import yaml
-except ImportError as e:  # pragma: no cover
-    raise SystemExit("curIAtor needs PyYAML — `pip install pyyaml` (or `pip install curiator`).") from e
 
 # the gallery.yaml schema logic lives in config.py; the shell loads this file as a TOP-LEVEL module
 # (the old `import registry` seam), so fall back to the absolute import when there's no parent package
 try:
+    from ..config import load_config as _load_config
     from ..config import mount_entries as _mount_entries
 except ImportError:  # pragma: no cover — top-level `import registry`
+    from curiator.config import load_config as _load_config
     from curiator.config import mount_entries as _mount_entries
 
 PACKAGE_ROOT = Path(__file__).resolve().parents[2]   # the curiator package/checkout root (NOT the collection)
-GALLERY_YAML = Path(os.environ.get("CURIATOR_GALLERY", PACKAGE_ROOT / "gallery.yaml"))
-# The collection root = the directory holding gallery.yaml. App `source:` paths and the feedback/ ledger
-# resolve against THIS — so a separate collection (`curiator init`, the Docker /collection mount) works,
-# not just the demo repo. Matches config.py's cfg['repo_root']; for the demo repo the two coincide.
-COLLECTION_ROOT = GALLERY_YAML.resolve().parent
-REPO_ROOT = COLLECTION_ROOT                          # back-compat alias (app_shell feedback dir + source resolution)
 
 _DEFAULT_PORT_BASE = 8201   # reference IDs only (mounts are in-process, no real port is bound)
 
 
 def _load_yaml() -> dict:
-    if not GALLERY_YAML.exists():
-        raise SystemExit(f"curIAtor: no gallery config at {GALLERY_YAML} "
-                         f"(run `curiator --gallery <path> up` or create gallery.yaml — see docs/DESIGN.md).")
-    return yaml.safe_load(GALLERY_YAML.read_text()) or {}
+    try:
+        return _load_config()
+    except SystemExit as exc:
+        raise SystemExit(f"{exc} (run `curiator --gallery <path> up` or create gallery.yaml).") from exc
 
 
 CONFIG = _load_yaml()
+GALLERY_YAML = Path(CONFIG["gallery_path"])
+# The collection root = the directory holding gallery.yaml. App `source:` paths and the feedback/ ledger
+# resolve against THIS — so a separate collection (`curiator init`, the Docker /collection mount) works,
+# not just the demo repo. Matches config.py's cfg['repo_root']; for the demo repo the two coincide.
+COLLECTION_ROOT = Path(CONFIG["repo_root"])
+REPO_ROOT = COLLECTION_ROOT                          # back-compat alias (app_shell feedback dir + source resolution)
 AGENT = CONFIG.get("agent", {}) or {}
 FEEDBACK_CFG = CONFIG.get("feedback", {}) or {}
 SHELL_CFG = CONFIG.get("shell", {}) or {}

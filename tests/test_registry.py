@@ -29,6 +29,21 @@ def test_sources_resolve_against_collection_not_package(collection):
         sys.path[:] = saved
 
 
+def test_registry_uses_process_gallery_override_without_env(collection, monkeypatch):
+    from curiator.config import set_gallery_override
+
+    monkeypatch.delenv("CURIATOR_GALLERY", raising=False)
+    set_gallery_override(collection / "gallery.yaml")
+    saved = list(sys.path)
+    try:
+        reg = _fresh_registry()
+        assert reg.GALLERY_YAML == (collection / "gallery.yaml").resolve()
+        assert reg.ALL_APPS[0]["key"] == "sample"
+    finally:
+        set_gallery_override(None)
+        sys.path[:] = saved
+
+
 def test_injects_app_source_dir_on_syspath(collection):
     saved = list(sys.path)
     try:

@@ -23,7 +23,7 @@ curiator/
                               #   link | status | context | work | done | open | commands | feedback |
                               #   seed | app create | init | user | demo*
   config.py                   # gallery.yaml → cfg. Resolution: explicit `curiator --gallery` override →
-                              #   $CURIATOR_GALLERY fallback → cwd-up gallery.yaml → a `.curiator/app.yaml`
+                              #   legacy $CURIATOR_GALLERY fallback → cwd-up gallery.yaml → a `.curiator/app.yaml`
                               #   link → packaged default. ALSO the ONE home of the
                               #   app/mount schema helpers (mount_entries / app_specs / app_spec /
                               #   infer_current_app) that the shell, adapters, gitmem, and CLI all share.

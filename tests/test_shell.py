@@ -2,8 +2,8 @@
 the catalog → iframe → deep-link → feedback paths that have no other coverage. These regression-guard the
 two log crashes — render_history on a null `ts`, and the duplicate-output `_route` mis-routing its input.
 
-The shell loads its registry at import time from CURIATOR_GALLERY (set by the `collection` fixture), so we
-re-exec the module per test against the current tmp gallery (and keep `curiator/shell` on sys.path so
+The shell loads its registry at import time from the shared gallery resolver, so we re-exec the module per
+test against the current tmp gallery (and keep `curiator/shell` on sys.path so
 `import registry` + Flask's asset root_path both resolve)."""
 from __future__ import annotations
 

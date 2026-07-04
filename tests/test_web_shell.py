@@ -54,6 +54,28 @@ def test_react_shell_index_and_bootstrap(web_client):
     assert sample["revision"] == 0
 
 
+def test_web_shell_argv_gallery_beats_ambient_env(collection, tmp_path, monkeypatch):
+    from curiator.config import set_gallery_override
+
+    bad = tmp_path / "bad-gallery"
+    (bad / "apps").mkdir(parents=True)
+    (bad / "gallery.yaml").write_text("""\
+apps:
+  - name: wrong_app
+    mount: { kind: dash-inproc, module: wrong_app }
+    source: apps/wrong_app.py
+""")
+    (bad / "apps" / "wrong_app.py").write_text("app = object()\n")
+    monkeypatch.setenv("CURIATOR_GALLERY", str(bad / "gallery.yaml"))
+    monkeypatch.setattr(sys, "argv", ["web_shell.py", "--gallery", str(collection / "gallery.yaml")])
+    try:
+        mod = _load_web_mod(monkeypatch)
+        assert mod.core.REG.GALLERY_YAML == (collection / "gallery.yaml").resolve()
+        assert [app["key"] for app in mod.core.REG.ALL_APPS] == ["sample"]
+    finally:
+        set_gallery_override(None)
+
+
 def test_react_shell_general_iframe_src_is_stable(web_client):
     body = web_client.get("/assets/react_shell.js").get_data(as_text=True)
     assert "function appSrc(key, generalKey, revision)" in body

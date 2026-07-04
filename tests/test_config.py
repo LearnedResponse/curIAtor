@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import textwrap
 
-from curiator.config import load_config, set_block_key, set_gallery_override
+from curiator.config import load_config, set_block_key, set_gallery_override, set_gallery_override_from_argv
 
 
 def test_loads_gallery_under_collection(cfg, collection):
@@ -45,6 +45,25 @@ def test_gallery_override_beats_environment_and_can_clear(tmp_path, monkeypatch)
         cfg = load_config()
         assert cfg["gallery_path"] == str((env_dir / "gallery.yaml").resolve())
         assert [a["name"] for a in cfg["apps"]] == ["env_app"]
+    finally:
+        set_gallery_override(None)
+
+
+def test_gallery_override_can_be_set_from_raw_shell_argv(tmp_path, monkeypatch):
+    gallery_dir = tmp_path / "cli"
+    gallery_dir.mkdir()
+    (gallery_dir / "gallery.yaml").write_text(textwrap.dedent('''\
+        apps:
+          - name: cli_app
+            mount: { kind: dash-inproc, module: cli_app }
+            source: apps/cli_app.py
+    '''))
+    monkeypatch.delenv("CURIATOR_GALLERY", raising=False)
+    try:
+        set_gallery_override_from_argv(["--some-shell-flag", "value", "--gallery", str(gallery_dir)])
+        cfg = load_config()
+        assert cfg["gallery_path"] == str((gallery_dir / "gallery.yaml").resolve())
+        assert [a["name"] for a in cfg["apps"]] == ["cli_app"]
     finally:
         set_gallery_override(None)
 

@@ -1,6 +1,6 @@
 """Shared fixtures: an isolated, git-initialized **collection** in a tmp dir, so the whole stack
 (config → registry → ledger → gitmem → adapters → loop) is testable without the real repo or a live
-agent. The `collection` fixture points CURIATOR_GALLERY at the tmp gallery; `cfg` is its loaded config.
+agent. The `collection` fixture uses the legacy env fallback; CLI-path tests cover `--gallery`.
 """
 from __future__ import annotations
 

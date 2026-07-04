@@ -245,7 +245,7 @@ def _start_shell_if_needed(cfg: dict, timeout: float) -> tuple[subprocess.Popen 
     if _wait_url(f"{base_url}/api/bootstrap", timeout=0.75):
         return None, base_url
     proc = subprocess.Popen(
-        [sys.executable, str(_shell_path())],
+        [sys.executable, str(_shell_path()), "--gallery", str(Path(cfg["gallery_path"]).resolve())],
         cwd=cfg["repo_root"],
         env=_child_env(cfg),
         stdout=subprocess.DEVNULL,

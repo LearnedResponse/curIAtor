@@ -1,12 +1,13 @@
 """config.py — load gallery.yaml into the cfg dict the loop/adapters/ledger consume.
 
 Lightweight (doesn't import the shell or touch sys.path) so the loop can load config cheaply.
-Resolution: explicit CLI override, else $CURIATOR_GALLERY, else <cwd>/gallery.yaml,
+Resolution: explicit CLI override, else legacy $CURIATOR_GALLERY, else <cwd>/gallery.yaml,
 else a `.curiator/app.yaml` link, else the packaged default.
 """
 from __future__ import annotations
 
 import os
+from collections.abc import Sequence
 from pathlib import Path
 
 try:
@@ -27,6 +28,27 @@ def set_gallery_override(path: str | Path | None) -> None:
     """
     global _GALLERY_OVERRIDE
     _GALLERY_OVERRIDE = Path(path).expanduser() if path else None
+
+
+def set_gallery_override_from_argv(argv: Sequence[str] | None = None) -> None:
+    """Pin gallery resolution from a raw argv list before full CLI parsing exists.
+
+    The shell entrypoints import their registry at module import time, so they need a tiny early parser
+    for `python web_shell.py --gallery <path>`. The real `curiator` CLI still owns full argparse
+    validation; this helper only recognizes the global gallery flag and ignores everything else.
+    """
+    import sys
+
+    args = list(sys.argv[1:] if argv is None else argv)
+    for i, arg in enumerate(args):
+        if arg == "--gallery":
+            if i + 1 >= len(args):
+                raise SystemExit("curIAtor: --gallery needs a path.")
+            set_gallery_override(args[i + 1])
+            return
+        if arg.startswith("--gallery="):
+            set_gallery_override(arg.split("=", 1)[1])
+            return
 
 
 def find_link(start: Path | None = None) -> Path | None:

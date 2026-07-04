@@ -11,7 +11,7 @@ from pathlib import Path
 
 from .agent_capabilities import agent_report
 from .app_cli import _app_names
-from .config import LINK_REL, app_spec, app_specs, load_config
+from .config import LINK_REL, app_spec, app_specs, load_config, load_config_at
 
 
 def _cli_shared():
@@ -55,15 +55,7 @@ def cmd_link(args) -> int:
     gallery = Path(args.gallery).expanduser().resolve() if args.gallery else Path(load_config()["gallery_path"]).resolve()
     if not gallery.exists():
         raise SystemExit(f"curIAtor: gallery not found: {gallery}")
-    old_gallery = os.environ.get("CURIATOR_GALLERY")
-    os.environ["CURIATOR_GALLERY"] = str(gallery)
-    try:
-        cfg = load_config()
-    finally:
-        if old_gallery is None:
-            os.environ.pop("CURIATOR_GALLERY", None)
-        else:
-            os.environ["CURIATOR_GALLERY"] = old_gallery
+    cfg = load_config_at(gallery)
     app = args.app or cfg.get("current_app")
     if not app:
         raise SystemExit("curIAtor: pass --app <key> for this link.")
