@@ -1,14 +1,12 @@
 # Backlog — OT v2: a physics digital twin under the HMI
 
-> **Status:** active dogfood target as of 2026-07-04. Build as much local engine-backed/digital-twin
-> proof as possible before public release, then mark only true toolchain/substrate blockers such as
-> OpenModelica/FMU availability or licensed Simscape dependencies. OT **v1 shipped** (deterministic tank
-> sim + SQLite historian + Dash
-> HMI, `curiator-ot@36e21cf`). The runner now has a local `engine-backed` mount primitive
-> (`engine`, `engine_port`, `{engine_url}`, optional `engine_health`, and engine diagnostics), so the next dogfood step is the
-> OpenModelica/FMU substrate itself. v2 deepens the *substrate*: replace the hand-coded ODE with a credible
-> **physics digital twin (OpenModelica)** under the same HMI the loop iterates — and turn that HMI into a
-> **diagnostics/KPI surface** so feedback drives real backend work, not just layout. Captured 2026-07-04.
+> **Status:** local engine-backed proof landed as of 2026-07-04; remaining substrate work is blocked on
+> OpenModelica/FMU runtime availability. OT **v1 shipped** (deterministic tank sim + SQLite historian +
+> Dash HMI, `curiator-ot@36e21cf`). OT v2 now has `curiator-ot@ad198e5`: `models/TankProcess.mo`, an
+> `engine-backed` `twin_diagnostics` app, a managed tank-twin sidecar, `engine_health` readiness, and a
+> KPI/diagnostics HMI. Fresh-clone strict preflight with `--http-smoke --browser-smoke` passed at
+> `ad198e5`. `omc` and Python FMU runtime packages (`fmpy` / `assimulo`) are absent in this environment,
+> so true FMU export/co-sim and the feedback round against that real substrate are the remaining blocker.
 
 ## The pitch
 
@@ -37,16 +35,25 @@ work through the same feedback→fix loop — the front-end is geared toward bac
 ## What's there (OT v1, shipped)
 
 Deterministic tank sim + SQLite historian + Dash HMI + a 10-item feedback-to-fix arc + fresh-clone
-preflight (`curiator-ot@36e21cf`). v2 keeps all of it and swaps the process model underneath.
+preflight (`curiator-ot@36e21cf`). The local v2 proof adds a separate `twin_diagnostics`
+engine-backed app at `curiator-ot@ad198e5`: a deterministic Python sidecar implementing the same tank
+process shape, `models/TankProcess.mo` as the intended OpenModelica source, an HTTP health endpoint, and
+a KPI/diagnostics front-end. It keeps the public quickstart runnable while refusing to claim FMU export
+until the OpenModelica toolchain is present.
 
 ## Work-order
 
-1. **OpenModelica model** of the tank/process; export an **FMU**.
+1. **OpenModelica model** of the tank/process; export an **FMU**. Modelica source exists at
+   `models/TankProcess.mo`; FMU export is blocked until `omc` is installed.
 2. **FMU co-sim driver** feeding the existing historian + HMI — a pure backend swap, HMI unchanged first.
+   The local fallback sidecar is present and verified; the true FMU runtime is blocked on
+   OpenModelica/FMU packages.
 3. **Extend the HMI into a diagnostics/KPI surface** — twin-fidelity KPIs, control-margin indicators,
-   alarm rationale — so feedback can reach the *backend*, not only the layout.
+   alarm rationale — so feedback can reach the *backend*, not only the layout. The local diagnostics HMI
+   landed in `twin_diagnostics`.
 4. **A feedback round that drives a backend change** (twin fidelity or control logic) via a KPI-surface
-   comment — the proof that the loop drives backend work, not just UI.
+   comment — the proof that the loop drives backend work, not just UI. Remaining until the real FMU
+   backend is available.
 5. This is the **first FMU-backed dogfood of the `engine-backed` mount** — local runner lifecycle and
    health polling are available, but this still needs the real OpenModelica/FMU substrate and a feedback
    round that exercises it.

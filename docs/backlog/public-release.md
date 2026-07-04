@@ -117,6 +117,12 @@ leave feedback → watch the fix land and the ⚙ reply arrive. Every item below
    `curiator-finance@137877d`, `curiator-phylogenetics@38cefee`, and `curiator-ml@508162e`; the checked
    gallery feedback queues had no remaining non-done items. The published-head gate must be rerun after
    any of those updated heads are pushed.
+   On 2026-07-04, the OT v2 local dogfood head advanced to `curiator-ot@ad198e5` with an
+   `engine-backed` `twin_diagnostics` app, `models/TankProcess.mo`, engine health, HTTP smoke, and
+   browser smoke. `curiator release-preflight --gallery curiator-ot --fresh-clone --strict
+   --http-smoke --browser-smoke --browser-bin brave-browser --json` passed at `ad198e5`. The remaining
+   OT v2 substrate gap is explicitly blocked on OpenModelica/FMU runtime availability before a real FMU
+   feedback round can be claimed.
 5. **SECURITY.md — reviewed against current defaults; re-read once at release cut.** The product auto-runs a coding agent against
    feedback text. The first policy now states: one-container-per-collection as the blast-radius unit,
    the autonomy dial, group-gated elevated profiles, dispatch quotas/trusted dispatch groups as admission
