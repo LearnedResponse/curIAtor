@@ -42,6 +42,10 @@ All notable changes to curIAtor are documented here. The format follows
   launched run no longer looks hung), each tool use (`▸ Read(...)`, `▸ Bash: …`, `▸ Edit(...)`), and a
   final `● result` with turn count, duration, and cost. Set `agent.stream: false` for the old
   emit-only-at-the-end `--output-format text` behavior.
+- The `headless-cc` adapter now pre-approves `WebSearch` and `WebFetch` by default, so the agent can do
+  read-only web research (e.g. verify a paper or link) — headless `claude -p` cannot prompt, so these
+  previously failed mid-run. Drop `WebFetch` from `agent.allowed_tools` (or deny it) for collections
+  open to untrusted public feedback; see SECURITY.md.
 - Screenshot feedback can be annotated in-browser with boxes, arrows, numbered pins, and redaction
   blocks; annotations are burned into the PNG before it is saved to the ledger, and structured
   annotation metadata records per-mark notes plus same-origin DOM target hints for task bundles and

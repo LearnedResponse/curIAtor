@@ -311,7 +311,9 @@ def test_headless_cc_streams_json_events_with_a_formatter(cfg, monkeypatch, tmp_
     assert "--verbose" in cap["cmd"]
     assert cap["cmd"][cap["cmd"].index("--output-format") + 1] == "stream-json"
     assert cap["kwargs"]["line_formatter"] is headless_cc._format_stream_event
-    assert cap["cmd"][-7:] == ["--allowedTools", "Read", "Edit", "Write", "Bash", "Glob", "Grep"]  # tools LAST
+    # tools LAST (variadic), and web research is pre-approved so it works headlessly
+    assert cap["cmd"][-9:] == ["--allowedTools", "Read", "Edit", "Write", "Bash", "Glob", "Grep",
+                               "WebSearch", "WebFetch"]
 
 
 def test_headless_cc_stream_can_be_disabled(cfg, monkeypatch, tmp_path):

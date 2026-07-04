@@ -31,7 +31,9 @@ agent:
   # provider knobs — all optional, sensible defaults shown:
   model: null                   # --model (null = the provider CLI default; e.g. sonnet/opus, or gpt-5-codex)
   permission_mode: acceptEdits  # acceptEdits (auto-apply edits) | bypassPermissions (zero prompts) | default
-  allowed_tools: [Read, Edit, Write, Bash, Glob, Grep]   # headless-cc: pre-approved without a prompt
+  allowed_tools: [Read, Edit, Write, Bash, Glob, Grep, WebSearch, WebFetch]   # headless-cc: pre-approved without a prompt
+  #   headless `claude -p` can't prompt, so any tool the agent uses must be listed here. WebSearch/WebFetch
+  #   enable read-only web research; drop WebFetch (or deny it) for UNTRUSTED public feedback — see SECURITY.md.
   # codex (`codex exec`) only — maps the same profile onto Codex flags:
   sandbox: workspace-write      # read-only | workspace-write (default) | danger-full-access
   #   (permission_mode: bypassPermissions ⇒ codex --dangerously-bypass-approvals-and-sandbox, full trust)
@@ -54,7 +56,7 @@ agent:
   #   groups: [admin]                     # author in any of these → this profile is merged on top
   #   autonomy: auto                      # do substantive work directly (not just small tweaks)
   #   permission_mode: bypassPermissions  # no prompts — so it can `pip install`, edit requirements.txt, …
-  #   allowed_tools: [Read, Edit, Write, Bash, Glob, Grep, WebFetch]
+  #   allowed_tools: [Read, Edit, Write, Bash, Glob, Grep, WebSearch, WebFetch]
   #   disallowed_tools: ["Edit(.claude/**)", "Write(.claude/**)", "Bash(git push:*)", "Bash(rm -rf:*)"]  # the blacklist
 
 # How ◆ General feedback on the RUNNER itself is handled. This repo IS the editable checkout, so the

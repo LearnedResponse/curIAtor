@@ -24,8 +24,11 @@ from pathlib import Path
 
 from .. import runlog
 
-# Enough to edit one app, smoke-test it, and run `curiator reply` — but not the whole toolbox.
-_DEFAULT_TOOLS = ["Read", "Edit", "Write", "Bash", "Glob", "Grep"]
+# Enough to edit one app, smoke-test it, run `curiator reply`, and do read-only web research (verify a
+# paper/link) — but not the whole toolbox. Headless `claude -p` can't prompt, so a tool the agent uses
+# MUST be pre-approved here or it errors mid-run. WebFetch fetches arbitrary URLs: drop it (or add it to
+# `agent.disallowed_tools`) for collections that take UNTRUSTED public feedback — see SECURITY.md.
+_DEFAULT_TOOLS = ["Read", "Edit", "Write", "Bash", "Glob", "Grep", "WebSearch", "WebFetch"]
 
 
 def available() -> bool:

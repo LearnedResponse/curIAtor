@@ -78,6 +78,10 @@ For public example repositories:
 ## Adapter Notes
 
 - `headless-cc` and `command` adapters inherit the security behavior of the CLI you configure.
+- The `headless-cc` adapter pre-approves `WebSearch` and `WebFetch` by default (headless `claude -p`
+  cannot prompt, so an agent tool must be pre-approved or it errors). `WebFetch` can retrieve arbitrary
+  URLs, which is an exfiltration vector under prompt injection from untrusted feedback — remove it from
+  `agent.allowed_tools`, or add it to `agent.disallowed_tools`, for collections open to public input.
 - The Codex adapter supports sandbox/permission settings, but an elevated bypass profile is a
   full-trust run. Use it only inside the collection's containment boundary.
 - Deny-lists are defense in depth. They are not a complete policy engine and may not be available for
