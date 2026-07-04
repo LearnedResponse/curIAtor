@@ -5,8 +5,11 @@
 > review and release-time Zenodo/DOI deposit. Scoped 2026-07-01; stats CLI, local Zenodo metadata, a conservative `docs/paper/`
 > Markdown draft scaffold, draft related-work prose, draft acknowledgements, and command-backed
 > `curiator stats --output` / `curiator release-preflight --output` evidence snapshots have landed.
-> The public-collection publication blocker is cleared at the release-candidate heads; `make paper-stats`
-> now refreshes a PDF-friendly paper summary from the three published example collections, while
+> The public-collection publication blocker is locally cleared at the current release-candidate heads;
+> the latest paper stats snapshot reports 27 feedback cycles, 27 direct fixes, 27 replies, and 14
+> curator commits across `curiator-aviato@4743529`, `curiator-ot@2e9896c`, and
+> `curiator-geometry@60ab897`. `make paper-stats`
+> refreshes a PDF-friendly paper summary from the three published example collections, while
 > `make paper-pdf` regenerates the loop/provenance figures and exports a locally reviewed manuscript
 > PDF. Paper/DOI publication work is still blocked on the tagged release, Zenodo wiring, and final
 > human PDF review/deposit. A citable
@@ -63,7 +66,7 @@ the durable record of that conversation.
    table directly, and `--output <path>` writes any selected stats report as a named paper evidence
    artifact without shell redirection.
    The release-candidate summary in `docs/paper/curiator-paper.md` now cites the exact command-backed
-   snapshot from the three published example collection heads while keeping the full wide table in
+   2026-07-04 snapshot from the three example collection heads while keeping the full wide table in
    `release-evidence/`. Remaining paper work: rerun this at tag cut if any release head changes, then
    archive/cite the final output.
 3. Draft in `docs/paper/` (markdown → pandoc PDF) — scaffolded with `curiator-paper.md` and
