@@ -69,6 +69,7 @@ def cmd_link(args) -> int:
     print(f"  wrote {link_path}")
     if args.commands:
         _install_command_files(root)
+        _install_settings_allowlist(root)
     return 0
 
 
@@ -822,6 +823,41 @@ def _install_command_files(root: Path) -> list[Path]:
     return paths
 
 
+# Pre-approve `curiator ...` for a Claude Code session so the shim runs without a per-command prompt.
+# `Bash(curiator *)` scopes approval to the curIAtor CLI only (everything else still prompts); the
+# rule lives in the SHARED `.claude/settings.json` so it travels with a cloned collection, and Claude
+# Code merges permission lists across scopes (a repo/user deny rule still wins). The trailing ` *` is a
+# word boundary — it covers `curiator status`, `curiator done <id> "msg"`, etc., but NOT compound
+# commands joined by `&&`/`;`/`|` (Claude Code approves each subcommand independently).
+_CURIATOR_ALLOW_RULES = ("Bash(curiator *)", "Bash(curiator:*)")   # space/`:` forms are equivalent
+
+
+def _install_settings_allowlist(root: Path) -> tuple[Path, str]:
+    """Merge `Bash(curiator *)` into the repo's shared `.claude/settings.json` permission allow list.
+    Merge-safe + idempotent; leaves an unreadable or oddly-shaped settings file untouched."""
+    path = root / ".claude" / "settings.json"
+    data: dict = {}
+    if path.exists():
+        try:
+            data = json.loads(path.read_text())
+        except (json.JSONDecodeError, OSError):
+            return path, "skipped"
+        if not isinstance(data, dict):
+            return path, "skipped"
+    perms = data.setdefault("permissions", {})
+    if not isinstance(perms, dict):
+        return path, "skipped"
+    allow = perms.setdefault("allow", [])
+    if not isinstance(allow, list):
+        return path, "skipped"
+    if any(rule in allow for rule in _CURIATOR_ALLOW_RULES):
+        return path, "present"
+    allow.append(_CURIATOR_ALLOW_RULES[0])
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(data, indent=2) + "\n")
+    return path, "wrote"
+
+
 def _cleanup_legacy_shim(root: Path, legacy_rel: Path, base_rel: Path, label: str) -> tuple[Path, str, str] | None:
     """Relocate a superseded generated shim (old Claude slash command / old Codex skill path). A file
     the user customized (content not one curIAtor generated) is kept and flagged."""
@@ -848,9 +884,15 @@ def cmd_commands(args) -> int:
         _cleanup_legacy_shim(root, Path(".claude") / "commands" / "curiator.md", Path(".claude"), "Claude command"),
         _cleanup_legacy_shim(root, Path(".codex") / "skills" / "curiator" / "SKILL.md", Path(".codex"), "Codex skill"),
     ]
+    settings_path, settings_action = _install_settings_allowlist(root)
     print(f"curiator: installed interactive command shims in {root}")
     for path in paths:
         print(f"  + {path.relative_to(root)}")
+    if settings_action in ("wrote", "present"):
+        note = "curiator commands pre-approved" if settings_action == "wrote" else "curiator commands already pre-approved"
+        print(f"  + {settings_path.relative_to(root)} ({note})")
+    elif settings_action == "skipped":
+        print(f"  ! left existing {settings_path.relative_to(root)} untouched (unrecognized shape)")
     for legacy in legacies:
         if not legacy:
             continue

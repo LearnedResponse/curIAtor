@@ -198,6 +198,47 @@ def test_commands_install_writes_model_invokable_skills(collection, monkeypatch)
     assert not (collection / ".claude" / "commands" / "curiator.md").exists()
 
 
+def test_commands_install_preapproves_curiator_commands(collection, monkeypatch, capsys):
+    """The shared `.claude/settings.json` gets a `Bash(curiator *)` allow rule so the skill runs
+    without a per-command permission prompt."""
+    import json
+
+    from curiator import cli
+
+    monkeypatch.chdir(collection)
+    assert cli.main(["commands", "install"]) == 0
+    settings = collection / ".claude" / "settings.json"
+    assert settings.exists()
+    data = json.loads(settings.read_text())
+    assert data["permissions"]["allow"] == ["Bash(curiator *)"]
+    assert "curiator commands pre-approved" in capsys.readouterr().out
+
+    # idempotent: re-running does not duplicate the rule
+    assert cli.main(["commands", "install"]) == 0
+    assert json.loads(settings.read_text())["permissions"]["allow"] == ["Bash(curiator *)"]
+
+
+def test_commands_install_merges_allowlist_into_existing_settings(collection, monkeypatch):
+    """Existing settings + other permission rules are preserved; the curiator rule is appended once."""
+    import json
+
+    from curiator import cli
+
+    settings = collection / ".claude" / "settings.json"
+    settings.parent.mkdir(parents=True)
+    settings.write_text(json.dumps({
+        "permissions": {"allow": ["Bash(ls *)"], "deny": ["Bash(git push --force*)"]},
+        "env": {"FOO": "bar"},
+    }))
+
+    monkeypatch.chdir(collection)
+    assert cli.main(["commands", "install"]) == 0
+    data = json.loads(settings.read_text())
+    assert data["permissions"]["allow"] == ["Bash(ls *)", "Bash(curiator *)"]
+    assert data["permissions"]["deny"] == ["Bash(git push --force*)"]   # untouched
+    assert data["env"] == {"FOO": "bar"}                                 # untouched
+
+
 def test_commands_install_migrates_generated_legacy_claude_command(collection, monkeypatch, capsys):
     """A curIAtor-generated `.claude/commands/curiator.md` slash command is relocated to the skill path."""
     from curiator import cli

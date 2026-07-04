@@ -293,7 +293,10 @@ run from a separate app repo can still find the collection's gallery, ledger, sm
 source scope after the repos move together. `--commands` installs lightweight, model-invokable
 `curiator` skills for both agents (`.claude/skills/curiator/SKILL.md` for Claude Code and
 `.agents/skills/curiator/SKILL.md` for Codex) so either can reach for `curiator status`,
-`curiator context`, and `curiator work` on its own. If no app
+`curiator context`, and `curiator work` on its own. It also merges a `Bash(curiator *)` allow rule
+into the shared `.claude/settings.json`, so a Claude Code session runs `curiator` commands without a
+per-command permission prompt (the rule is scoped to the curIAtor CLI — everything else still prompts,
+and any repo/user `deny` rule still wins). If no app
 is selected and the collection has multiple apps, `curiator context` prints a collection-level summary
 with app counts, General feedback, and ready commands instead of failing.
 

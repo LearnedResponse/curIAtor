@@ -151,6 +151,8 @@ curiator done <feedback_id> "Changed the picker and smoke-tested it"
 The Claude Code and Codex `curiator` skills installed by `--commands` are thin: the coding agent
 reaches for them on its own when the task matches, and they call the CLI, which writes the same
 ledger, task bundle, reply trace, reload, and git-as-memory commit as the headless watcher.
+`--commands` also drops a `Bash(curiator *)` allow rule into `.claude/settings.json` so those
+`curiator` calls run without a per-command permission prompt (everything else still prompts).
 
 ## The agent, and where it runs
 

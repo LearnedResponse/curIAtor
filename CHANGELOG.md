@@ -173,7 +173,10 @@ All notable changes to curIAtor are documented here. The format follows
   (Codex) — so the coding agent reaches for it on its own when a task matches, rather than only when a
   user types a slash command. Previously-generated `.claude/commands/curiator.md` slash commands and
   legacy `.codex/skills/curiator/SKILL.md` shims are relocated to the skill paths on reinstall;
-  user-customized shims at those paths are kept and flagged.
+  user-customized shims at those paths are kept and flagged. It also merges a `Bash(curiator *)`
+  permission allow rule into the shared `.claude/settings.json` (merge-safe and idempotent) so a
+  Claude Code session runs `curiator` commands without a per-command prompt, scoped to the curIAtor
+  CLI while any repo/user `deny` rule still wins.
 - Ledger inspection commands now open existing SQLite ledgers read-only, so `curiator status`,
   `context`, and `feedback show` do not dirty git-tracked collection ledgers.
 - Screenshot annotation sanitization now drops empty DOM-target class lists instead of persisting
