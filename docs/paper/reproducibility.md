@@ -44,17 +44,17 @@ manuscript artifact.
 For per-collection appendix tables:
 
 ```bash
-CURIATOR_GALLERY=galleries/curiator-aviato/gallery.yaml curiator stats --markdown
-CURIATOR_GALLERY=galleries/curiator-ot/gallery.yaml curiator stats --markdown
-CURIATOR_GALLERY=galleries/curiator-geometry/gallery.yaml curiator stats --markdown
-CURIATOR_GALLERY=galleries/curiator-geometry/gallery.yaml \
-  curiator stats --markdown --output docs/paper/figures/curiator-geometry-stats.md
+curiator --gallery galleries/curiator-aviato/gallery.yaml stats --markdown
+curiator --gallery galleries/curiator-ot/gallery.yaml stats --markdown
+curiator --gallery galleries/curiator-geometry/gallery.yaml stats --markdown
+curiator --gallery galleries/curiator-geometry/gallery.yaml \
+  stats --markdown --output docs/paper/figures/curiator-geometry-stats.md
 ```
 
 Use `--csv` when building figures or spreadsheets:
 
 ```bash
-CURIATOR_GALLERY=galleries/curiator-geometry/gallery.yaml curiator stats --csv
+curiator --gallery galleries/curiator-geometry/gallery.yaml stats --csv
 ```
 
 ## Figures

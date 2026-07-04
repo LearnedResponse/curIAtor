@@ -39,6 +39,7 @@ import subprocess
 from pathlib import Path
 
 from .. import ledger
+from ..config import set_gallery_override
 from ..app_cli import (
     _APP_TEMPLATE_CHOICES,
     _JS_PACKAGE_MANAGERS,
@@ -196,7 +197,7 @@ def _shell_url(cfg: dict, app: str | None = None) -> str:
 def _curiator_env_cmd(cfg: dict, *parts: str) -> str:
     gallery = shlex.quote(str(Path(cfg["gallery_path"]).resolve()))
     args = " ".join(shlex.quote(str(part)) for part in parts)
-    return f"CURIATOR_GALLERY={gallery} curiator {args}"
+    return f"curiator --gallery {gallery} {args}"
 
 
 def _cli_user(cfg: dict) -> dict | None:
@@ -214,6 +215,8 @@ def _cli_user(cfg: dict) -> dict | None:
 
 def main(argv=None) -> int:
     p = argparse.ArgumentParser(prog="curiator", description="curIAtor — an AI-maintained app gallery.")
+    p.add_argument("--gallery", dest="gallery_override",
+                   help="path to gallery.yaml or a collection directory; overrides CURIATOR_GALLERY")
     sub = p.add_subparsers(dest="cmd", required=True)
     up = sub.add_parser("up", help="serve the gallery")
     up.add_argument("--legacy-dash-shell", action="store_true", help="serve the old Dash overlay shell")
@@ -496,7 +499,11 @@ def main(argv=None) -> int:
     sub.add_parser("reflect", help="(git-as-memory) summarize curator history into LESSONS.md"
                    ).set_defaults(func=cmd_reflect)
     args = p.parse_args(argv)
-    return args.func(args)
+    set_gallery_override(getattr(args, "gallery_override", None))
+    try:
+        return args.func(args)
+    finally:
+        set_gallery_override(None)
 
 
 if __name__ == "__main__":

@@ -54,7 +54,7 @@ List the colocated collection repos and get the exact command for targeting one:
 
 ```bash
 curiator galleries
-CURIATOR_GALLERY=galleries/curiator-my-topic/gallery.yaml curiator status
+curiator --gallery galleries/curiator-my-topic/gallery.yaml status
 ```
 
 If `curiator galleries` sees old `../curiator-*` paths next to the runner checkout, it reports them.

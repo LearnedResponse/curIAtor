@@ -132,7 +132,7 @@ def cmd_galleries(args) -> int:
             dirty = f"{len(g['dirty'])} dirty" if g["dirty"] else "clean"
             gallery = _rel_cmd_path(g["gallery"])
             print(f"  {g['name']}: {git}, {dirty}")
-            print(f"    use: CURIATOR_GALLERY={shlex.quote(gallery)} curiator status")
+            print(f"    use: curiator --gallery {shlex.quote(gallery)} status")
     if siblings:
         print("")
         print("curiator: sibling curiator-* gallery paths found next to this checkout")
@@ -206,7 +206,7 @@ def _adopt_gallery_payload(args) -> dict:
         "destination": str(dest),
         "gallery": str(dest / "gallery.yaml"),
         "runner_rewrites": [],
-        "use": f"CURIATOR_GALLERY={_rel_cmd_path(str(dest / 'gallery.yaml'))} curiator status",
+        "use": f"curiator --gallery {_rel_cmd_path(str(dest / 'gallery.yaml'))} status",
     }
     if not source.exists() or not source.is_dir():
         payload["error"] = f"source directory not found: {source}"
@@ -263,7 +263,7 @@ def _clone_gallery_payload(args) -> dict:
         "destination": str(dest),
         "gallery": str(dest / "gallery.yaml"),
         "runner_rewrites": [],
-        "use": f"CURIATOR_GALLERY={_rel_cmd_path(str(dest / 'gallery.yaml'))} curiator status",
+        "use": f"curiator --gallery {_rel_cmd_path(str(dest / 'gallery.yaml'))} status",
     }
     if not _valid_gallery_dir_name(name):
         payload["error"] = f"destination name must be a single curiator-* directory: {name}"

@@ -84,7 +84,7 @@ def test_galleries_prints_target_command(tmp_path, monkeypatch, capsys):
     out = capsys.readouterr().out
 
     assert "curiator-demo" in out
-    assert "CURIATOR_GALLERY=galleries/curiator-demo/gallery.yaml curiator status" in out
+    assert "curiator --gallery galleries/curiator-demo/gallery.yaml status" in out
 
 
 def test_galleries_reports_sibling_checkout_to_adopt(tmp_path, monkeypatch, capsys):

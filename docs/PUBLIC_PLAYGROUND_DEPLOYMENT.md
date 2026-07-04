@@ -74,15 +74,15 @@ auth:
 Create invited users inside the mounted collection:
 
 ```bash
-CURIATOR_GALLERY=/collection/gallery.yaml curiator user add alice@example.com --name Alice --groups admin
-CURIATOR_GALLERY=/collection/gallery.yaml curiator user add bob@example.com --name Bob
-CURIATOR_GALLERY=/collection/gallery.yaml curiator user list
+curiator --gallery /collection/gallery.yaml user add alice@example.com --name Alice --groups admin
+curiator --gallery /collection/gallery.yaml user add bob@example.com --name Bob
+curiator --gallery /collection/gallery.yaml user list
 ```
 
 Revoke access without deleting the audit trail:
 
 ```bash
-CURIATOR_GALLERY=/collection/gallery.yaml curiator user disable bob@example.com
+curiator --gallery /collection/gallery.yaml user disable bob@example.com
 ```
 
 For `auth.mode: local`, keep password hashes in the gitignored `auth.users_file`
@@ -150,8 +150,8 @@ services:
       - "127.0.0.1:8300:8300"
     volumes:
       - /srv/curiator/geometry:/collection
+    command: ["curiator", "--gallery", "/collection/gallery.yaml", "serve"]
     environment:
-      CURIATOR_GALLERY: /collection/gallery.yaml
       SHELL_HOST: "0.0.0.0"
     restart: unless-stopped
 ```
@@ -217,25 +217,25 @@ replacement for your host's real backup mechanism.
 Daily:
 
 ```bash
-CURIATOR_GALLERY=/collection/gallery.yaml curiator queue list
+curiator --gallery /collection/gallery.yaml queue list
 git -C /collection status --short
 ```
 
 Weekly:
 
 ```bash
-CURIATOR_GALLERY=/collection/gallery.yaml curiator stats --markdown
-CURIATOR_GALLERY=/collection/gallery.yaml curiator smoke
-CURIATOR_GALLERY=/collection/gallery.yaml curiator playground-preflight --http-smoke
-CURIATOR_GALLERY=/collection/gallery.yaml curiator playground-preflight
-CURIATOR_GALLERY=/collection/gallery.yaml curiator playground-backup-smoke --no-smoke
-CURIATOR_GALLERY=/collection/gallery.yaml curiator queue sweep --older-than 30
+curiator --gallery /collection/gallery.yaml stats --markdown
+curiator --gallery /collection/gallery.yaml smoke
+curiator --gallery /collection/gallery.yaml playground-preflight --http-smoke
+curiator --gallery /collection/gallery.yaml playground-preflight
+curiator --gallery /collection/gallery.yaml playground-backup-smoke --no-smoke
+curiator --gallery /collection/gallery.yaml queue sweep --older-than 30
 ```
 
 Only close stale held feedback after reviewing the dry-run list:
 
 ```bash
-CURIATOR_GALLERY=/collection/gallery.yaml curiator queue sweep --older-than 30 --apply --reason stale
+curiator --gallery /collection/gallery.yaml queue sweep --older-than 30 --apply --reason stale
 ```
 
 Before widening the invite list, review:

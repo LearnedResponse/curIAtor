@@ -96,9 +96,9 @@ server, no re-implementation.
 
 ## Scaffold verification
 
-- `CURIATOR_GALLERY=galleries/curiator-phylogenetics/gallery.yaml curiator doctor`: passing, no
+- `curiator --gallery galleries/curiator-phylogenetics/gallery.yaml doctor`: passing, no
   errors or warnings.
-- `CURIATOR_GALLERY=galleries/curiator-phylogenetics/gallery.yaml curiator smoke`: passing for both
+- `curiator --gallery galleries/curiator-phylogenetics/gallery.yaml smoke`: passing for both
   apps (`tinnik_static`, `tinnik_dash`).
 - `curiator stats --json`: 8 cycles, 8 replied/done cycles, 8 curator commits, latest feedback-loop
   receipt `b1b3586`.

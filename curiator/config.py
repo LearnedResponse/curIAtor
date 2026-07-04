@@ -1,8 +1,8 @@
 """config.py — load gallery.yaml into the cfg dict the loop/adapters/ledger consume.
 
 Lightweight (doesn't import the shell or touch sys.path) so the loop can load config cheaply.
-Resolution: $CURIATOR_GALLERY, else <cwd>/gallery.yaml, else a `.curiator/app.yaml` link,
-else the packaged default.
+Resolution: explicit CLI override, else $CURIATOR_GALLERY, else <cwd>/gallery.yaml,
+else a `.curiator/app.yaml` link, else the packaged default.
 """
 from __future__ import annotations
 
@@ -16,6 +16,17 @@ except ImportError as e:  # pragma: no cover
 
 
 LINK_REL = Path(".curiator") / "app.yaml"
+_GALLERY_OVERRIDE: Path | None = None
+
+
+def set_gallery_override(path: str | Path | None) -> None:
+    """Pin gallery resolution for the current process.
+
+    The CLI uses this for `curiator --gallery ... <command>`. It deliberately outranks the environment
+    variable, but it is process-local so it does not grant ambient authority to child tools.
+    """
+    global _GALLERY_OVERRIDE
+    _GALLERY_OVERRIDE = Path(path).expanduser() if path else None
 
 
 def find_link(start: Path | None = None) -> Path | None:
@@ -40,6 +51,8 @@ def load_link(start: Path | None = None) -> dict:
 
 
 def find_gallery() -> Path:
+    if _GALLERY_OVERRIDE is not None:
+        return _GALLERY_OVERRIDE
     env = os.environ.get("CURIATOR_GALLERY")
     if env:
         return Path(env)

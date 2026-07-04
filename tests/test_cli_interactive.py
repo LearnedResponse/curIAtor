@@ -110,7 +110,8 @@ def test_context_without_selected_app_summarizes_multi_app_collection(collection
     assert "# curIAtor Context: collection" in out
     assert "- apps: 2" in out
     assert "- selected app: none" in out
-    assert "curiator context --app" in out
+    assert "curiator --gallery" in out
+    assert "context --app" in out
     assert "`sample`:" in out
     assert "`other`:" in out
     assert "Recent General Feedback" in out

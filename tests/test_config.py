@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import textwrap
 
-from curiator.config import load_config, set_block_key
+from curiator.config import load_config, set_block_key, set_gallery_override
 
 
 def test_loads_gallery_under_collection(cfg, collection):
@@ -19,6 +19,34 @@ def test_load_config_searches_parent_directories(collection, monkeypatch):
     cfg = load_config()
     assert cfg["repo_root"] == str(collection.resolve())
     assert cfg["gallery_path"] == str((collection / "gallery.yaml").resolve())
+
+
+def test_gallery_override_beats_environment_and_can_clear(tmp_path, monkeypatch):
+    env_dir = tmp_path / "env"
+    cli_dir = tmp_path / "cli"
+    env_dir.mkdir()
+    cli_dir.mkdir()
+    for name, directory in (("env_app", env_dir), ("cli_app", cli_dir)):
+        (directory / "gallery.yaml").write_text(textwrap.dedent(f'''\
+            apps:
+              - name: {name}
+                mount: {{ kind: dash-inproc, module: {name} }}
+                source: apps/{name}.py
+        '''))
+
+    monkeypatch.setenv("CURIATOR_GALLERY", str(env_dir / "gallery.yaml"))
+    try:
+        set_gallery_override(cli_dir / "gallery.yaml")
+        cfg = load_config()
+        assert cfg["gallery_path"] == str((cli_dir / "gallery.yaml").resolve())
+        assert [a["name"] for a in cfg["apps"]] == ["cli_app"]
+
+        set_gallery_override(None)
+        cfg = load_config()
+        assert cfg["gallery_path"] == str((env_dir / "gallery.yaml").resolve())
+        assert [a["name"] for a in cfg["apps"]] == ["env_app"]
+    finally:
+        set_gallery_override(None)
 
 
 def test_explicit_runner_and_git_from_gallery(cfg):
