@@ -96,7 +96,7 @@ only at scaffold/import time.
 Three roadmap collections want the same thing plain `proxy` did not give: a **persistent backend engine**
 the proxied front-end talks to but the loop never edits — a game server
 ([`games-collection`](games-collection.md): Factorio RCON / DFHack / the NetHack Learning
-Environment), an FMU co-sim (`ot-digital-twin`), or a
+Environment), an FMU co-sim ([`ot-digital-twin`](ot-digital-twin.md)), or a
 training/inference process ([`curiator-ml`](curiator-ml.md)). That's the **engine-backed mount**: `proxy` (the front-end
 the loop iterates) **plus a managed backend sidecar** reachable over websocket / RCON / API.
 
