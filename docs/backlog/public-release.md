@@ -59,8 +59,8 @@ leave feedback → watch the fix land and the ⚙ reply arrive. Every item below
    `/home/adamguetz/...`. `curiator commands install` now lays down repo-local interactive shims at
    `.claude/commands/curiator.md` and `.agents/skills/curiator/SKILL.md`; the three release
    collections carry those current paths and now default to `runner.mode: pinned` for standalone
-   `pip install curiator` use (`curiator-aviato` `3719ac9`, `curiator-ot` `36e21cf`,
-   `curiator-geometry` `30bb155` on `curiator/auto`). `curiator doctor` now gives a local preflight for
+   `pip install curiator` use (`curiator-aviato` `4743529`, `curiator-ot` `2e9896c`,
+   `curiator-geometry` `60ab897` on `curiator/auto`). `curiator doctor` now gives a local preflight for
    machine-absolute paths, missing app roots/sources, weak smoke coverage, suspicious proxy port wiring,
    likely HMR dev-server proxy commands, missing framework base/root-path config, missing command
    executables, and common missing dependency manifests; `curiator smoke` runs the same per-app smoke
@@ -94,11 +94,13 @@ leave feedback → watch the fix land and the ⚙ reply arrive. Every item below
    `36e21cf`.
    `curiator-finance` is now a verified optional fourth: its public-demo posture is pinned/no-login,
    the stale machine-local ledger note is sanitized, and
-   `curiator release-preflight --gallery curiator-finance --fresh-clone --strict` passes at `d6270bd`.
+   `curiator release-preflight --gallery curiator-finance --fresh-clone --strict` passes at `137877d`,
+   after stale approval roots were closed to match the implemented portfolio/literature history.
    `curiator-phylogenetics` is also a verified paper-linked optional collection at `38cefee`; its
    static GitHub Pages publishing path is prepared, with the public URL still external. `curiator-ml`
-   is now the first diagnostic-driven-backend dogfood collection at `a19184c`: a local benchmark
-   dashboard with a metric JSON smoke and passing fresh-clone strict preflight. To check the minimum set
+   is now the first diagnostic-driven-backend dogfood collection at `508162e`: deterministic
+   classification and regression benchmark dashboards with metric JSON smokes and passing fresh-clone
+   strict browser preflight. To check the minimum set
    plus these optional public-shaped collections, run
    `curiator release-preflight --include-optional --fresh-clone --strict`. The three above remain the
    minimum release set unless scope expands. On 2026-07-02,
@@ -109,7 +111,12 @@ leave feedback → watch the fix land and the ⚙ reply arrive. Every item below
    `curiator-finance@d6270bd` and `curiator-phylogenetics@b1b3586`. After the local Pages publishing
    and Dash-suite consolidation commits, `curiator release-preflight --gallery curiator-phylogenetics
    --fresh-clone --strict --browser-smoke --json` passes at `38cefee`; rerun the full published-head
-   gate after pushing that optional repo head.
+   gate after pushing that optional repo head. On 2026-07-04, the local no-publication gate
+   `curiator release-preflight --include-optional --fresh-clone --strict --json` passed at
+   `curiator-aviato@4743529`, `curiator-ot@2e9896c`, `curiator-geometry@60ab897`,
+   `curiator-finance@137877d`, `curiator-phylogenetics@38cefee`, and `curiator-ml@508162e`; the checked
+   gallery feedback queues had no remaining non-done items. The published-head gate must be rerun after
+   any of those updated heads are pushed.
 5. **SECURITY.md — reviewed against current defaults; re-read once at release cut.** The product auto-runs a coding agent against
    feedback text. The first policy now states: one-container-per-collection as the blast-radius unit,
    the autonomy dial, group-gated elevated profiles, dispatch quotas/trusted dispatch groups as admission

@@ -29,8 +29,6 @@ licenses, DOI services, hosted credentials) at the point they are actually reach
   release.
 - [**ot-digital-twin**](ot-digital-twin.md) — push OT v2 toward a local engine-backed/digital-twin proof;
   mark OpenModelica/FMU/toolchain or licensed-substrate blockers only when reached.
-- [**curiator-ml**](curiator-ml.md) — build a local open-benchmark diagnostic loop before considering
-  Kaggle/API-key paths.
 
 ## Hosted Pilot
 
@@ -53,3 +51,6 @@ Fully delivered public work-orders, retired to [`completed/`](completed/) for pr
 - [**phylogenetics-collection**](completed/phylogenetics-collection.md) — Pyodide static companion,
   Dash explorer, eight feedback-to-fix receipts, Pages workflow, and strict fresh-clone browser
   preflight; public Pages URL remains external — shipped `curiator-phylogenetics@38cefee`.
+- [**curiator-ml**](completed/curiator-ml.md) — deterministic classification and regression diagnostic
+  dashboards with metric artifacts, seeded feedback receipts, and strict fresh-clone browser preflight;
+  Kaggle/API/live-data paths remain external — shipped `curiator-ml@508162e`.
