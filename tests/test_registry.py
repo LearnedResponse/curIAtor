@@ -96,3 +96,28 @@ def test_app_root_can_expand_to_multiple_mounts(collection):
         assert str((collection / "apps" / "suite").resolve()) in sys.path
     finally:
         sys.path[:] = saved
+
+
+def test_registry_renders_engine_backed_proxy_placeholders(collection):
+    (collection / "apps" / "twin").mkdir()
+    (collection / "gallery.yaml").write_text(textwrap.dedent('''\
+        apps:
+          - name: twin
+            root: apps/twin
+            source: .
+            mount:
+              kind: engine-backed
+              cmd: "python server.py --port {port} --engine {engine_url}"
+              port: 8742
+              engine: "python engine.py --port {engine_port}"
+              engine_port: 8842
+              engine_health: /health
+        feedback: { dir: feedback }
+    '''))
+    saved = list(sys.path)
+    try:
+        reg = _fresh_registry()
+        app = reg.ALL_APPS[0]
+        assert app["mount"]["cmd"] == "python server.py --port 8742 --engine http://127.0.0.1:8842"
+    finally:
+        sys.path[:] = saved

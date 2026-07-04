@@ -255,11 +255,14 @@ def _render_smoke_template(cfg: dict, spec: dict, app: str, src: str | None, com
     root = spec.get("root") or Path(cfg["repo_root"])
     source = spec.get("source") or (Path(cfg["repo_root"]) / src if src else root)
     mount = spec.get("mount") if isinstance(spec.get("mount"), dict) else {}
+    engine_port = mount.get("engine_port") or ""
     values = {
         "root": str(root),
         "source": str(source),
         "app": app,
         "port": spec.get("port") or mount.get("port") or "",
+        "engine_port": engine_port,
+        "engine_url": f"http://127.0.0.1:{engine_port}" if engine_port else "",
     }
     return str(command).format(**values)
 
@@ -276,7 +279,7 @@ def _http_smoke_settings(spec: dict, app: str) -> dict | None:
     if raw is False:
         return None
     mount = spec.get("mount") or {}
-    if mount.get("kind") != "proxy":
+    if mount.get("kind") not in {"proxy", "engine-backed"}:
         return None
     if isinstance(raw, str):
         settings = {"path": raw}
@@ -302,7 +305,7 @@ def _tail(path: Path, limit: int = 2000) -> str:
 
 
 def http_smoke_app(cfg: dict, app: str, src: str | None, spec: dict | None = None) -> dict:
-    """Start a proxy app briefly and verify it answers HTTP. Intended for opt-in CLI/runtime smoke."""
+    """Start a proxy-like app briefly and verify it answers HTTP. Intended for opt-in CLI/runtime smoke."""
     spec = spec or _app_spec(cfg, app) or {}
     settings = _http_smoke_settings(spec, app)
     if not settings:
@@ -318,24 +321,62 @@ def http_smoke_app(cfg: dict, app: str, src: str | None, spec: dict | None = Non
         return {"ok": False, "message": "proxy mount needs commands.preview or mount.cmd for HTTP smoke"}
     rendered = _render_smoke_template(cfg, spec, app, src, str(command))
     root = Path(spec.get("root") or cfg["repo_root"])
+    engine_rendered = ""
+    engine_root = root
+    engine_port = mount.get("engine_port")
+    if mount.get("kind") == "engine-backed":
+        if not mount.get("engine") or not engine_port:
+            return {"ok": False, "message": "engine-backed HTTP smoke needs engine and engine_port"}
+        engine_rendered = _render_smoke_template(cfg, spec, app, src, str(mount.get("engine")))
+        engine_root = Path(mount.get("engine_cwd") or mount.get("cwd") or root)
+        if not engine_root.is_absolute():
+            engine_root = root / engine_root
     timeout = float(settings.get("timeout") or 5.0)
     path = settings["path"]
     url = path if path.startswith(("http://", "https://")) else f"http://127.0.0.1:{port}{path}"
     env = {**os.environ, "PORT": str(port), "CURIATOR_APP": app}
+    if engine_port:
+        env["CURIATOR_ENGINE_PORT"] = str(engine_port)
+        env["CURIATOR_ENGINE_URL"] = f"http://127.0.0.1:{engine_port}"
+    engine_env = {**env, "PORT": str(engine_port)} if engine_port else env
 
     with tempfile.TemporaryDirectory(prefix="curiator-http-smoke-") as tmp:
         out_path = Path(tmp) / "stdout.log"
         err_path = Path(tmp) / "stderr.log"
+        engine_out_path = Path(tmp) / "engine-stdout.log"
+        engine_err_path = Path(tmp) / "engine-stderr.log"
+        engine_proc = None
+        if engine_rendered:
+            with engine_out_path.open("wb") as out, engine_err_path.open("wb") as err:
+                try:
+                    engine_proc = subprocess.Popen(
+                        shlex.split(engine_rendered),
+                        cwd=engine_root,
+                        env=engine_env,
+                        stdout=out,
+                        stderr=err,
+                    )
+                except OSError as exc:
+                    return {
+                        "ok": False,
+                        "message": f"could not start engine HTTP smoke command: {exc}",
+                        "engine_command": engine_rendered,
+                    }
         with out_path.open("wb") as out, err_path.open("wb") as err:
             try:
                 proc = subprocess.Popen(shlex.split(rendered), cwd=root, env=env, stdout=out, stderr=err)
             except OSError as exc:
+                if engine_proc is not None and engine_proc.poll() is None:
+                    engine_proc.terminate()
                 return {"ok": False, "message": f"could not start HTTP smoke command: {exc}", "command": rendered}
 
             try:
                 deadline = time.monotonic() + timeout
                 last_error = "not attempted"
                 while time.monotonic() < deadline:
+                    if engine_proc is not None and engine_proc.poll() is not None:
+                        last_error = f"engine process exited with code {engine_proc.poll()}"
+                        break
                     code = proc.poll()
                     if code is not None:
                         last_error = f"process exited with code {code}"
@@ -349,6 +390,7 @@ def http_smoke_app(cfg: dict, app: str, src: str | None, spec: dict | None = Non
                                     "message": f"HTTP {status}",
                                     "url": url,
                                     "command": rendered,
+                                    **({"engine_command": engine_rendered} if engine_rendered else {}),
                                 }
                             last_error = f"HTTP {status}"
                     except urllib.error.HTTPError as exc:
@@ -363,11 +405,18 @@ def http_smoke_app(cfg: dict, app: str, src: str | None, spec: dict | None = Non
                     detail += f"; stderr: {stderr}"
                 elif stdout:
                     detail += f"; stdout: {stdout}"
+                engine_stderr = _tail(engine_err_path) if engine_rendered else ""
+                engine_stdout = _tail(engine_out_path) if engine_rendered else ""
+                if engine_stderr:
+                    detail += f"; engine stderr: {engine_stderr}"
+                elif engine_stdout:
+                    detail += f"; engine stdout: {engine_stdout}"
                 return {
                     "ok": False,
                     "message": detail,
                     "url": url,
                     "command": rendered,
+                    **({"engine_command": engine_rendered} if engine_rendered else {}),
                     "timeout": timeout,
                 }
             finally:
@@ -378,6 +427,13 @@ def http_smoke_app(cfg: dict, app: str, src: str | None, spec: dict | None = Non
                     except subprocess.TimeoutExpired:
                         proc.kill()
                         proc.wait(timeout=2)
+                if engine_proc is not None and engine_proc.poll() is None:
+                    engine_proc.terminate()
+                    try:
+                        engine_proc.wait(timeout=2)
+                    except subprocess.TimeoutExpired:
+                        engine_proc.kill()
+                        engine_proc.wait(timeout=2)
 
 
 def smoke_app(cfg: dict, app: str, src: str | None) -> tuple[bool, str]:

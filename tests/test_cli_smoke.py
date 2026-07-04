@@ -150,6 +150,77 @@ def test_smoke_http_starts_proxy_and_checks_configured_path(collection, capsys, 
     assert popen_calls[0]["env"]["CURIATOR_APP"] == "proxy_http"
 
 
+def test_smoke_http_starts_engine_backed_proxy(collection, capsys, monkeypatch):
+    from curiator import cli
+    from curiator import gitmem
+
+    root = collection / "apps" / "twin"
+    root.mkdir()
+    (root / "server.py").write_text("print('server')\n")
+    (root / "engine.py").write_text("print('engine')\n")
+    (collection / "gallery.yaml").write_text(textwrap.dedent(f"""\
+        apps:
+          - name: twin
+            title: Twin
+            root: apps/twin
+            source: .
+            smoke: python -m py_compile server.py engine.py
+            smoke_http: /api/snapshot
+            mount:
+              kind: engine-backed
+              cmd: "{sys.executable} server.py --port {{port}} --engine-url {{engine_url}}"
+              port: 8878
+              engine: "{sys.executable} engine.py --port {{engine_port}}"
+              engine_port: 8978
+    """))
+
+    popen_calls = []
+
+    class FakeProc:
+        def poll(self):
+            return None
+
+        def terminate(self):
+            return None
+
+        def wait(self, timeout=None):
+            return 0
+
+    real_popen = gitmem.subprocess.Popen
+
+    def fake_popen(args, *popen_args, **popen_kwargs):
+        if not (len(args) >= 2 and args[1] in {"server.py", "engine.py"}):
+            return real_popen(args, *popen_args, **popen_kwargs)
+        popen_calls.append({"args": args, "cwd": popen_kwargs.get("cwd"), "env": popen_kwargs.get("env")})
+        return FakeProc()
+
+    class FakeResponse:
+        status = 200
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+    monkeypatch.setattr(gitmem.subprocess, "Popen", fake_popen)
+    monkeypatch.setattr(gitmem.urllib.request, "urlopen", lambda url, timeout=None: FakeResponse())
+
+    assert cli.main(["smoke", "--app", "twin", "--http", "--json"]) == 0
+    payload = json.loads(capsys.readouterr().out)
+    result = payload["results"][0]
+    assert result["http_smoke"]["ok"] is True
+    assert result["http_smoke"]["url"] == "http://127.0.0.1:8878/api/snapshot"
+    assert result["http_smoke"]["engine_command"] == f"{sys.executable} engine.py --port 8978"
+    assert popen_calls[0]["args"] == [sys.executable, "engine.py", "--port", "8978"]
+    assert popen_calls[0]["cwd"] == root
+    assert popen_calls[0]["env"]["PORT"] == "8978"
+    assert popen_calls[1]["args"] == [
+        sys.executable, "server.py", "--port", "8878", "--engine-url", "http://127.0.0.1:8978",
+    ]
+    assert popen_calls[1]["env"]["CURIATOR_ENGINE_URL"] == "http://127.0.0.1:8978"
+
+
 def test_smoke_browser_opens_apps_through_shell(collection, capsys, monkeypatch):
     from curiator import browser_smoke, cli
 

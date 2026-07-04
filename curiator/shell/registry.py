@@ -96,7 +96,19 @@ def _build_all_apps() -> list[dict]:
             smoke = mount.get("smoke", a.get("smoke"))
             cmd = mount.get("cmd")
             if cmd and port is not None:
-                mount["cmd"] = str(cmd).format(port=port, root=str(root), app=key)
+                engine_port = mount.get("engine_port") or ""
+                engine_url = f"http://127.0.0.1:{engine_port}" if engine_port else ""
+                try:
+                    mount["cmd"] = str(cmd).format(
+                        port=port,
+                        root=str(root),
+                        source=str(src_path) if src_path else "",
+                        app=key,
+                        engine_port=engine_port,
+                        engine_url=engine_url,
+                    )
+                except (KeyError, IndexError, ValueError):
+                    mount["cmd"] = str(cmd)
             mount.setdefault("kind", "dash-inproc")
             if mount.get("kind") == "dash-inproc":
                 mount.setdefault("module", key)
