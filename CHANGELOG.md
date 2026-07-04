@@ -165,6 +165,9 @@ All notable changes to curIAtor are documented here. The format follows
   `--strict-launch` rejects `TODO(release)` placeholders before publication.
 
 ### Fixed
+- The catalog "sort: number" option now sorts by the number shown on each row (the app's port),
+  numerically, instead of by the app's module key as a string — so it no longer looks unordered in
+  galleries whose keys differ from their displayed numbers. Apps without a number sort last.
 - `docs/USING_CURIATOR.md` no longer says the curator never commits; it now describes the current
   default-uncommitted behavior plus `git.commit: true` git-as-memory commits.
 - The adapter package overview now matches the current task protocol: agents never run git directly,

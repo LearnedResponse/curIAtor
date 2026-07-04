@@ -917,11 +917,20 @@
       const filtered = apps
         .filter((a) => a.kind !== "general")
         .filter((a) => !q || [a.key, a.title, ...(a.tags || [])].join(" ").toLowerCase().includes(q));
+      const byKey = (a, b) => String(a.key).localeCompare(String(b.key));
       filtered.sort((a, b) => {
-        if (sort === "open") return (a.metrics.open || 0) - (b.metrics.open || 0);
-        if (sort === "rating") return (a.metrics.avg_stars || 0) - (b.metrics.avg_stars || 0);
+        if (sort === "open") return (a.metrics.open || 0) - (b.metrics.open || 0) || byKey(a, b);
+        if (sort === "rating") return (a.metrics.avg_stars || 0) - (b.metrics.avg_stars || 0) || byKey(a, b);
         if (sort === "title") return String(a.title).localeCompare(String(b.title));
-        return String(a.key).localeCompare(String(b.key));
+        // "id"/number → sort by the number shown on each row (a.port), numerically; apps without a
+        // number sort last, then ties break by key. (Was sorting by a.key string, unrelated to a.port.)
+        // Guard with `a.port ?` so a falsy port (0/null/undefined) is "no number", matching the row.
+        const na = a.port ? numberValue(a.port) : null;
+        const nb = b.port ? numberValue(b.port) : null;
+        if (na === null && nb === null) return byKey(a, b);
+        if (na === null) return 1;
+        if (nb === null) return -1;
+        return na - nb || byKey(a, b);
       });
       if (reverse) filtered.reverse();
       return filtered;
