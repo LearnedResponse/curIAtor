@@ -21,6 +21,7 @@ def _load_script():
 
 def _copy_release_doc_fixture(tmp_path: Path) -> None:
     (tmp_path / "docs" / "backlog").mkdir(parents=True)
+    (tmp_path / "docs" / "backlog" / "completed").mkdir(parents=True)
     (tmp_path / "docs" / "paper").mkdir(parents=True)
     shutil.copyfile(ROOT / "Makefile", tmp_path / "Makefile")
     shutil.copyfile(ROOT / "README.md", tmp_path / "README.md")
@@ -28,8 +29,8 @@ def _copy_release_doc_fixture(tmp_path: Path) -> None:
     shutil.copyfile(ROOT / "docs" / "RELEASE.md", tmp_path / "docs" / "RELEASE.md")
     shutil.copyfile(ROOT / "docs" / "backlog" / "public-release.md",
                     tmp_path / "docs" / "backlog" / "public-release.md")
-    shutil.copyfile(ROOT / "docs" / "backlog" / "public-playground.md",
-                    tmp_path / "docs" / "backlog" / "public-playground.md")
+    shutil.copyfile(ROOT / "docs" / "backlog" / "completed" / "public-playground.md",
+                    tmp_path / "docs" / "backlog" / "completed" / "public-playground.md")
     shutil.copyfile(ROOT / "docs" / "paper" / "reproducibility.md",
                     tmp_path / "docs" / "paper" / "reproducibility.md")
     shutil.copyfile(ROOT / "docs" / "paper" / "curiator-paper.md",
@@ -128,7 +129,7 @@ def test_release_docs_requires_browser_smoke_docs(tmp_path):
     readme = tmp_path / "README.md"
     release = tmp_path / "docs" / "RELEASE.md"
     reproducibility = tmp_path / "docs" / "paper" / "reproducibility.md"
-    playground = tmp_path / "docs" / "backlog" / "public-playground.md"
+    playground = tmp_path / "docs" / "backlog" / "completed" / "public-playground.md"
     readme.write_text(
         readme.read_text()
         .replace("curiator smoke --browser", "curiator smoke --shell")
@@ -164,9 +165,9 @@ def test_release_docs_requires_browser_smoke_docs(tmp_path):
         "docs/paper/reproducibility.md missing required phrase: "
         "curiator release-preflight --gallery curiator-aviato --browser-smoke"
     ) in failures
-    assert "public-playground backlog missing required phrase: --browser-smoke" in failures
+    assert "public-playground doc missing required phrase: --browser-smoke" in failures
     assert (
-        "public-playground backlog missing required phrase: "
+        "public-playground doc missing required phrase: "
         "curiator playground-backup-smoke"
     ) in failures
 

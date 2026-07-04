@@ -1,7 +1,7 @@
 # Public playground deployment runbook
 
 This is the phase-0 "velvet rope" deployment shape from
-[`docs/backlog/public-playground.md`](backlog/public-playground.md): one hosted collection, invited
+[`docs/backlog/completed/public-playground.md`](backlog/completed/public-playground.md): one hosted collection, invited
 users only, and one container as the blast-radius boundary. It is a runbook, not proof that a hosted
 instance exists.
 

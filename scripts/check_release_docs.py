@@ -44,6 +44,7 @@ def check_release_docs(root: Path = ROOT, *, strict_launch: bool = False) -> lis
     release = root / "docs" / "RELEASE.md"
     public_release = root / "docs" / "backlog" / "public-release.md"
     public_playground = root / "docs" / "backlog" / "public-playground.md"
+    completed_public_playground = root / "docs" / "backlog" / "completed" / "public-playground.md"
     reproducibility = root / "docs" / "paper" / "reproducibility.md"
     paper = root / "docs" / "paper" / "curiator-paper.md"
     demo_gif = root / "docs" / "demo.gif"
@@ -55,8 +56,8 @@ def check_release_docs(root: Path = ROOT, *, strict_launch: bool = False) -> lis
         failures.append("missing SECURITY.md")
     if not public_release.exists():
         failures.append("missing docs/backlog/public-release.md")
-    if not public_playground.exists():
-        failures.append("missing docs/backlog/public-playground.md")
+    if not public_playground.exists() and not completed_public_playground.exists():
+        failures.append("missing public-playground backlog note")
     if not release.exists():
         failures.append("missing docs/RELEASE.md")
     if not reproducibility.exists():
@@ -68,7 +69,8 @@ def check_release_docs(root: Path = ROOT, *, strict_launch: bool = False) -> lis
     security_text = security.read_text(encoding="utf-8") if security.exists() else ""
     release_text = release.read_text(encoding="utf-8") if release.exists() else ""
     public_release_text = public_release.read_text(encoding="utf-8") if public_release.exists() else ""
-    public_playground_text = public_playground.read_text(encoding="utf-8") if public_playground.exists() else ""
+    public_playground_note = public_playground if public_playground.exists() else completed_public_playground
+    public_playground_text = public_playground_note.read_text(encoding="utf-8") if public_playground_note.exists() else ""
     reproducibility_text = reproducibility.read_text(encoding="utf-8") if reproducibility.exists() else ""
     paper_text = paper.read_text(encoding="utf-8") if paper.exists() else ""
     makefile_text = makefile.read_text(encoding="utf-8") if makefile.exists() else ""
@@ -92,7 +94,7 @@ def check_release_docs(root: Path = ROOT, *, strict_launch: bool = False) -> lis
         "curiator playground-backup-smoke",
     ]:
         if phrase not in public_playground_text:
-            failures.append(f"public-playground backlog missing required phrase: {phrase}")
+            failures.append(f"public-playground doc missing required phrase: {phrase}")
 
     for phrase in SECURITY_REQUIRED_PHRASES:
         if not _contains(security_text, phrase):

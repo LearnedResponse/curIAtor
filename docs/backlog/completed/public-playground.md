@@ -1,14 +1,14 @@
 # Backlog — public playground (hosted collections, trust-tiered dispatch)
 
-> **Status:** active hosted-pilot gate as of 2026-07-03. Local moderation, quota, preflight, and
-> backup-restore primitives are present; keep dogfooding dry-run evidence locally, and mark the actual
-> hosted pilot/deployment as external until hosting credentials/public exposure are available. Scoped
+> **Status:** retired to completed as of 2026-07-04. Local moderation, quota, preflight, and
+> backup-restore primitives are present; the actual hosted pilot/deployment remains parked as an
+> external operating step until hosting credentials/public exposure are available. Scoped
 > 2026-07-01; phase-2 moderation primitive landed (`held` status,
 > `auth.allow_anonymous` held intake for `local`/`oidc`, admin `/queue` shell view, and
 > `curiator queue list|approve|reject|sweep` CLI, per-IP anonymous submission limits, and
 > watcher-enforced account/global dispatch quotas, plus anonymous-upload suppression in the React shell).
 > Sequences AFTER
-> [public-release](public-release.md): the
+> [public-release](../public-release.md): the
 > static example repos are the pitch; this is the live complement — **a hosted public collection where
 > anyone can leave feedback and watch the curator work**, without handing an autonomous agent to the
 > open internet. It is the mechanism behind SECURITY.md's "Public Internet Use" policy (queue + human
@@ -18,7 +18,7 @@
 > the rate limit and the trust vetting. A phase-0 deployment runbook, `curiator playground-preflight`
 > posture gate, and `curiator playground-backup-smoke` restore-copy gate with `--output` evidence
 > snapshots now exist in
-> [`docs/PUBLIC_PLAYGROUND_DEPLOYMENT.md`](../PUBLIC_PLAYGROUND_DEPLOYMENT.md); the actual hosted pilot
+> [`docs/PUBLIC_PLAYGROUND_DEPLOYMENT.md`](../../PUBLIC_PLAYGROUND_DEPLOYMENT.md); the actual hosted pilot
 > remains to run. The anonymous tier + held pool is a later phase, built only after the velvet phase
 > teaches us what hosted moderation actually costs.
 > Local-auth hosted preflight now also rejects inline `auth.users` password hashes plus tracked,
@@ -28,6 +28,10 @@
 > secret values out of the JSON evidence report. Header-auth deployments now also fail closed at the
 > feedback boundary: if the trusted edge proxy does not supply identity headers, feedback, quick
 > replies, transcription, and retained audio are rejected instead of entering the dispatch queue.
+>
+> **External blocker parked:** the remaining phase-0 proof is operating a real hosted collection with
+> invitees. That requires hosting credentials/public exposure, TLS/DNS, admin users, and an actual
+> moderation commitment; the runner-side local work-order is complete.
 
 ## The idea
 
@@ -126,7 +130,7 @@ budget across their loops (fairness + a global cap); that's v2, per-collection q
 
 ## v1 scope
 
-**One velvet-gated playground collection**: [`galleries/curiator-geometry`](completed/math-geometry-collection.md)
+**One velvet-gated playground collection**: [`galleries/curiator-geometry`](math-geometry-collection.md)
 (now scaffolded) — deterministic, dataless, zero-toolchain, the cheapest to babysit, and its audience
 (researchers/educators) is exactly who to invite first. `curiator-aviato` or `curiator-ot` as a second
 playground only after the moderation load is understood. Phases 1–2 follow the rollout above; nothing

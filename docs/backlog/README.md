@@ -30,11 +30,6 @@ licenses, DOI services, hosted credentials) at the point they are actually reach
 - [**ot-digital-twin**](ot-digital-twin.md) — push OT v2 toward a local engine-backed/digital-twin proof;
   mark OpenModelica/FMU/toolchain or licensed-substrate blockers only when reached.
 
-## Hosted Pilot
-
-- [**public-playground**](public-playground.md) — keep local hosted-pilot gates and dry-run evidence
-  current; the actual external deployment remains blocked on hosting credentials and public exposure.
-
 ## Shipped
 
 Fully delivered public work-orders, retired to [`completed/`](completed/) for provenance.
@@ -54,3 +49,6 @@ Fully delivered public work-orders, retired to [`completed/`](completed/) for pr
 - [**curiator-ml**](completed/curiator-ml.md) — deterministic classification and regression diagnostic
   dashboards with metric artifacts, seeded feedback receipts, and strict fresh-clone browser preflight;
   Kaggle/API/live-data paths remain external — shipped `curiator-ml@508162e`.
+- [**public-playground**](completed/public-playground.md) — hosted-pilot moderation, auth, quota,
+  preflight, backup-restore, and runbook primitives are delivered; actually running a public/velvet-gated
+  deployment remains external — shipped runner state `curiator@94f3717`.
