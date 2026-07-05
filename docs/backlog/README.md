@@ -29,6 +29,9 @@ local implementation before release.
 
 ## Direction (post-release experiments)
 
+- [**nodered-overlay**](nodered-overlay.md) — Node-RED under the same-origin overlay: **verified working
+  end-to-end** (editor + live `/comms` WebSocket) now that the proxy streams (1a) and bridges WebSockets
+  (1b). Remaining: a `nodered` scaffold template + an example collection so it's one command.
 - [**per-run-branches**](per-run-branches.md) — an example collection for the "grown-up app" tier: each
   agent run on a feature branch off `main`, an **Approve** button *in the app* that merges it, and live
   per-branch preview (git worktrees). Not the default (that's `git.branch: null` → commit to `main`);
