@@ -251,6 +251,7 @@ def run_once(cfg: dict) -> int:
         print(f"curiator:   ▶ launching {adapter_name} on {key}/{eid} "
               f"(autonomy={prof.get('autonomy', 'auto-small')}){elevated}", flush=True)
         runlog.note(task, f"status set to working; launching {adapter_name}")
+        runlog.clear_cancel(cfg, eid)                    # drop any stale Stop marker before a fresh run
         dispatched += 1
         try:
             adapter.run(task)                            # the agent edits + smoke-tests + replies
@@ -265,6 +266,37 @@ def run_once(cfg: dict) -> int:
             runlog.note(task, f"agent interrupted: {exc}")
             _reset_interrupted_work(cfg, key, entry, f"agent interrupted by service shutdown ({exc})")
             raise
+        except runlog.AgentCancelled:                     # the Stop button — park it, don't retry
+            runlog.clear_cancel(cfg, eid)
+            runlog.note(task, "cancelled by user; parked as held")
+            ledger.add_system_note(
+                cfg, key,
+                "⏹ Run stopped by user. Parked as **held** — the working tree may hold partial edits. "
+                "Re-run it from the queue (approve) or drop it (reject).",
+                reply_to=[eid], agent="curiator watcher")
+            ledger.set_status(cfg, key, [eid], "held")
+            print(f"curiator:   ⏹ {key}/{eid} → held (stopped by user)", flush=True)
+        except runlog.AgentTimeout as exc:                # taking a while — cap the retries, then park
+            attempts = int(entry.get("timeout_attempts") or 0) + 1
+            cap = _quota_value((cfg.get("agent") or {}).get("max_timeouts"))
+            cap = 2 if cap is None else cap
+            runlog.note(task, f"{exc} (attempt {attempts}/{cap})")
+            if attempts >= cap:
+                ledger.add_system_note(
+                    cfg, key,
+                    f"⏱ Stopped at the {exc.timeout}s time limit again (attempt {attempts}/{cap}). Parked as "
+                    "**held** — raise `agent.timeout` for longer runs or narrow the request, then re-run from "
+                    "the queue.", reply_to=[eid], agent="curiator watcher")
+                ledger.update_entry(cfg, key, eid, {"status": "held", "timeout_attempts": attempts})
+                print(f"curiator:   ⏱ {key}/{eid} → held (hit the {exc.timeout}s limit {attempts}×)", flush=True)
+            else:
+                ledger.add_system_note(
+                    cfg, key,
+                    f"⏱ Taking longer than the {exc.timeout}s limit — stopped and requeued to try again "
+                    f"(attempt {attempts}/{cap}). Raise `agent.timeout` to allow longer runs.",
+                    reply_to=[eid], agent="curiator watcher")
+                ledger.update_entry(cfg, key, eid, {"status": "new", "timeout_attempts": attempts})
+                print(f"curiator:   ⏱ {key}/{eid} → requeued (hit the {exc.timeout}s limit, attempt {attempts}/{cap})", flush=True)
         except Exception as exc:                          # never leave an item stuck on 'working'
             print(f"curiator:   ✗ {key}/{eid} failed: {exc}", flush=True)
             runlog.note(task, f"loop error: {exc}")

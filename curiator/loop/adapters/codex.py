@@ -62,14 +62,12 @@ def run(task) -> None:
         cmd += ["-s", _sandbox(agent)]
     cmd += ["--", prompt]                              # terminate options so the bundle is the PROMPT
 
-    try:
-        # stdin=DEVNULL: codex exec reads stdin even with a positional prompt ("Reading additional input
-        # from stdin…") — give it immediate EOF so it can't block the loop waiting on a non-existent TTY.
-        proc = runlog.run_streamed(task, cmd, cwd=repo_root, timeout=int(agent.get("timeout", 900)),
-                                   label="codex exec", display_cmd=["codex", "exec", "<task bundle>", "..."],
-                                   stdin=subprocess.DEVNULL)
-    except subprocess.TimeoutExpired as exc:
-        raise RuntimeError(f"codex exec timed out after {agent.get('timeout', 900)}s") from exc
+    # stdin=DEVNULL: codex exec reads stdin even with a positional prompt ("Reading additional input
+    # from stdin…") — give it immediate EOF so it can't block the loop waiting on a non-existent TTY.
+    # A timeout raises runlog.AgentTimeout (handled by the loop); no local catch needed.
+    proc = runlog.run_streamed(task, cmd, cwd=repo_root, timeout=int(agent.get("timeout", 900)),
+                               label="codex exec", display_cmd=["codex", "exec", "<task bundle>", "..."],
+                               stdin=subprocess.DEVNULL)
 
     if proc.tail.strip():
         print(f"[codex] {task.key}/{task.entry.get('id')}:\n{proc.tail[-2000:]}")

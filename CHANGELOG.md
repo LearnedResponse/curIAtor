@@ -37,6 +37,14 @@ All notable changes to curIAtor are documented here. The format follows
   toolchain, and intended use, and exposes the same metadata as JSON for agents and docs.
 - Per-feedback run artifacts: task bundles live under `feedback/tasks/<id>.md`, agent stdout/stderr
   streams live to `feedback/replies/<id>.md`, and feedback status badges link to a scrollable trace view.
+- The trace/console view has a **Stop** button that cancels an in-flight agent run: the shell drops a
+  cancel marker the watcher polls for, terminates the agent, and parks the item as `held` (reviewable
+  and re-runnable from the moderation queue) with a note that the working tree may hold partial edits.
+- Long runs now show a "… still working (Nm elapsed)" heartbeat in the trace after a stretch of silence,
+  so a slow-but-healthy run reads as "taking a while" instead of looking frozen.
+- Timeouts no longer retry forever: a run that exceeds `agent.timeout` posts a clear "taking longer than
+  {timeout}s" note and is requeued up to `agent.max_timeouts` times (default 2), then parked as `held`
+  with guidance to raise `agent.timeout` or narrow the request.
 - The `headless-cc` adapter runs `claude -p` with `--output-format stream-json --verbose` and renders
   the JSONL events into the trace as readable progress — session start (visible within a second, so a
   launched run no longer looks hung), each tool use (`▸ Read(...)`, `▸ Bash: …`, `▸ Edit(...)`), and a

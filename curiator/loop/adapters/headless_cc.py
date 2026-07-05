@@ -19,7 +19,6 @@ from __future__ import annotations
 
 import json
 import shutil
-import subprocess
 from pathlib import Path
 
 from .. import runlog
@@ -117,12 +116,10 @@ def run(task) -> None:
     cmd += ["--allowedTools", *allowed]               # variadic — keep LAST (consumes args until the next flag)
 
     display = ["claude", "-p", "<task bundle>"] + (["--verbose", "--output-format", "stream-json"] if stream else []) + ["..."]
-    try:
-        proc = runlog.run_streamed(task, cmd, cwd=task.cfg["repo_root"], timeout=int(agent.get("timeout", 900)),
-                                   label="claude -p", display_cmd=display,
-                                   line_formatter=_format_stream_event if stream else None)
-    except subprocess.TimeoutExpired as exc:
-        raise RuntimeError(f"claude -p timed out after {agent.get('timeout', 900)}s") from exc
+    # A timeout raises runlog.AgentTimeout and a Stop raises runlog.AgentCancelled; the loop handles both.
+    proc = runlog.run_streamed(task, cmd, cwd=task.cfg["repo_root"], timeout=int(agent.get("timeout", 900)),
+                               label="claude -p", display_cmd=display,
+                               line_formatter=_format_stream_event if stream else None)
 
     if proc.tail.strip():
         print(f"[headless-cc] {task.key}/{task.entry.get('id')}:\n{proc.tail[-2000:]}")

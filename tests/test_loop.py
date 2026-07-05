@@ -191,6 +191,92 @@ def test_run_once_resets_and_reraises_on_agent_interruption(cfg, monkeypatch):
     assert "service shutdown" in note["comment"]
 
 
+def test_run_once_holds_item_when_stopped_by_user(cfg, monkeypatch):
+    fid = ledger.save_entry(cfg, "sample", comment="stop me", ts="t")
+
+    class Cancelled:
+        @staticmethod
+        def run(task):
+            raise runlog.AgentCancelled("run cancelled by user")
+
+    monkeypatch.setattr("curiator.loop.adapters.get", lambda _cfg: Cancelled)
+    assert loop.run_once(cfg) == 1
+
+    data = ledger.load(cfg)["sample"]
+    user = next(e for e in data if e["id"] == fid)
+    note = next(e for e in data if e.get("kind") == "system" and fid in (e.get("reply_to") or []))
+    assert user["status"] == "held"                                 # parked, not retried
+    assert "Run stopped by user" in note["comment"]
+
+
+def test_run_once_caps_repeated_timeouts_then_parks(cfg, monkeypatch):
+    cfg["agent"]["max_timeouts"] = 2
+    fid = ledger.save_entry(cfg, "sample", comment="slow task", ts="t")
+
+    class TimedOut:
+        @staticmethod
+        def run(task):
+            raise runlog.AgentTimeout(900)
+
+    monkeypatch.setattr("curiator.loop.adapters.get", lambda _cfg: TimedOut)
+
+    loop.run_once(cfg)                                              # attempt 1 → requeued to try again
+    user = next(e for e in ledger.load(cfg)["sample"] if e["id"] == fid)
+    assert user["status"] == "new" and user["timeout_attempts"] == 1
+
+    loop.run_once(cfg)                                              # attempt 2 → cap reached → held
+    data = ledger.load(cfg)["sample"]
+    user = next(e for e in data if e["id"] == fid)
+    assert user["status"] == "held" and user["timeout_attempts"] == 2
+    notes = [e for e in data if e.get("kind") == "system" and fid in (e.get("reply_to") or [])]
+    assert any("time limit" in n["comment"] for n in notes)
+    assert any("Parked as" in n["comment"] for n in notes)
+
+
+def _bare_task(tmp_path):
+    import types
+    reply = tmp_path / "replies" / "abc123.md"
+    reply.parent.mkdir(parents=True, exist_ok=True)
+    return types.SimpleNamespace(reply_file=str(reply))
+
+
+def test_run_streamed_stops_on_cancel_marker(cfg, tmp_path):
+    import sys
+    import threading
+    import time as _t
+
+    task = _bare_task(tmp_path)
+    cancel = Path(task.reply_file).with_suffix(".cancel")
+    threading.Thread(target=lambda: (_t.sleep(0.4), cancel.write_text("stop")), daemon=True).start()
+
+    with pytest.raises(runlog.AgentCancelled):
+        runlog.run_streamed(task, [sys.executable, "-c", "import time; time.sleep(30)"],
+                            cwd=str(tmp_path), timeout=60, label="x", heartbeat=0)
+    trace = Path(task.reply_file).read_text()
+    assert "cancelled by user" in trace
+    assert not cancel.exists()                                      # marker consumed
+
+
+def test_run_streamed_timeout_raises_agent_timeout(cfg, tmp_path):
+    import sys
+
+    task = _bare_task(tmp_path)
+    with pytest.raises(runlog.AgentTimeout) as ei:
+        runlog.run_streamed(task, [sys.executable, "-c", "import time; time.sleep(30)"],
+                            cwd=str(tmp_path), timeout=1, label="x", heartbeat=0)
+    assert ei.value.timeout == 1
+    assert "time limit" in Path(task.reply_file).read_text()
+
+
+def test_run_streamed_emits_heartbeat_on_silence(cfg, tmp_path):
+    import sys
+
+    task = _bare_task(tmp_path)
+    runlog.run_streamed(task, [sys.executable, "-c", "import time; time.sleep(0.8)"],
+                        cwd=str(tmp_path), timeout=10, label="x", heartbeat=0.3)
+    assert "still working" in Path(task.reply_file).read_text()
+
+
 def test_recover_interrupted_working_requeues_watcher_claim(cfg):
     fid = ledger.save_entry(cfg, "sample", comment="left working", ts="t")
     entry = next(e for e in ledger.load(cfg)["sample"] if e["id"] == fid)

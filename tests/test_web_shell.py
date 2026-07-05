@@ -969,3 +969,24 @@ def test_reload_refreshes_registry_for_newly_created_app(collection, web_mod):
     mounted = client.get("/app/orange_picker/")
     assert mounted.status_code == 200
     assert "Orange Picker" in mounted.get_data(as_text=True)
+
+
+def test_trace_stop_writes_cancel_marker_only_for_active_run(web_client, cfg):
+    """The Stop button drops a cancel marker only while the item is `working`; otherwise it declines."""
+    from curiator import ledger
+    from curiator.loop import runlog
+
+    fid = ledger.save_entry(cfg, "sample", comment="stop me", ts="t")
+
+    # not dispatched yet → 409, no marker written
+    r = web_client.post(f"/feedback-trace/{fid}/stop")
+    assert r.status_code == 409
+    assert not runlog.cancel_path(cfg, fid).exists()
+
+    ledger.set_status(cfg, "sample", [fid], "working")
+    r = web_client.post(f"/feedback-trace/{fid}/stop")
+    assert r.status_code == 200 and r.get_json()["ok"] is True
+    assert runlog.cancel_path(cfg, fid).exists()
+
+    # unknown id → 404
+    assert web_client.post("/feedback-trace/deadbeef/stop").status_code == 404

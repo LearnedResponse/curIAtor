@@ -286,10 +286,17 @@ def _trace_page(feedback_id: str, text: str) -> str:
       pre {{ box-sizing: border-box; height: calc(100vh - 43px); margin: 0; overflow: auto; padding: 14px;
         background: #111820; color: #dce7ef; font: 12px/1.45 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
         white-space: pre-wrap; word-break: break-word; }}
+      button.stop {{ margin-left: auto; font: 12px system-ui, sans-serif; color: #a33; background: #fff;
+        border: 1px solid #d9b3b3; border-radius: 5px; padding: 3px 10px; cursor: pointer; }}
+      button.stop:hover:not(:disabled) {{ background: #fbeaea; }}
+      button.stop:disabled {{ color: #999; border-color: #e2e2e2; background: #f3f3f3; cursor: default; }}
+      .stopmsg {{ color: #a33; font-size: 11px; }}
     </style>
   </head>
   <body>
-    <header>{_wordmark_html(17)}<h1>agent trace</h1><span class="meta">feedback {fid}</span></header>
+    <header>{_wordmark_html(17)}<h1>agent trace</h1><span class="meta">feedback {fid}</span>
+      <button class="stop" id="stopbtn" title="Stop this agent run">⏹ Stop</button>
+      <span class="stopmsg" id="stopmsg"></span></header>
     <pre id="trace">{_esc(text)}</pre>
     <script>
       const pre = document.getElementById('trace');
@@ -303,6 +310,28 @@ def _trace_page(feedback_id: str, text: str) -> str:
       }}
       pre.scrollTop = pre.scrollHeight;
       setInterval(refresh, 1500);
+      const stopbtn = document.getElementById('stopbtn');
+      const stopmsg = document.getElementById('stopmsg');
+      stopbtn.addEventListener('click', async () => {{
+        stopbtn.disabled = true;
+        stopmsg.textContent = 'stopping…';
+        try {{
+          const r = await fetch('/feedback-trace/{fid}/stop', {{method: 'POST'}});
+          const j = await r.json().catch(() => ({{}}));
+          if (r.ok) {{
+            stopmsg.textContent = 'stop requested — the run halts within a few seconds, then parks as held.';
+          }} else if (r.status === 409) {{
+            stopmsg.textContent = 'no active run (' + (j.status || 'not working') + ').';
+            stopbtn.disabled = false;
+          }} else {{
+            stopmsg.textContent = 'could not stop: ' + (j.error || r.status);
+            stopbtn.disabled = false;
+          }}
+        }} catch (e) {{
+          stopmsg.textContent = 'stop failed: ' + e;
+          stopbtn.disabled = false;
+        }}
+      }});
     </script>
   </body>
 </html>"""

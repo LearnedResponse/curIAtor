@@ -35,6 +35,26 @@ def reply_path(cfg: dict, feedback_id: str) -> Path:
     return replies_dir(cfg) / f"{feedback_id}.md"
 
 
+def cancel_path(cfg: dict, feedback_id: str) -> Path:
+    """A cancel marker the shell drops to ask the watcher to stop an in-flight agent run (the Stop
+    button). The watcher's run loop polls for it; sits next to the trace so both processes agree."""
+    return replies_dir(cfg) / f"{feedback_id}.cancel"
+
+
+def request_cancel(cfg: dict, feedback_id: str) -> Path:
+    p = cancel_path(cfg, feedback_id)
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(_now(), encoding="utf-8")
+    return p
+
+
+def clear_cancel(cfg: dict, feedback_id: str) -> None:
+    try:
+        cancel_path(cfg, feedback_id).unlink()
+    except OSError:
+        pass
+
+
 def append(path: str | Path, text: str) -> None:
     p = Path(path)
     p.parent.mkdir(parents=True, exist_ok=True)
@@ -80,6 +100,24 @@ class AgentInterrupted(BaseException):
     """Raised when the watcher is shutting down while an agent subprocess is running."""
 
 
+class AgentCancelled(Exception):
+    """Raised when a user asked to stop this run (the trace-view Stop button dropped a cancel marker)."""
+
+
+class AgentTimeout(Exception):
+    """Raised when an agent run exceeded its time limit and was stopped."""
+
+    def __init__(self, timeout: int, tail: str = "") -> None:
+        super().__init__(f"stopped at the {timeout}s time limit")
+        self.timeout = timeout
+        self.tail = tail
+
+
+# Emit a "still working" heartbeat into the trace after this many seconds with no agent output, so a
+# long-but-healthy run visibly says "taking a while" instead of looking frozen.
+HEARTBEAT_SECONDS = 45
+
+
 def _tail_push(parts: list[str], chunk: str, limit: int = 8000) -> None:
     parts.append(chunk)
     total = sum(len(p) for p in parts)
@@ -99,6 +137,11 @@ def _terminate_process_group(proc: subprocess.Popen, sig: int = signal.SIGTERM) 
             return
 
 
+def _elapsed_str(seconds: float) -> str:
+    m, s = divmod(int(seconds), 60)
+    return f"{m}m{s:02d}s" if m else f"{s}s"
+
+
 def run_streamed(
     task,
     cmd: list[str],
@@ -109,13 +152,18 @@ def run_streamed(
     display_cmd: list[str] | None = None,
     stdin=None,
     line_formatter=None,
+    heartbeat: float = HEARTBEAT_SECONDS,
 ) -> RunResult:
     """Run a command while streaming stdout/stderr into the task's markdown trace.
 
     `line_formatter`, if given, maps each raw output line to a human-readable trace line (return None
     to drop a line). Used to turn `claude -p --output-format stream-json` JSONL events into readable
     progress instead of dumping raw JSON — or nothing, as plain `--output-format text` does until it
-    finishes. Without it, raw output is streamed verbatim (the default; codex/command adapters)."""
+    finishes. Without it, raw output is streamed verbatim (the default; codex/command adapters).
+
+    After `heartbeat` seconds with no output a "still working" line is emitted so a slow-but-healthy run
+    reads as "taking a while", not frozen. A cancel marker (the Stop button — see `cancel_path`) stops
+    the run with `AgentCancelled`; exceeding `timeout` stops it with `AgentTimeout`."""
     shown = display_cmd or cmd
     note(task, f"running `{label}`")
     append(task.reply_file, "```text\n$ " + " ".join(shown) + "\n")
@@ -154,23 +202,39 @@ def run_streamed(
 
     for sig in previous_handlers:
         signal.signal(sig, _handle_shutdown)
-    deadline = time.monotonic() + timeout if timeout else None
+    start = time.monotonic()
+    deadline = start + timeout if timeout else None
+    cancel_marker = Path(task.reply_file).with_suffix(".cancel")
     tail: list[str] = []
     sel = selectors.DefaultSelector()
     if proc.stdout is not None:
         sel.register(proc.stdout, selectors.EVENT_READ)
     timed_out = False
+    cancelled = False
+    last_activity = start
     try:
         while True:
-            if deadline is not None and time.monotonic() > deadline:
+            now = time.monotonic()
+            if deadline is not None and now > deadline:
                 timed_out = True
                 _terminate_process_group(proc, signal.SIGKILL)
                 break
+            if cancel_marker.exists():                    # the Stop button dropped a cancel marker
+                cancelled = True
+                _terminate_process_group(proc, signal.SIGKILL)
+                break
             events = sel.select(timeout=0.2)
+            got = False
             for key, _ in events:
                 line = key.fileobj.readline()
                 if line:
                     _emit(line)
+                    got = True
+            if got:
+                last_activity = now
+            elif heartbeat and (now - last_activity) >= heartbeat:
+                append(task.reply_file, f"… still working ({_elapsed_str(now - start)} elapsed)\n")
+                last_activity = now
             if proc.poll() is not None:
                 break
         if proc.stdout is not None:
@@ -182,11 +246,18 @@ def run_streamed(
             signal.signal(sig, handler)
         sel.close()
     rc = proc.wait()
+    if cancelled:
+        append(task.reply_file, "\n[stopped — cancelled by user]\n```\n")
+        note(task, "cancelled by user")
+        try:
+            cancel_marker.unlink()
+        except OSError:
+            pass
+        raise AgentCancelled("run cancelled by user")
     if timed_out:
-        append(task.reply_file, f"\n[timeout after {timeout}s]\n")
-        append(task.reply_file, "```\n")
-        note(task, "timed out")
-        raise subprocess.TimeoutExpired(cmd, timeout, output="".join(tail))
+        append(task.reply_file, f"\n[stopped at the {timeout}s time limit]\n```\n")
+        note(task, f"stopped at the {timeout}s time limit")
+        raise AgentTimeout(timeout, "".join(tail))
     append(task.reply_file, f"\n[exit {rc}]\n```\n")
     note(task, f"finished `{label}` with exit {rc}")
     return RunResult(returncode=rc, tail="".join(tail))

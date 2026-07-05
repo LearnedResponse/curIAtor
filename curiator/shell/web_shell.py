@@ -733,6 +733,20 @@ def build_flask_app() -> Flask:
             return core._page("Agent trace", "<p style='color:#777;font-size:13px'>No trace file for this feedback.</p>"), 404
         return core._trace_page(feedback_id, p.read_text(encoding="utf-8", errors="replace"))
 
+    @app.route("/feedback-trace/<feedback_id>/stop", methods=["POST"])
+    def _trace_stop(feedback_id):
+        """The trace-view Stop button: drop a cancel marker the watcher polls for. Only meaningful while
+        the item is `working`; the watcher terminates the agent and parks the item as `held`."""
+        from ..loop import runlog as _runlog
+        found = _queue_find(feedback_id)
+        if not found:
+            return jsonify({"ok": False, "error": "feedback not found"}), 404
+        _key, entry = found
+        if entry.get("status") != "working":
+            return jsonify({"ok": False, "error": "no active run", "status": entry.get("status")}), 409
+        _runlog.request_cancel(core.LEDGER_CFG, feedback_id)
+        return jsonify({"ok": True})
+
     @app.route("/static-app/<path:fname>")
     def _static_app(fname):
         return send_from_directory(core.HERE, fname)
