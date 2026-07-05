@@ -36,12 +36,16 @@
     return h("span", {className: "ts", "data-ts": iso, title: iso}, iso);
   }
 
-  function appSrc(key, generalKey, revision) {
+  function appSrc(key, generalKey, revision, extraQuery) {
     if (!key) return "";
     if (key === generalKey) return "/general";
     const base = "/app/" + encodeURIComponent(key) + "/";
+    // Forward any deep-link query args (e.g. ?node=crit) to the mounted app, plus the reload cache-buster.
+    const params = new URLSearchParams(extraQuery || "");
     const rev = Number(revision) || 0;
-    return rev ? base + "?v=" + encodeURIComponent(String(rev)) : base;
+    if (rev) params.set("v", String(rev));
+    const qs = params.toString();
+    return qs ? base + "?" + qs : base;
   }
 
   function tree(items) {
@@ -1462,9 +1466,18 @@
     const [catCollapsed, setCatCollapsed] = useState(false);
     const [fbCollapsed, setFbCollapsed] = useState(false);
     const [newAppOpen, setNewAppOpen] = useState(false);
+    // Deep-link query args (everything except our own `app`) captured at load, forwarded to the mounted
+    // app's iframe so `/?app=X&node=crit` behaves like `/app/X/?node=crit`. Cleared when the user
+    // manually switches apps, since those args are specific to the deep-linked app.
+    const [frameQuery, setFrameQuery] = useState(() => {
+      const p = new URLSearchParams(location.search);
+      p.delete("app");
+      return p.toString();
+    });
 
     function setSelected(key) {
       setSelectedState(key);
+      setFrameQuery("");
       setCatOpen(false);
       setFbOpen(false);
       const g = boot && boot.general_key;
@@ -1525,7 +1538,7 @@
       color: "#8e44ad", kind: "general", metrics: {open: 0, total: 0}};
     const allApps = [generalApp, ...apps];
     const selectedApp = allApps.find((a) => a.key === selected);
-    const src = appSrc(selected, boot.general_key, selectedApp && selectedApp.revision);
+    const src = appSrc(selected, boot.general_key, selectedApp && selectedApp.revision, frameQuery);
 
     return h("div", {className: "rshell"},
       h(NewAppWizard, {open: newAppOpen, onClose: () => setNewAppOpen(false), onCreated: newAppCreated}),

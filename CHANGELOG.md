@@ -177,6 +177,9 @@ All notable changes to curIAtor are documented here. The format follows
   `--strict-launch` rejects `TODO(release)` placeholders before publication.
 
 ### Fixed
+- The overlay now forwards deep-link query args to the mounted app: `/?app=X&node=crit` loads the app
+  iframe as `/app/X/?node=crit`, so app-to-app links (and any shared link with app-specific params)
+  reach the app instead of being dropped at the wrapper. The args are cleared when you switch apps.
 - The catalog "sort: number" option now sorts by the number shown on each row (the app's port),
   numerically, instead of by the app's module key as a string — so it no longer looks unordered in
   galleries whose keys differ from their displayed numbers. Apps without a number sort last.

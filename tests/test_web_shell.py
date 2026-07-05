@@ -78,11 +78,19 @@ apps:
 
 def test_react_shell_general_iframe_src_is_stable(web_client):
     body = web_client.get("/assets/react_shell.js").get_data(as_text=True)
-    assert "function appSrc(key, generalKey, revision)" in body
+    assert "function appSrc(key, generalKey, revision, extraQuery)" in body
     assert 'return "/general";' in body
     assert "/general?t=" not in body
-    assert '?v=' in body
+    assert 'params.set("v", String(rev))' in body           # app cache-buster still applied
     assert "selectedApp && selectedApp.revision" in body
+
+
+def test_react_shell_forwards_deep_link_query_args(web_client):
+    """`/?app=X&node=crit` must forward `node=crit` to the /app/X/ iframe (app-to-app deep links)."""
+    body = web_client.get("/assets/react_shell.js").get_data(as_text=True)
+    assert "frameQuery" in body
+    assert 'p.delete("app")' in body                          # capture everything except our own control param
+    assert "revision, frameQuery)" in body                    # appSrc is called with the forwarded args
 
 
 def test_react_shell_pins_general_and_restores_auth_menu(web_client):
