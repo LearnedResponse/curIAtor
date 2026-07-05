@@ -18,7 +18,10 @@ All notable changes to curIAtor are documented here. The format follows
 - App-directory source scopes via `root:` / directory-valued `source:`, plus `mounts:` so one folder can
   expose multiple gallery endpoints.
 - Same-origin `proxy` mount support for local web servers under `/app/<name>/...`, with process restart
-  on curIAtor reload.
+  on curIAtor reload. The proxy **streams** the backend response incrementally (per-read chunks) instead
+  of buffering it whole, so Server-Sent Events, chunked/progressive responses, and large bodies flow
+  through in real time; the read timeout is relaxed for SSE/long-lived streams. (WebSocket upgrades are
+  still not bridged by the built-in proxy — that remains a separate item.)
   Proxy mounts can opt into preserving the `/app/<name>/` prefix for frameworks like Streamlit that
   need their own base path.
 - `curiator app create` / `curiator init-app` to scaffold app directories and register them in

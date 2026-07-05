@@ -998,3 +998,57 @@ def test_trace_stop_writes_cancel_marker_only_for_active_run(web_client, cfg):
 
     # unknown id → 404
     assert web_client.post("/feedback-trace/deadbeef/stop").status_code == 404
+
+
+def test_proxy_streaming_detection(web_mod):
+    """SSE and any no-Content-Length response are treated as streaming (so their read timeout is relaxed)."""
+    core = web_mod.core
+
+    class R:
+        def __init__(self, headers):
+            self.headers = headers
+
+    assert core._proxy_response_is_streaming(R({"Content-Type": "text/event-stream"})) is True
+    assert core._proxy_response_is_streaming(R({"Content-Type": "text/html"})) is True            # chunked/no length
+    assert core._proxy_response_is_streaming(R({"Content-Type": "text/html", "Content-Length": "42"})) is False
+
+
+def test_proxy_streams_body_incrementally(web_mod, monkeypatch):
+    """The proxy yields the backend body in chunks (read1) instead of buffering it whole, and closes the
+    upstream when done — the fix that makes SSE / chunked / large responses work through the overlay."""
+    import io
+
+    core = web_mod.core
+
+    class Resp:
+        status, reason = 200, "OK"
+
+        def __init__(self):
+            self.headers = {"Content-Type": "text/event-stream", "Cache-Control": "no-cache"}
+            self._chunks = [b"data: 1\n\n", b"data: 2\n\n", b""]
+            self.closed = False
+
+        def read1(self, _n):
+            return self._chunks.pop(0)
+
+        def close(self):
+            self.closed = True
+
+    resp = Resp()
+    monkeypatch.setattr(core, "_ensure_proxy", lambda key, rec: (True, None))
+    monkeypatch.setattr(core.urllib.request, "urlopen", lambda req, timeout=None: resp)
+
+    seen = {}
+
+    def start_response(status, headers):
+        seen["status"] = status
+        seen["headers"] = dict(headers)
+
+    environ = {"REQUEST_METHOD": "GET", "QUERY_STRING": "", "wsgi.input": io.BytesIO()}
+    body = core._proxy_call("x", {"mount": {"port": 9999}}, "/", environ, start_response)
+    chunks = list(body)                                   # consume the streaming generator
+
+    assert chunks == [b"data: 1\n\n", b"data: 2\n\n"]      # per-read chunks, not one buffered blob
+    assert seen["status"].startswith("200")
+    assert seen["headers"]["Content-Type"] == "text/event-stream"
+    assert resp.closed                                    # generator closed the upstream on completion

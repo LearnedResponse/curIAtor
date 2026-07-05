@@ -352,8 +352,14 @@ def test_proxy_forwards_public_origin_and_prefix_headers(shell_mod, monkeypatch,
         reason = "OK"
         headers = {"Content-Type": "text/plain"}
 
-        def read(self):
-            return b"ok"
+        def __init__(self):
+            self._chunks = [b"ok", b""]        # streaming reader: one read1() then EOF
+
+        def read1(self, _n=-1):
+            return self._chunks.pop(0)
+
+        def close(self):
+            pass
 
     def fake_urlopen(req, timeout=None):
         captured["url"] = req.full_url

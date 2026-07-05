@@ -1527,6 +1527,42 @@ def _proxy_forward_headers(key: str, environ) -> dict[str, str]:
     return headers
 
 
+def _proxy_response_is_streaming(resp) -> bool:
+    """SSE, or any response without a fixed Content-Length, should flow through incrementally and may
+    stay open far longer than a normal request — so it needs the read timeout relaxed."""
+    ctype = (resp.headers.get("Content-Type") or "").lower()
+    if ctype.startswith("text/event-stream"):
+        return True
+    return resp.headers.get("Content-Length") is None
+
+
+def _relax_read_timeout(resp) -> None:
+    """Best-effort: clear the socket read timeout for a long-lived stream so a quiet SSE / long-poll
+    connection isn't dropped at the proxy's connect timeout. CPython-specific; a no-op if unreachable."""
+    try:
+        resp.fp.raw._sock.settimeout(None)
+    except Exception:  # noqa: BLE001 — the relaxation is best-effort; a normal keepalive still fits 30s
+        pass
+
+
+def _proxy_stream(resp, chunk: int = 65536):
+    """Yield the backend body incrementally — `read1` does one socket read, so SSE/chunked data flows as
+    it arrives instead of being buffered whole in memory. Closes the upstream on completion or on client
+    disconnect (WSGI closes the generator, running the `finally`)."""
+    reader = getattr(resp, "read1", None) or resp.read
+    try:
+        while True:
+            data = reader(chunk)
+            if not data:
+                break
+            yield data
+    finally:
+        try:
+            resp.close()
+        except Exception:  # noqa: BLE001
+            pass
+
+
 def _proxy_call(key: str, rec: dict, rest: str, environ, start_response):
     ok, err = _ensure_proxy(key, rec)
     if not ok:
@@ -1574,8 +1610,10 @@ def _proxy_call(key: str, rec: dict, rest: str, environ, start_response):
         return [_proxy_diagnostics_html(key, rec, message=message, url=url).encode()]
     status = f"{resp.status} {getattr(resp, 'reason', 'OK')}"
     out_headers = [(k, v) for k, v in resp.headers.items() if k.lower() not in _HOP_HEADERS]
+    if _proxy_response_is_streaming(resp):
+        _relax_read_timeout(resp)
     start_response(status, out_headers)
-    return [resp.read()]
+    return _proxy_stream(resp)      # stream chunks (SSE/chunked/large bodies) instead of buffering whole
 
 
 class LazyDispatcher:
