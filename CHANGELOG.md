@@ -20,8 +20,12 @@ All notable changes to curIAtor are documented here. The format follows
 - Same-origin `proxy` mount support for local web servers under `/app/<name>/...`, with process restart
   on curIAtor reload. The proxy **streams** the backend response incrementally (per-read chunks) instead
   of buffering it whole, so Server-Sent Events, chunked/progressive responses, and large bodies flow
-  through in real time; the read timeout is relaxed for SSE/long-lived streams. (WebSocket upgrades are
-  still not bridged by the built-in proxy — that remains a separate item.)
+  through in real time; the read timeout is relaxed for SSE/long-lived streams. **WebSocket upgrades are
+  bridged** too: the built-in server hands the proxy the raw client socket (`werkzeug.socket`), which it
+  transparently tunnels to the backend (replay the upgrade, relay the `101`, then pump bytes both ways) —
+  no WS framing in the proxy and no new dependency, so live HMR, Node-RED's editor comms, and socket
+  dashboards work same-origin. Behind a WSGI server that doesn't expose the socket (e.g. gunicorn) a WS
+  upgrade degrades to an honest `501` instead of hanging.
   Proxy mounts can opt into preserving the `/app/<name>/` prefix for frameworks like Streamlit that
   need their own base path.
 - `curiator app create` / `curiator init-app` to scaffold app directories and register them in

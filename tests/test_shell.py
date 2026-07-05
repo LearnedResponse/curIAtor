@@ -312,7 +312,9 @@ def test_engine_backed_proxy_blocks_when_engine_health_fails(shell_mod, monkeypa
         shell_mod._discard_proxy_logs("twin")
 
 
-def test_proxy_websocket_upgrade_reports_hmr_limit(shell_mod, monkeypatch, tmp_path):
+def test_proxy_websocket_falls_back_to_501_without_dev_server_socket(shell_mod, monkeypatch, tmp_path):
+    """A WS upgrade is bridged when the built-in server exposes `werkzeug.socket`; without it (behind
+    another WSGI server) it degrades to an honest 501 with diagnostics — never hangs."""
     from io import BytesIO
 
     monkeypatch.setattr(shell_mod, "_ensure_proxy", lambda key, rec: (True, None))
@@ -330,13 +332,13 @@ def test_proxy_websocket_upgrade_reports_hmr_limit(shell_mod, monkeypatch, tmp_p
             "QUERY_STRING": "",
             "HTTP_CONNECTION": "Upgrade",
             "HTTP_UPGRADE": "websocket",
-            "wsgi.input": BytesIO(b""),
+            "wsgi.input": BytesIO(b""),                    # no "werkzeug.socket" → fallback path
         },
         start_response,
     )).decode()
 
     assert statuses[0][0] == "501 Not Implemented"
-    assert "WebSocket/HMR upgrade requests are not supported" in body
+    assert "WebSocket upgrades need curIAtor" in body      # apostrophe in the message is HTML-escaped
     assert "npm run dev" in body
     assert "http://127.0.0.1:8700/@vite/client" in body
 

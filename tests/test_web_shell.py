@@ -1052,3 +1052,113 @@ def test_proxy_streams_body_incrementally(web_mod, monkeypatch):
     assert seen["status"].startswith("200")
     assert seen["headers"]["Content-Type"] == "text/event-stream"
     assert resp.closed                                    # generator closed the upstream on completion
+
+
+def test_ws_upgrade_request_reconstruction(web_mod):
+    """The replayed upgrade request carries the client handshake headers + curIAtor's X-Forwarded-*."""
+    core = web_mod.core
+    env = {
+        "REQUEST_METHOD": "GET", "QUERY_STRING": "flow=1",
+        "HTTP_HOST": "h", "HTTP_UPGRADE": "websocket", "HTTP_CONNECTION": "Upgrade",
+        "HTTP_SEC_WEBSOCKET_KEY": "abc", "REMOTE_ADDR": "127.0.0.1", "wsgi.url_scheme": "http",
+    }
+    req = core._ws_upgrade_request("nodered", env, "/comms").decode()
+    assert req.startswith("GET /comms?flow=1 HTTP/1.1\r\n")
+    assert "Upgrade: websocket" in req and "Connection: Upgrade" in req
+    assert "Sec-Websocket-Key: abc" in req                 # handshake header forwarded
+    assert "X-Forwarded-Prefix: /app/nodered" in req       # origin context added
+    assert req.endswith("\r\n\r\n")
+
+
+def test_proxy_websocket_falls_back_to_501_without_hijack_socket(web_mod, monkeypatch):
+    """Behind a WSGI server that doesn't expose the raw socket (no `werkzeug.socket`), a WS upgrade
+    degrades to an honest 501 rather than hanging."""
+    import io
+
+    core = web_mod.core
+    monkeypatch.setattr(core, "_ensure_proxy", lambda key, rec: (True, None))
+    seen = {}
+
+    def start_response(status, headers):
+        seen["status"] = status
+
+    environ = {
+        "REQUEST_METHOD": "GET", "QUERY_STRING": "",
+        "HTTP_UPGRADE": "websocket", "HTTP_CONNECTION": "Upgrade",
+        "wsgi.input": io.BytesIO(),                        # note: no "werkzeug.socket"
+    }
+    body = b"".join(core._proxy_call("x", {"mount": {"port": 9}}, "/", environ, start_response))
+    assert seen["status"].startswith("501")
+    assert b"WebSocket" in body
+
+
+def test_proxy_bridges_websocket_upgrade_end_to_end(collection, monkeypatch):
+    """A WS upgrade is tunneled through the real proxy: the client's upgrade reaches the backend, its 101
+    is relayed, and bytes pump both ways. Raw sockets throughout (no WS library) — this tests the tunnel
+    mechanics, which is exactly what carries real WebSocket frames on top."""
+    import socket
+    import threading
+
+    import yaml
+    from werkzeug.serving import make_server
+
+    # a raw 'WebSocket-ish' echo backend: 101 handshake, then echo received bytes with an "echo:" prefix
+    bsock = socket.socket()
+    bsock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    bsock.bind(("127.0.0.1", 0))
+    bport = bsock.getsockname()[1]
+    bsock.listen(1)
+
+    def backend():
+        try:
+            conn, _ = bsock.accept()
+        except OSError:
+            return
+        buf = b""
+        while b"\r\n\r\n" not in buf:
+            d = conn.recv(4096)
+            if not d:
+                conn.close()
+                return
+            buf += d
+        conn.sendall(b"HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n\r\n")
+        while True:
+            d = conn.recv(4096)
+            if not d:
+                break
+            conn.sendall(b"echo:" + d)
+        conn.close()
+
+    threading.Thread(target=backend, daemon=True).start()
+
+    (collection / "apps" / "wsapp").mkdir(parents=True, exist_ok=True)
+    gallery = yaml.safe_load((collection / "gallery.yaml").read_text())
+    gallery["apps"].append({
+        "name": "wsapp", "root": "apps/wsapp", "source": ".",
+        "mount": {"kind": "proxy", "cmd": "true", "port": bport},
+    })
+    (collection / "gallery.yaml").write_text(yaml.safe_dump(gallery, sort_keys=False))
+
+    web_mod = _load_web_mod(monkeypatch)
+    application, _flask = web_mod.build_application()
+    monkeypatch.setattr(web_mod.core, "_ensure_proxy", lambda key, rec: (True, None))
+
+    srv = make_server("127.0.0.1", 0, application, threaded=True)
+    sport = srv.socket.getsockname()[1]
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    try:
+        c = socket.create_connection(("127.0.0.1", sport), timeout=5)
+        c.settimeout(5)
+        c.sendall(b"GET /app/wsapp/comms HTTP/1.1\r\nHost: x\r\nUpgrade: websocket\r\n"
+                  b"Connection: Upgrade\r\nSec-WebSocket-Key: abc\r\nSec-WebSocket-Version: 13\r\n\r\n")
+        buf = b""
+        while b"\r\n\r\n" not in buf:
+            d = c.recv(4096)
+            assert d, "connection closed before the 101 handshake was relayed"
+            buf += d
+        assert b"101 Switching Protocols" in buf           # backend handshake relayed to the client
+        c.sendall(b"ping")
+        assert c.recv(4096) == b"echo:ping"                # bidirectional byte pump through the tunnel
+    finally:
+        srv.shutdown()
+        bsock.close()

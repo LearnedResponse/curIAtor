@@ -35,6 +35,7 @@ import json
 import os
 import re
 import shlex
+import socket
 import sys
 import subprocess
 import tempfile
@@ -1563,6 +1564,88 @@ def _proxy_stream(resp, chunk: int = 65536):
             pass
 
 
+def _ws_upgrade_request(key: str, environ, path: str) -> bytes:
+    """Reconstruct the client's WebSocket upgrade request to replay to the backend — WSGI already
+    consumed the request line + headers into environ — with curIAtor's forwarded-origin headers added.
+    All client headers (incl. Upgrade/Connection/Sec-WebSocket-*) pass through so the backend runs the
+    real handshake; the proxy stays out of the WS protocol."""
+    qs = environ.get("QUERY_STRING") or ""
+    target = path + (f"?{qs}" if qs else "")
+    lines = [f"{environ.get('REQUEST_METHOD', 'GET')} {target} HTTP/1.1"]
+    seen = set()
+    for k, v in environ.items():
+        if k.startswith("HTTP_"):
+            name = k[5:].replace("_", "-").title()
+            lines.append(f"{name}: {v}")
+            seen.add(name.lower())
+    for name, v in _proxy_forward_headers(key, environ).items():
+        if name.lower() not in seen:
+            lines.append(f"{name}: {v}")
+    return ("\r\n".join(lines) + "\r\n\r\n").encode("latin-1", "replace")
+
+
+def _ws_pump(src, dst, done: threading.Event) -> None:
+    """Relay bytes one direction until EOF/error, then half-close the far side and signal completion."""
+    try:
+        while True:
+            data = src.recv(65536)
+            if not data:
+                break
+            dst.sendall(data)
+    except OSError:
+        pass
+    finally:
+        try:
+            dst.shutdown(socket.SHUT_WR)
+        except OSError:
+            pass
+        done.set()
+
+
+def _ws_tunnel(key: str, environ, port, path: str) -> None:
+    """Transparently bridge a WebSocket between the same-origin client and the backend app. After the
+    handshake it is a dumb byte pipe (no frame parsing) run in two threads until either side closes.
+    Ends by raising ConnectionError so Werkzeug's dev server releases the hijacked socket without trying
+    to write its own response over it (its `connection_dropped` path handles this cleanly — no traceback).
+
+    Werkzeug-dev-server specific: relies on `environ['werkzeug.socket']`; the caller falls back to a 501
+    when it's absent (e.g. behind gunicorn)."""
+    client = environ["werkzeug.socket"]
+    backend = None
+    last = None
+    for _ in range(20):                        # cold start: the backend may not be listening on first hit
+        try:
+            backend = socket.create_connection(("127.0.0.1", int(port)), timeout=5)
+            break
+        except OSError as exc:
+            last = exc
+            time.sleep(0.1)
+    if backend is None:
+        try:
+            client.sendall(b"HTTP/1.1 502 Bad Gateway\r\nConnection: close\r\n\r\n")
+        except OSError:
+            pass
+        raise ConnectionError(f"ws proxy backend unreachable on :{port} ({last})")
+    try:
+        backend.sendall(_ws_upgrade_request(key, environ, path))
+        client.settimeout(None)
+        backend.settimeout(None)
+        done = threading.Event()
+        pumps = [threading.Thread(target=_ws_pump, args=(a, b, done), daemon=True)
+                 for a, b in ((client, backend), (backend, client))]
+        for t in pumps:
+            t.start()
+        done.wait()
+        for t in pumps:
+            t.join(timeout=2)
+    finally:
+        try:
+            backend.close()
+        except OSError:
+            pass
+    raise ConnectionError("websocket tunnel closed")   # hand the hijacked socket back to Werkzeug cleanly
+
+
 def _proxy_call(key: str, rec: dict, rest: str, environ, start_response):
     ok, err = _ensure_proxy(key, rec)
     if not ok:
@@ -1574,10 +1657,13 @@ def _proxy_call(key: str, rec: dict, rest: str, environ, start_response):
     qs = environ.get("QUERY_STRING") or ""
     url = f"http://127.0.0.1:{port}{path}" + (f"?{qs}" if qs else "")
     if _is_websocket_upgrade(environ):
+        if "werkzeug.socket" in environ:                 # built-in dev server → bridge the WS transparently
+            _ws_tunnel(key, environ, port, path)         # raises ConnectionError when done (hands socket back)
+            return []                                    # unreachable; the tunnel always raises
         start_response("501 Not Implemented", [("Content-Type", "text/html; charset=utf-8")])
-        message = ("WebSocket/HMR upgrade requests are not supported by curIAtor's lightweight built-in "
-                   "proxy; use a production reverse proxy for live HMR, or use the scaffold preview/build "
-                   "commands for this mount.")
+        message = ("WebSocket upgrades need curIAtor's built-in server, which exposes the raw socket to "
+                   "bridge them; this shell is running behind a WSGI server that doesn't. Run `curiator up` "
+                   "directly, or put a WebSocket-capable reverse proxy in front for this mount.")
         return [_proxy_diagnostics_html(key, rec, message=message, url=url).encode()]
     method = environ.get("REQUEST_METHOD", "GET")
     length = int(environ.get("CONTENT_LENGTH") or 0)
