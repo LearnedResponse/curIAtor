@@ -120,7 +120,7 @@ def _load_config_from_path(path: str | Path, *, link: dict | None = None) -> dic
     # absent/`commit:false` ⇒ today's leave-uncommitted behavior. `commit:true` ⇒ one commit per run.
     git = cfg.get("git") or {}
     git.setdefault("commit", False)              # false = leave uncommitted | true = git-as-memory
-    git.setdefault("branch", "curiator/auto")    # sandbox/env branch (empty/null ⇒ current HEAD)
+    git.setdefault("branch", None)               # null/empty ⇒ commit to current HEAD (main); a name isolates on a branch
     git.setdefault("signoff", True)              # add Signed-off-by (DCO) via `git commit -s`
     git.setdefault("include_ledger", False)      # opt in to bundling the SQLite ledger in commits
     cfg["git"] = git

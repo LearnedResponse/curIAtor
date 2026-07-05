@@ -91,7 +91,8 @@ auth:
 # (source edit + ledger update together); the git log is the queryable, revertible record.
 git:
   commit: false                 # false (default) = leave uncommitted | true = git-as-memory (per-run commits)
-  branch: curiator/auto         # the sandbox/env branch commits land on (empty/null = current HEAD)
+  branch: null                  # DEFAULT: commit to the current HEAD (main). Set a name (e.g. curiator/auto) only to
+                                #   isolate curator work on its own branch — worth it per-app-repo, not for a shared monorepo.
   signoff: true                 # add Signed-off-by (DCO)
   include_ledger: false         # opt in to commit feedback/app_feedback.sqlite in the same commit
   # also_commit: dependency manifests an ELEVATED run may touch (pip install → requirements.txt) ride in

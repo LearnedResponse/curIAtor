@@ -219,18 +219,26 @@ what make "commit freely" safe and keep the memory trustworthy:
 
 ### The gate (now) and branching (deferred)
 
-The safety gate is **the human reviews the git log and merges to main** — *merge-to-main is always a
-human action.* For now that review happens in plain git (outside the UI): commits land on
-`git.branch` (default a `curiator/auto` branch; `HEAD` for the trusting your-own-box case), and you
-`merge`/`cherry-pick` what's good. A `git:` block in `gallery.yaml` carries the policy
-(`commit: bool` — default `false` = today's leave-uncommitted; `branch`; `signoff`), so it's **opt-in
-per collection** (a standalone collection runs `commit: true`; the QCRS instance, living in a repo with
-its own conventions, keeps `commit: false`).
+The safety gate is **the git log itself** — review happens in plain git (outside the UI): each run is
+one atomic commit, and you `revert`/`cherry-pick` what's bad after the fact. `git.branch` chooses where
+commits land — **default `null` = the current `HEAD` (`main`)**; set a branch name (e.g. `curiator/auto`)
+only to *isolate* curator work off `main`. A `git:` block in `gallery.yaml` carries the policy
+(`commit: bool` — default `false` = leave-uncommitted; `branch`; `signoff`), so it's **opt-in per
+collection** (a standalone collection runs `commit: true`; the runner's own repo keeps `commit: false`).
 
-**Deferred to a later milestone:** a *branching/merging UI* — review/approve/merge curator commits from
-the gallery itself, per-app branches, one-click PR creation. We don't need that machinery yet; the
-binding practices above are exactly what make it safe to build on later. The principle stays dbt's:
-**never maintain the graph — derive it from the refs; git is the record, not a separate store.**
+**On branching — commit to `main` unless you have a real production boundary.** A branch only earns its
+keep if it isolates un-integrated work from a boundary someone defends: a distinct release/deploy event,
+or multiple writers who'd collide. curIAtor's loop is serialized and the shell *hot-reloads on edit*, so
+there's no gap between "committed" and "live" for a branch to protect — and one repo hosting many apps has
+no per-app review unit a shared branch could give you. So a shared curator branch on a monorepo is
+ceremony; commit to `main` and use the log. The branch model becomes right when an app **graduates** to
+its own subrepo (`curiator app import` keeps its `.git`) with real versioning/dependents — then it runs a
+normal feature→main flow in *its* repo.
+
+**Deferred (see `docs/backlog/per-run-branches.md`):** a per-run *branch + in-app approval* flow — each
+run on a feature branch, an **Approve** button in the app that merges it to `main`, live per-branch
+preview. That's the "grown-up app" tier; the binding practice stays dbt's: **never maintain the graph —
+derive it from the refs; git is the record, not a separate store.**
 
 ## Scaling: serving and curation are two independent tiers
 

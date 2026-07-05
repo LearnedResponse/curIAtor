@@ -87,7 +87,7 @@ def test_defaults_when_blocks_absent(tmp_path, monkeypatch):
     cfg = load_config()
     assert cfg["runner"]["mode"] == "pinned"      # safe consumer default
     assert cfg["git"]["commit"] is False          # leave-uncommitted default
-    assert cfg["git"]["branch"] == "curiator/auto"
+    assert cfg["git"]["branch"] is None            # default: commit to current HEAD (main), no separate branch
     assert cfg["git"]["signoff"] is True
     assert cfg["git"]["include_ledger"] is False
     assert cfg["auth"]["admin_groups"] == ["admin"]   # who may change agent settings (mode != none)

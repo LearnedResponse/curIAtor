@@ -176,6 +176,13 @@ All notable changes to curIAtor are documented here. The format follows
   gate rejects lingering `TODO(draft)` placeholders while still allowing release-blocked evidence, and
   `--strict-launch` rejects `TODO(release)` placeholders before publication.
 
+### Changed
+- Git-as-memory now defaults `git.branch` to `null` — agent commits land on the current `HEAD` (`main`)
+  instead of a separate `curiator/auto` branch. A shared curator branch on a monorepo of many apps isn't
+  a useful review unit (no per-app boundary, and the shell hot-reloads on edit so there's no
+  commit-vs-live gap); commit to `main` and use the log (`revert`/cherry-pick). Set `git.branch: <name>`
+  to opt back into branch isolation — worth it for an app in its own repo, not a shared collection.
+
 ### Fixed
 - The overlay now forwards deep-link query args to the mounted app: `/?app=X&node=crit` loads the app
   iframe as `/app/X/?node=crit`, so app-to-app links (and any shared link with app-specific params)

@@ -27,6 +27,14 @@ PyPI/Zenodo setup, DOI/badge updates, off-machine validation, and final paper re
 No live local dogfood items remain. New public/dogfood work should enter here only if it still needs
 local implementation before release.
 
+## Direction (post-release experiments)
+
+- [**per-run-branches**](per-run-branches.md) — an example collection for the "grown-up app" tier: each
+  agent run on a feature branch off `main`, an **Approve** button *in the app* that merges it, and live
+  per-branch preview (git worktrees). Not the default (that's `git.branch: null` → commit to `main`);
+  this is for apps with a real accepted-state boundary. Key open decision: the same-app conflict policy
+  (supersede vs. rebase-and-reconcile).
+
 ## Shipped
 
 Fully delivered public work-orders, retired to [`completed/`](completed/) for provenance.
