@@ -244,8 +244,30 @@ def _rust_string(value: str) -> str:
     ) + '"'
 
 
+def _reindent_entry(entry: str, dash_indent: int | None) -> list[str]:
+    """Re-indent a generated app entry (written with the list dash at 2 spaces) so its `- name:` sits at
+    `dash_indent` — matching however the target gallery indents its existing app items. Galleries
+    generated elsewhere (e.g. Kwisatz's `all_apps_index`) put list items at column 0, so a hardcoded
+    2-space entry would land over-indented and corrupt the YAML."""
+    lines = entry.rstrip().splitlines()
+    if dash_indent is None or dash_indent == 2:
+        return lines
+    delta = dash_indent - 2
+    out = []
+    for line in lines:
+        if not line.strip():
+            out.append("")
+        elif delta > 0:
+            out.append(" " * delta + line)
+        else:
+            strip_n = min(-delta, len(line) - len(line.lstrip(" ")))
+            out.append(line[strip_n:])
+    return out
+
+
 def _append_app_entry(text: str, entry: str) -> str:
-    """Append an app item under the top-level `apps:` block while preserving the rest of gallery.yaml."""
+    """Append an app item under the top-level `apps:` block while preserving the rest of gallery.yaml,
+    matching the indentation the gallery already uses for its app list items."""
     lines = text.splitlines()
     for i, line in enumerate(lines):
         if re.match(r"^apps:\s*\[\s*\]\s*(?:#.*)?$", line):
@@ -253,11 +275,16 @@ def _append_app_entry(text: str, entry: str) -> str:
             return "\n".join(lines) + "\n"
         if re.match(r"^apps:\s*(?:#.*)?$", line):
             j = i + 1
+            dash_indent = None
             while j < len(lines):
                 if lines[j] and not lines[j].startswith((" ", "\t", "#")) and _TOP_LEVEL_RE.match(lines[j]):
                     break
+                if dash_indent is None:
+                    m = re.match(r"^(\s*)-\s", lines[j])
+                    if m:
+                        dash_indent = len(m.group(1))   # match existing items (may be col 0, not 2)
                 j += 1
-            insert = entry.rstrip().splitlines()
+            insert = _reindent_entry(entry, dash_indent)
             if j > i + 1 and lines[j - 1].strip():
                 insert = ["", *insert]
             lines[j:j] = insert

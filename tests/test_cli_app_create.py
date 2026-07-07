@@ -116,6 +116,32 @@ def test_app_create_dash_directory_updates_gallery(collection):
     assert app["tags"] == ["dash", "vision"]
 
 
+def test_app_create_matches_column_zero_app_indentation(collection):
+    """Regression: galleries whose app list items sit at column 0 (e.g. generated ones like Kwisatz's)
+    must get a new entry at the SAME indent — a hardcoded 2-space entry lands nested under the previous
+    app and corrupts the YAML."""
+    from curiator import cli
+
+    (collection / "gallery.yaml").write_text(
+        "apps:\n"
+        "- name: sample\n"                          # dash at column 0, keys at 2 (all_apps_index style)
+        "  title: Sample\n"
+        "  source: apps/sample.py\n"
+        "  mount: { kind: dash-inproc, module: sample }\n"
+        "  tags: [demo]\n"
+        "shell:\n"
+        "  port: 8399\n"
+    )
+
+    assert cli.main(["app", "create", "second_app", "--template", "dash", "--title", "Second"]) == 0
+
+    text = (collection / "gallery.yaml").read_text()
+    data = _gallery(collection)                      # must still parse
+    assert [a["name"] for a in data["apps"]] == ["sample", "second_app"]
+    assert "\n- name: second_app\n" in text          # new item at column 0, matching the existing ones
+    assert "\n  - name: second_app\n" not in text     # NOT over-indented under `sample`
+
+
 def test_init_app_alias_static_and_python_proxy_ports(collection):
     from curiator import cli
 
