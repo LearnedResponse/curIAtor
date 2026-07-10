@@ -47,8 +47,11 @@ def _metrics(key: str) -> dict:
 
 def _apps_payload() -> list[dict]:
     core.refresh_changed_app_sources()
+    feedback = core.load_feedback()               # one ledger read for all apps' metrics + updated ts
     apps = []
     for rec in core.REGISTRY:
+        items = feedback.get(rec["key"], [])
+        avg, n_open, n_total = core.metrics_from(items)
         apps.append({
             "key": rec["key"],
             "title": rec.get("title", rec["key"]),
@@ -58,7 +61,8 @@ def _apps_payload() -> list[dict]:
             "port": rec.get("port"),
             "source": rec.get("source") or rec.get("file"),
             "root": rec.get("root"),
-            "metrics": _metrics(rec["key"]),
+            "metrics": {"avg_stars": avg, "open": n_open, "total": n_total},
+            "updated": core.app_updated(rec, items),
             "revision": core.APP_REVISIONS.get(rec["key"], 0),
         })
     return apps

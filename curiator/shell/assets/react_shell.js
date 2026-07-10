@@ -925,6 +925,7 @@
       filtered.sort((a, b) => {
         if (sort === "open") return (a.metrics.open || 0) - (b.metrics.open || 0) || byKey(a, b);
         if (sort === "rating") return (a.metrics.avg_stars || 0) - (b.metrics.avg_stars || 0) || byKey(a, b);
+        if (sort === "updated") return (a.updated || 0) - (b.updated || 0) || byKey(a, b);
         if (sort === "title") return String(a.title).localeCompare(String(b.title));
         // "id"/number → sort by the number shown on each row (a.port), numerically; apps without a
         // number sort last, then ties break by key. (Was sorting by a.key string, unrelated to a.port.)
@@ -949,7 +950,7 @@
           onChange: (e) => setSearch(e.target.value), style: {marginBottom: 5}}),
         h("div", {style: {display: "flex", gap: 5}},
           h("select", {className: "rshell-select", value: sort, onChange: (e) => setSort(e.target.value)},
-            [["id", "number"], ["open", "open feedback"], ["rating", "rating"], ["title", "title"]]
+            [["id", "number"], ["updated", "date updated"], ["open", "open feedback"], ["rating", "rating"], ["title", "title"]]
               .map(([v, label]) => h("option", {key: v, value: v}, "sort: " + label))),
           h("label", {style: {fontSize: 12, color: "#555", whiteSpace: "nowrap"}},
             h("input", {type: "checkbox", checked: reverse, onChange: (e) => setReverse(e.target.checked)}), " ⇅"))),

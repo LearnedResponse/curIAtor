@@ -830,13 +830,17 @@ def _feedback_user_and_status(rate_limit_key: str | None = None) -> tuple[dict |
     return u, "new", None, 0
 
 
-def app_metrics(key):
-    """(avg_stars or None, n_open, n_total) from the feedback ledger."""
-    items = load_feedback().get(key, [])
+def metrics_from(items):
+    """(avg_stars or None, n_open, n_total) from a list of ledger entries for one app."""
     stars = [e["stars"] for e in items if e.get("stars")]
     avg = round(sum(stars) / len(stars), 1) if stars else None
     n_open = sum(1 for e in items if e.get("kind") != "system" and e.get("status") in OPEN_STATUSES)
     return avg, n_open, len(items)
+
+
+def app_metrics(key):
+    """(avg_stars or None, n_open, n_total) from the feedback ledger."""
+    return metrics_from(load_feedback().get(key, []))
 
 
 def recency(rec):
@@ -845,6 +849,18 @@ def recency(rec):
         return Path(f).stat().st_mtime if f else 0   # registry gives an absolute path
     except Exception:
         return 0
+
+
+def app_updated(rec, items):
+    """Epoch of the most recent update to an app: the newest of its source-file mtime and the latest
+    timestamp across its feedback/reply entries. Drives the catalog's 'date updated' sort; robust across
+    app types and survives clones via the ledger ts even when file mtimes reset."""
+    latest = recency(rec)
+    for e in items:
+        dt = _parse_history_ts(e.get("ts"))
+        if dt:
+            latest = max(latest, dt.timestamp())
+    return latest
 
 
 def _ts_span(iso):

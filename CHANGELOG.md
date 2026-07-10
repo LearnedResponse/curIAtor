@@ -11,7 +11,9 @@ All notable changes to curIAtor are documented here. The format follows
 ### Added
 - Flask + React overlay shell (`web_shell.py`) served by default, with the legacy Dash shell still
   available via `--legacy-dash-shell`. Dash remains supported as `dash-inproc`; the overlay itself is
-  now framework-neutral.
+  now framework-neutral. The catalog gains a **"date updated"** sort — each app carries an `updated`
+  timestamp (the newest of its source-file mtime and its latest feedback/reply), so the ⇅ toggle can
+  surface recently-worked-on apps first (useful in large galleries).
 - SQLite-backed feedback ledger (`feedback/app_feedback.sqlite`) as the single runtime source of
   truth, with one-time import from legacy `feedback/app_feedback.json` and a `curiator feedback`
   inspection CLI for agents and humans.

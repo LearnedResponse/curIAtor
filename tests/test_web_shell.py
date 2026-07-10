@@ -1162,3 +1162,24 @@ def test_proxy_bridges_websocket_upgrade_end_to_end(collection, monkeypatch):
     finally:
         srv.shutdown()
         bsock.close()
+
+
+def test_apps_payload_exposes_updated_timestamp(web_client, cfg):
+    """Each app carries an `updated` epoch (newest of source mtime and latest feedback ts) for the
+    'date updated' catalog sort; recent feedback bumps it above the source-file mtime."""
+    import datetime
+
+    from curiator import ledger
+
+    ledger.save_entry(cfg, "sample", comment="recent", ts="2030-01-01T00:00:00+00:00")
+    apps = web_client.get("/api/bootstrap").get_json()["apps"]
+    sample = next(a for a in apps if a["key"] == "sample")
+    assert "updated" in sample
+    floor = datetime.datetime(2029, 1, 1, tzinfo=datetime.timezone.utc).timestamp()
+    assert sample["updated"] >= floor            # the 2030 feedback ts dominates → sorts as recently updated
+
+
+def test_react_shell_has_date_updated_sort_option(web_client):
+    body = web_client.get("/assets/react_shell.js").get_data(as_text=True)
+    assert '["updated", "date updated"]' in body
+    assert 'sort === "updated"' in body
