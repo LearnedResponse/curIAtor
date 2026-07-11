@@ -83,7 +83,7 @@ commits with the script in `figures/render_ot_before_after.py`.
 high-performance-HMI direction through operator feedback.](figures/ot-rainbow-before-after.png){width=100%}
 
 <!-- curiator:case-study-stats:start -->
-The current case-study summary was generated on 2026-07-04 with:
+The current case-study summary was generated on 2026-07-10 with:
 
 ```bash
 curiator stats compare \
@@ -93,15 +93,15 @@ curiator stats compare \
   --markdown
 ```
 
-_Runner: curIAtor 0.2.0, main@682a951, clean._
+_Runner: curIAtor 0.2.0, main@da96732, clean._
 
 Compact manuscript summary:
 
-- `curiator-aviato` (`curiator/auto@4743529`): 9 cycles; direct/proposal/human 9 (100.0%) / 0 (0.0%) / 0 (0.0%); median reply 2m 14s; 3 curator commits.
-- `curiator-ot` (`main@2e9896c`): 10 cycles; direct/proposal/human 10 (100.0%) / 0 (0.0%) / 0 (0.0%); median reply 1h 13m; 10 curator commits.
-- `curiator-geometry` (`main@60ab897`): 8 cycles; direct/proposal/human 8 (100.0%) / 0 (0.0%) / 0 (0.0%); median reply 1m 37s; 1 curator commits.
+- `curiator-aviato` (`main@a420957`): 13 cycles; direct/proposal/human 12 (92.3%) / 1 (7.7%) / 1 (7.7%); median reply 2m 9s; 7 curator commits.
+- `curiator-ot` (`main@43325fb`): 11 cycles; direct/proposal/human 11 (100.0%) / 0 (0.0%) / 0 (0.0%); median reply 19m 20s; 11 curator commits.
+- `curiator-geometry` (`main@bfae833`): 10 cycles; direct/proposal/human 10 (100.0%) / 0 (0.0%) / 0 (0.0%); median reply 1m 37s; 3 curator commits.
 
-_Totals: 3 collections, 27 cycles, 27 replied (100.0%), 27 direct fixes (100.0%), 0 proposals (0.0%), 0 human intervention (0.0%), 14 curator commits._
+_Totals: 3 collections, 34 cycles, 34 replied (100.0%), 33 direct fixes (97.1%), 1 proposals (2.9%), 1 human intervention (2.9%), 21 curator commits._
 
 The full command output, including reply-rate, no-dispatch, and agent-note columns, is kept in `release-evidence/case-study-stats.md` and `release-evidence/case-study-stats.json`.
 <!-- curiator:case-study-stats:end -->
