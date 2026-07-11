@@ -2,7 +2,9 @@
 from __future__ import annotations
 
 import io
+import subprocess
 import sys
+import threading
 from pathlib import Path
 
 import pytest
@@ -54,6 +56,35 @@ def test_react_shell_index_and_bootstrap(web_client):
     assert sample["revision"] == 0
 
 
+def test_react_shell_proposal_action_uses_admin_merge_path(web_mod, monkeypatch):
+    from curiator import proposals
+
+    called = {}
+
+    def approve(cfg, app, feedback_id, *, actor):
+        called.update({"app": app, "feedback_id": feedback_id, "actor": actor})
+        return {
+            "ok": True,
+            "action": "approved",
+            "app": app,
+            "feedback_id": feedback_id,
+            "branch": f"curiator/run/{feedback_id}",
+        }
+
+    monkeypatch.setattr(proposals, "approve", approve)
+    monkeypatch.setattr(web_mod.core, "reload_app", lambda key: {"reloaded": key})
+    client = web_mod.build_flask_app().test_client()
+
+    response = client.post(
+        "/api/action",
+        json={"key": "sample", "value": "curiator-proposal:approve:abc12345"},
+    )
+
+    assert response.status_code == 200
+    assert response.get_json()["proposal_result"]["action"] == "approved"
+    assert called == {"app": "sample", "feedback_id": "abc12345", "actor": "anonymous@local"}
+
+
 def test_web_shell_argv_gallery_beats_ambient_env(collection, tmp_path, monkeypatch):
     from curiator.config import set_gallery_override
 
@@ -85,6 +116,11 @@ def test_react_shell_general_iframe_src_is_stable(web_client):
     assert "selectedApp && selectedApp.revision" in body
 
 
+def test_script_launched_web_shell_uses_absolute_runtime_imports():
+    source = Path("curiator/shell/web_shell.py").read_text()
+    assert "from .." not in source
+
+
 def test_react_shell_forwards_deep_link_query_args(web_client):
     """`/?app=X&node=crit` must forward `node=crit` to the /app/X/ iframe (app-to-app deep links)."""
     body = web_client.get("/assets/react_shell.js").get_data(as_text=True)
@@ -99,6 +135,17 @@ def test_react_shell_pins_general_and_restores_auth_menu(web_client):
     assert "Queue" in body and "Settings" in body and "Profile" in body and "Log in" in body
     assert '.filter((a) => a.kind !== "general")' in body
     assert "rshell-general-row" in body
+
+
+def test_react_shell_has_figma_reference_attachment_and_compact_history(web_client):
+    js = web_client.get("/assets/react_shell.js").get_data(as_text=True)
+    css = web_client.get("/assets/react_shell.css").get_data(as_text=True)
+    assert "◇ Design" in js
+    assert "Attach Figma node" in js
+    assert "design_refs: designRefs" in js
+    assert "function DesignReferenceSummary" in js
+    assert "rshell-design-link" in css
+    assert "provider fetch" in js
 
 
 def test_react_shell_has_new_app_wizard(web_client):
@@ -124,6 +171,179 @@ def test_react_shell_has_new_app_wizard(web_client):
     assert "background: #8e44ad" in css
     assert "openNewAppWizard" not in general
     assert "+ New app" not in general
+
+
+def test_react_shell_has_workspace_fork_and_management_ui(web_client):
+    js = web_client.get("/assets/react_shell.js").get_data(as_text=True)
+    css = web_client.get("/assets/react_shell.css").get_data(as_text=True)
+    assert "function WorkspaceWizard" in js
+    assert "function WorkspacePanel" in js
+    assert "function WorkspaceBanner" in js
+    assert 'api("/api/workspaces"' in js
+    assert "Fork app in workspace" in js
+    assert "Start editing" in js and "Keep branch" in js and "Apply to canonical" in js and "Discard" in js
+    assert ".rshell-workspace-banner" in css
+
+
+def test_react_shell_has_feedback_replay_comparison_ui(web_client):
+    js = web_client.get("/assets/react_shell.js").get_data(as_text=True)
+    css = web_client.get("/assets/react_shell.css").get_data(as_text=True)
+    assert "function ReplayModal" in js
+    assert "/api/replays/inspect/" in js
+    assert "openReplay" in js
+    assert 'p.delete("replay")' in js
+    assert 'p.delete("replay_group")' in js
+    assert "Confirm provider cost and one Docker workspace per variant" in js
+    assert "identical task evidence" in js
+    assert "Metric artifact" in js
+    assert "Keep branch" in js and "Open live" in js and "Discard replay resources" in js
+    assert ".rshell-replay-grid" in css
+    assert ".rshell-replay-shot" in css
+
+
+def test_workspace_api_creates_asynchronously_and_runs_lifecycle_actions(web_client, monkeypatch):
+    import curiator.workspaces as workspaces
+
+    calls = []
+    row = {
+        "id": "ws123", "name": "sample-fork", "app_key": "sample", "status": "creating",
+        "mode": "branch", "branch": "curiator/workspace/sample-ws123", "host_port": None,
+        "owning_repo_base_sha": "a" * 40,
+    }
+
+    class FakeManager:
+        def __init__(self, _cfg):
+            pass
+
+        def list(self):
+            return [row]
+
+        def create(self, app, **kwargs):
+            calls.append(("create", app, kwargs))
+            return row
+
+        def get(self, workspace_id):
+            assert workspace_id == "ws123"
+            return row
+
+        def diff(self, workspace_id):
+            return {"id": workspace_id, "dirty": False, "status": "", "commits": [], "patch": ""}
+
+        def stop(self, workspace_id):
+            calls.append(("stop", workspace_id))
+            return {**row, "status": "stopped"}
+
+        def apply(self, workspace_id):
+            calls.append(("apply", workspace_id))
+            return {**row, "status": "applied"}
+
+    monkeypatch.setattr(workspaces, "WorkspaceManager", FakeManager)
+    listed = web_client.get("/api/workspaces")
+    assert listed.status_code == 200 and listed.get_json()["workspaces"][0]["id"] == "ws123"
+    created = web_client.post("/api/workspaces", json={"app": "sample", "name": "fork", "preview": False})
+    assert created.status_code == 202
+    assert calls[0][2]["background"] is True
+    stopped = web_client.post("/api/workspaces/ws123/stop", json={})
+    assert stopped.status_code == 200 and stopped.get_json()["workspace"]["status"] == "stopped"
+    applied = web_client.post("/api/workspaces/ws123/apply", json={})
+    assert applied.status_code == 200 and applied.get_json()["workspace"]["status"] == "applied"
+
+
+def test_replay_api_audits_and_launches_completed_feedback(web_client, web_mod, collection, monkeypatch):
+    from curiator import ledger, replay_lab
+    from curiator.loop.adapters import build_task
+
+    cfg = web_mod.core.LEDGER_CFG
+    fid = ledger.save_entry(cfg, "sample", comment="replay this completed UI task")
+    entry = next(item for item in ledger.load(cfg)["sample"] if item["id"] == fid)
+    build_task(cfg, "sample", entry)
+    source = collection / "apps" / "sample.py"
+    source.write_text(source.read_text() + "\n# accepted replay source\n")
+    subprocess.run(["git", "add", "apps/sample.py"], cwd=collection, check=True)
+    subprocess.run(
+        ["git", "commit", "-q", "-m", f"accepted replay\n\nCuriator-Feedback: {fid}"],
+        cwd=collection,
+        check=True,
+    )
+    ledger.set_status(cfg, "sample", [fid], "done")
+
+    audit = web_client.get(f"/api/replays/inspect/{fid}")
+    assert audit.status_code == 200
+    assert audit.get_json()["replay"]["exactness"] == "source-exact"
+    feedback = web_client.get("/api/feedback/sample").get_json()["items"]
+    assert next(item for item in feedback if item["id"] == fid)["replay_eligible"] is True
+
+    denied = web_client.post("/api/replays", json={
+        "feedback_id": fid, "profiles": ["codex", "claude"],
+    })
+    assert denied.status_code == 400 and "confirm provider cost" in denied.get_json()["error"]
+
+    called = {}
+    finished = threading.Event()
+
+    def fake_run_group(**kwargs):
+        called.update(kwargs)
+        finished.set()
+        return {"id": kwargs["group_id"]}
+
+    monkeypatch.setattr(replay_lab, "run_group", fake_run_group)
+    launched = web_client.post("/api/replays", json={"feedback_id": fid, "profiles": ["codex"]})
+    assert launched.status_code == 202
+    assert finished.wait(2)
+    assert called["feedback_id"] == fid
+    assert called["profiles"] == ["codex"]
+    assert called["credentials"] == "auto"
+    assert called["group_id"] == launched.get_json()["group_id"]
+
+
+def test_replay_api_returns_comparison_actions_and_binary_screenshot(web_client, monkeypatch):
+    from curiator import replay_lab, workspaces
+
+    group = {
+        "id": "abcde12345", "feedback_id": "feed1234", "app_key": "sample", "status": "complete",
+        "variants": [{
+            "id": "v1-test", "workspace_id": "ws-replay", "status": "done",
+            "result": {"browser": {"results": [{"browser_smoke": {
+                "screenshot": "/workspace/state/replies/feed1234-browser-smoke/sample.png",
+            }}]}},
+        }],
+    }
+    monkeypatch.setattr(replay_lab, "refresh_group", lambda _cfg, _gid: group)
+    monkeypatch.setattr(replay_lab, "load_group", lambda _cfg, _gid: group)
+    monkeypatch.setattr(replay_lab, "keep_variant", lambda _cfg, _gid, _vid: {**group, "status": "preserved"})
+    monkeypatch.setattr(replay_lab, "delete_group", lambda _cfg, _gid, force=False: {**group, "status": "deleted"})
+
+    class FakeManager:
+        def __init__(self, _cfg):
+            pass
+
+        def state_file(self, workspace_id, relative_path):
+            assert workspace_id == "ws-replay"
+            assert relative_path == "replies/feed1234-browser-smoke/sample.png"
+            return b"\x89PNG\r\n\x1a\n"
+
+    monkeypatch.setattr(workspaces, "WorkspaceManager", FakeManager)
+    shown = web_client.get("/api/replays/abcde12345")
+    assert shown.status_code == 200 and shown.get_json()["replay"]["status"] == "complete"
+    kept = web_client.post("/api/replays/abcde12345/keep", json={"variant_id": "v1-test"})
+    assert kept.status_code == 200 and kept.get_json()["replay"]["status"] == "preserved"
+    deleted = web_client.post("/api/replays/abcde12345/delete", json={"force": True})
+    assert deleted.status_code == 200 and deleted.get_json()["replay"]["status"] == "deleted"
+    shot = web_client.get("/api/replays/abcde12345/v1-test/screenshot")
+    assert shot.status_code == 200 and shot.mimetype == "image/png" and shot.data.startswith(b"\x89PNG")
+
+
+def test_workspace_container_metadata_is_exposed_in_bootstrap(web_client, monkeypatch):
+    monkeypatch.setenv("CURIATOR_WORKSPACE_ID", "ws-meta")
+    monkeypatch.setenv("CURIATOR_WORKSPACE_NAME", "old-ui")
+    monkeypatch.setenv("CURIATOR_WORKSPACE_MODE", "preview")
+    monkeypatch.setenv("CURIATOR_WORKSPACE_BASE_SHA", "abc123")
+    monkeypatch.setenv("CURIATOR_WORKSPACE_CONTROL_URL", "http://127.0.0.1:8420")
+    workspace = web_client.get("/api/bootstrap").get_json()["workspace"]
+    assert workspace == {
+        "id": "ws-meta", "name": "old-ui", "mode": "preview", "base_sha": "abc123",
+        "branch": None, "control_url": "http://127.0.0.1:8420",
+    }
 
 
 def test_react_shell_side_rails_are_collapsible(web_client):
@@ -513,7 +733,10 @@ def test_react_shell_admin_queue_page_reviews_held_feedback(web_client):
     approved = web_client.post(f"/queue/{fid}/approve")
     assert approved.status_code == 302
     items = ledger.load(load_config())["sample"]
-    assert next(e for e in items if e["id"] == fid)["status"] == "new"
+    approved_entry = next(e for e in items if e["id"] == fid)
+    assert approved_entry["status"] == "new"
+    assert approved_entry["moderation_approved_at"]
+    assert approved_entry["moderation_approved_by"] == "anonymous@local"
     assert any(e.get("kind") == "system" and fid in (e.get("reply_to") or [])
                and "approved by anonymous@local" in e.get("comment", "")
                for e in items)
@@ -526,6 +749,32 @@ def test_react_shell_admin_queue_page_reviews_held_feedback(web_client):
     assert any(e.get("kind") == "system" and reject_id in (e.get("reply_to") or [])
                and "Reason: spam" in e.get("comment", "")
                for e in items)
+
+
+def test_admin_queue_uses_explicit_recovery_actions_for_partial_run(web_client, cfg, collection):
+    from curiator import ledger, run_recovery
+    from curiator.loop import adapters
+
+    fid = ledger.save_entry(cfg, "sample", comment="partial interrupted edit", ts="t")
+    entry = next(item for item in ledger.load(cfg)["sample"] if item["id"] == fid)
+    task = adapters.build_task(cfg, "sample", entry)
+    run_recovery.create_checkpoint(task, "codex")
+    Path(task.source).write_text("partial from agent\n")
+    run_recovery.record_process_end(cfg, fid, "agent stopped")
+    ledger.set_status(cfg, "sample", [fid], "held")
+
+    body = web_client.get("/queue").get_data(as_text=True)
+    assert "Interrupted run recovery" in body
+    assert f"/queue/{fid}/resume" in body
+    assert f"/queue/{fid}/preserve" in body
+    assert f"/queue/{fid}/restore" in body
+    assert f"/queue/{fid}/approve" not in body
+
+    restored = web_client.post(f"/queue/{fid}/restore")
+    assert restored.status_code == 302
+    assert "import dash" in (collection / "apps" / "sample.py").read_text()
+    user = next(item for item in ledger.load(cfg)["sample"] if item["id"] == fid)
+    assert user["status"] == "new"
 
 
 def test_react_shell_login_required_rejects_logged_out_feedback_by_default(collection, monkeypatch):
@@ -744,6 +993,30 @@ def test_react_shell_feedback_api_threads_replies(web_client):
     assert child["reply_to"] == [parent]
     data = web_client.get("/api/feedback/sample").get_json()
     assert [e["comment"] for e in data["items"]] == ["original", "reply"]
+
+
+def test_react_shell_feedback_api_sanitizes_figma_design_references(web_client):
+    url = "https://www.figma.com/design/Abcd1234/Aviato?node-id=12-34"
+    saved = web_client.post("/api/feedback/sample", json={
+        "comment": "match the supplied frame",
+        "design_refs": [{"url": url, "label": " Revenue   card ", "access": "read"}],
+    })
+    assert saved.status_code == 200
+    assert saved.get_json()["entry"]["design_refs"] == [{
+        "provider": "figma",
+        "url": url,
+        "file_key": "Abcd1234",
+        "node_id": "12:34",
+        "access": "read",
+        "label": "Revenue card",
+    }]
+
+    rejected = web_client.post("/api/feedback/sample", json={
+        "comment": "unsafe",
+        "design_refs": ["https://evil.example/design/Abcd1234/Aviato?node-id=12-34"],
+    })
+    assert rejected.status_code == 400
+    assert "invalid design reference" in rejected.get_json()["error"]
 
 
 def test_react_shell_feedback_api_stores_sanitized_annotations(web_client):

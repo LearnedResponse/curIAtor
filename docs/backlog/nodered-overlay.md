@@ -1,10 +1,26 @@
-# Backlog — Node-RED overlay (recipe proven; example collection to build)
+# Backlog — Node-RED overlay
 
-> **Status:** the overlay is **verified working end-to-end** (2026-07-05) against real Node-RED 5.0.1 —
-> the editor loads through the same-origin proxy and its `/comms` WebSocket bridges live (received a real
-> `notification/runtime-state` push). What remains is packaging it as an example collection and, ideally,
-> a `curiator app` scaffold/import template so it's one command. Enabled by the proxy's streaming (1a) +
-> WebSocket bridging (1b) — see the completed general-app-hosting work.
+> **Status:** implemented and dogfooded 2026-07-11; awaiting the root implementation commit and
+> retirement to `completed/`. `curiator app create --template nodered` now emits the settings, seed flow,
+> structural/HTTP/WebSocket smokes, and preserve-prefix mount. `curiator-nodered@7e964fb` passes strict
+> dependency-prepared fresh-clone doctor, HTTP, and browser preflight, while feedback `b9e6c6e8` records
+> the uptime/status improvement as git-as-memory commit `c4d5c67`.
+
+## Delivered evidence (2026-07-11)
+
+- The scaffold creates `package.json`/lock-ready Node-RED 5 dependencies, dynamic `CURIATOR_APP`
+  `httpAdminRoot` and `httpNodeRoot`, deterministic flow/credential settings, a heartbeat and mounted
+  health endpoint, clean first-run telemetry settings, and local security guidance.
+- Doctor distinguishes missing `preserve_prefix`, missing settings, incorrect admin/API roots, and a
+  missing credential secret. `smoke_http.path` is correctly treated as an HTTP route rather than a
+  machine-absolute filesystem path.
+- The example collection's health flow returns real process uptime, stable `operational` status, and a
+  `fresh-restart`/`steady` phase. Its checked-in WebSocket client toggles runtime state and requires the
+  matching `notification/runtime-state` push through `/app/flow_ops/comms`.
+- `commands.bootstrap: npm ci --no-audit --no-fund` plus
+  `release-preflight --prepare-dependencies` proves the runtime from a clean clone without borrowing the
+  canonical checkout's `node_modules` or port. Strict fresh-clone HTTP and browser passes both succeed
+  with zero console errors.
 
 ## Why it matters
 

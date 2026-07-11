@@ -217,7 +217,7 @@ what make "commit freely" safe and keep the memory trustworthy:
 7. **Keep the ledger clean after committing.** The SHA is printed and queryable from git trailers; do
    not mutate the SQLite ledger after the commit just to stamp the hash back into the reply.
 
-### The gate (now) and branching (deferred)
+### The default gate and opt-in per-run proposals
 
 The safety gate is **the git log itself** — review happens in plain git (outside the UI): each run is
 one atomic commit, and you `revert`/`cherry-pick` what's bad after the fact. `git.branch` chooses where
@@ -235,10 +235,18 @@ ceremony; commit to `main` and use the log. The branch model becomes right when 
 its own subrepo (`curiator app import` keeps its `.git`) with real versioning/dependents — then it runs a
 normal feature→main flow in *its* repo.
 
-**Deferred (see `docs/backlog/per-run-branches.md`):** a per-run *branch + in-app approval* flow — each
-run on a feature branch, an **Approve** button in the app that merges it to `main`, live per-branch
-preview. That's the "grown-up app" tier; the binding practice stays dbt's: **never maintain the graph —
-derive it from the refs; git is the record, not a separate store.**
+**Landed, opt-in:** `git.branch: per-run` gives each app task a
+`curiator/run/<feedback_id>` branch from `git.accepted_branch` (default `main`) and an ignored worktree.
+The accepted checkout is required to be clean and stays untouched while the agent works. A successful
+`done` commits the proposal, changes the feedback item to `awaiting_approval`, and remaps the shell mount
+to that worktree. Admin-only Approve smoke-tests the merged result and creates a merge commit; Reject
+retires the worktree while retaining the branch. Merge conflicts abort without changing accepted state
+and are recorded in the feedback thread.
+
+Proposal state is derived from Git branch/worktree refs under `refs/curiator/proposals/`, not a second
+database. A newer run supersedes an older open proposal for the same configured app root; proposals in
+independent app repositories coexist. This remains the "grown-up app" tier rather than the default.
+`galleries/curiator-proposals` records the browser-smoked feedback -> branch -> preview -> approval proof.
 
 ## Scaling: serving and curation are two independent tiers
 

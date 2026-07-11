@@ -43,7 +43,8 @@ curiator release-preflight --fresh-clone --json --output release-evidence/releas
 `make release-check` runs lint, the full pytest suite, release-doc checks, strict fresh-clone preflight
 for the three required public collections, `docs/demo.gif` presence validation, package build, and
 `twine check`. It does not rewrite `docs/demo.gif`, so a recorded browser capture is not replaced by
-the generated storyboard fallback. The optional preflight adds finance and phylogenetics. The
+the generated storyboard fallback. The optional preflight adds finance, phylogenetics, ML, and
+Node-RED. The
 HTTP-smoke variant starts proxy apps briefly and polls configured `smoke_http` paths or default app
 URLs; the browser-smoke variant opens apps through the shell in headless Brave and fails on mount/proxy
 diagnostics or empty iframes. Both expect app dependencies to be installed in the tree being checked,
@@ -99,6 +100,10 @@ The required public examples are:
 - `LearnedResponse/curiator-aviato`
 - `LearnedResponse/curiator-ot`
 - `LearnedResponse/curiator-geometry`
+
+The per-run branch proof is a two-repository publication: `curiator-proposals` plus its nested
+`accepted_counter` app repository. Publish both and configure clone/materialization metadata before
+adding it to the optional fresh-clone gate; the local gitlink alone is not a stranger-portable clone.
 
 Before publishing, keep the feedback-to-fix commits but confirm each collection is clean and portable:
 

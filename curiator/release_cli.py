@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import shlex
 import shutil
 import stat
 import subprocess
@@ -12,11 +13,16 @@ import tempfile
 from pathlib import Path
 
 from . import ledger
-from .config import load_config, load_config_at
+from .config import app_specs, load_config, load_config_at
 
 
 _PUBLIC_RELEASE_GALLERIES = ("curiator-aviato", "curiator-ot", "curiator-geometry")
-_OPTIONAL_RELEASE_GALLERIES = ("curiator-finance", "curiator-phylogenetics", "curiator-ml")
+_OPTIONAL_RELEASE_GALLERIES = (
+    "curiator-finance",
+    "curiator-phylogenetics",
+    "curiator-ml",
+    "curiator-nodered",
+)
 _PUBLIC_RELEASE_OWNER = "LearnedResponse"
 _PUBLIC_RUNNER_REPO = "curIAtor"
 _USER_ABS_PATH_RE = re.compile(
@@ -244,7 +250,9 @@ def _machine_path_hits(repo: Path, needles: tuple[str, ...]) -> list[dict]:
 
 
 _SAFE_ENV_TEMPLATE_NAMES = {".env.example", ".env.sample", ".env.template"}
-_PUBLISH_RUNTIME_PREFIXES = ("feedback/shots/", "feedback/audio/", "feedback/tasks/", "feedback/replies/")
+_PUBLISH_RUNTIME_PREFIXES = (
+    "feedback/shots/", "feedback/audio/", "feedback/tasks/", "feedback/replies/", "feedback/runs/",
+)
 _PUBLISH_SQLITE_SIDECARS = ("feedback/app_feedback.sqlite-wal", "feedback/app_feedback.sqlite-shm")
 _PUBLISH_CACHE_DIRS = {"__pycache__", ".pytest_cache", ".ruff_cache", ".mypy_cache", ".cache"}
 _PUBLISH_ENV_DIRS = {".venv", "venv", ".env"}
@@ -501,11 +509,68 @@ def _release_preflight_paths(args) -> tuple[Path, list[str], tuple[str, ...]]:
     return root, names, needles
 
 
+def _prepare_gallery_dependencies(gallery: Path) -> dict:
+    """Run explicit, trusted collection bootstrap commands once per owning app root."""
+    cfg = load_config_at(gallery)
+    repo = Path(cfg["repo_root"]).resolve()
+    results = []
+    seen: set[tuple[str, str]] = set()
+    for spec in app_specs(cfg):
+        commands = spec.get("commands") if isinstance(spec.get("commands"), dict) else {}
+        command = str(commands.get("bootstrap") or "").strip()
+        if not command:
+            continue
+        root = Path(spec.get("root") or repo).resolve()
+        key = (str(root), command)
+        if key in seen:
+            continue
+        seen.add(key)
+        app = str(spec.get("name") or spec.get("app_name") or "app")
+        try:
+            rendered = command.format(
+                app=app,
+                root=str(root),
+                source=str(spec.get("source") or root),
+                port=(spec.get("mount") or {}).get("port") or "",
+            )
+            args = shlex.split(rendered)
+            if not args:
+                raise ValueError("empty bootstrap command")
+            run = subprocess.run(
+                args,
+                cwd=root,
+                capture_output=True,
+                text=True,
+                timeout=1200,
+            )
+            detail = (run.stderr or run.stdout or "").strip()[-2000:]
+            row = {
+                "app": app,
+                "root": str(root.relative_to(repo)) if root != repo else ".",
+                "command": rendered,
+                "ok": run.returncode == 0,
+                "message": "passed" if run.returncode == 0 else (detail or f"exit {run.returncode}"),
+            }
+        except (OSError, ValueError, subprocess.TimeoutExpired) as exc:
+            row = {
+                "app": app,
+                "root": str(root.relative_to(repo)) if root != repo else ".",
+                "command": command,
+                "ok": False,
+                "message": f"{type(exc).__name__}: {exc}",
+            }
+        results.append(row)
+    return {"ok": all(row["ok"] for row in results), "results": results}
+
+
 def _release_preflight_payload_for_root(args) -> dict:
     root, names, needles = _release_preflight_paths(args)
-    galleries = [
-        _release_preflight_one(
-            (root / name / "gallery.yaml").resolve(),
+    galleries = []
+    for name in names:
+        gallery = (root / name / "gallery.yaml").resolve()
+        prepared = _prepare_gallery_dependencies(gallery) if args.prepare_dependencies else None
+        result = _release_preflight_one(
+            gallery,
             run_smoke=not args.no_smoke,
             http_smoke=args.http_smoke,
             browser_smoke=getattr(args, "browser_smoke", False),
@@ -517,8 +582,10 @@ def _release_preflight_payload_for_root(args) -> dict:
             public_remote_owner=args.public_remote_owner,
             require_published_head=args.require_published_head,
         )
-        for name in names
-    ]
+        if prepared is not None:
+            result["dependency_prepare"] = prepared
+            result["ok"] = result["ok"] and prepared["ok"]
+        galleries.append(result)
     runner = _runner_release_result(
         _project_root(),
         require_public_remote=args.require_runner_public_remote,
@@ -549,6 +616,7 @@ def _release_preflight_payload_for_root(args) -> dict:
             "require_runner_public_remote": bool(args.require_runner_public_remote),
             "require_runner_published_head": bool(args.require_runner_published_head),
             "require_release_tag": args.require_release_tag,
+            "prepare_dependencies": bool(args.prepare_dependencies),
         },
     }
 
@@ -583,6 +651,7 @@ def _release_preflight_payload_for_clones(args, clone_base: Path) -> dict:
             })
             galleries.append(result)
             continue
+        prepared = _prepare_gallery_dependencies(clone_gallery) if args.prepare_dependencies else None
         result = _release_preflight_one(
             clone_gallery.resolve(),
             run_smoke=not args.no_smoke,
@@ -593,6 +662,9 @@ def _release_preflight_payload_for_clones(args, clone_base: Path) -> dict:
             needles=needles,
             strict=args.strict,
         )
+        if prepared is not None:
+            result["dependency_prepare"] = prepared
+            result["ok"] = result["ok"] and prepared["ok"]
         if args.require_public_remotes:
             result["public_remote"] = _public_remote_result(source_repo, source_repo.name, args.public_remote_owner)
         if args.require_published_head:
@@ -640,6 +712,7 @@ def _release_preflight_payload_for_clones(args, clone_base: Path) -> dict:
             "require_runner_public_remote": bool(args.require_runner_public_remote),
             "require_runner_published_head": bool(args.require_runner_published_head),
             "require_release_tag": args.require_release_tag,
+            "prepare_dependencies": bool(args.prepare_dependencies),
         },
     }
 

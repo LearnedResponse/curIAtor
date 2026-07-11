@@ -421,33 +421,100 @@ def test_general_survives_null_ts(collection, client):
     assert "data-ts='None'" not in body                              # the null row emits no broken marker
 
 
-def test_general_history_supports_one_and_five_minute_ranges(collection, client):
+def test_general_history_supports_practical_activity_ranges(collection, client):
     now = datetime.now(timezone.utc)
-    recent = (now - timedelta(seconds=30)).isoformat(timespec="seconds")
-    three_min = (now - timedelta(minutes=3)).isoformat(timespec="seconds")
     ten_min = (now - timedelta(minutes=10)).isoformat(timespec="seconds")
+    two_hour = (now - timedelta(hours=2)).isoformat(timespec="seconds")
+    two_day = (now - timedelta(days=2)).isoformat(timespec="seconds")
+    ten_day = (now - timedelta(days=10)).isoformat(timespec="seconds")
+    forty_day = (now - timedelta(days=40)).isoformat(timespec="seconds")
     _seed_feedback({
         "__general__": [
-            {"id": "old", "author": "user", "kind": "comment", "comment": "ten-minute item",
+            {"id": "recent", "author": "user", "kind": "comment", "comment": "ten-minute item",
              "status": "done", "ts": ten_min},
-            {"id": "mid", "author": "user", "kind": "comment", "comment": "three-minute item",
-             "status": "done", "ts": three_min},
-            {"id": "new", "author": "user", "kind": "comment", "comment": "thirty-second item",
-             "status": "new", "ts": recent},
+            {"id": "hour", "author": "user", "kind": "comment", "comment": "two-hour item",
+             "status": "done", "ts": two_hour},
+            {"id": "day", "author": "user", "kind": "comment", "comment": "two-day item",
+             "status": "done", "ts": two_day},
+            {"id": "month", "author": "user", "kind": "comment", "comment": "ten-day item",
+             "status": "done", "ts": ten_day},
+            {"id": "old", "author": "user", "kind": "comment", "comment": "forty-day item",
+             "status": "done", "ts": forty_day},
         ],
     })
 
     all_body = client.get("/general").get_data(as_text=True)
-    assert "1 minute" in all_body and "5 minutes" in all_body
-    assert "ten-minute item" in all_body and "three-minute item" in all_body and "thirty-second item" in all_body
+    assert all(label in all_body for label in ("Past hour", "Past 24 hours", "Past 7 days", "Past 30 days"))
+    assert all(item in all_body for item in
+               ("ten-minute item", "two-hour item", "two-day item", "ten-day item", "forty-day item"))
 
-    one_min_body = client.get("/general?range=1m").get_data(as_text=True)
-    assert "thirty-second item" in one_min_body
-    assert "three-minute item" not in one_min_body and "ten-minute item" not in one_min_body
+    hour_body = client.get("/general?range=1h").get_data(as_text=True)
+    assert "ten-minute item" in hour_body and "two-hour item" not in hour_body
 
-    five_min_body = client.get("/general?range=5m").get_data(as_text=True)
-    assert "thirty-second item" in five_min_body and "three-minute item" in five_min_body
-    assert "ten-minute item" not in five_min_body
+    day_body = client.get("/general?range=24h").get_data(as_text=True)
+    assert "ten-minute item" in day_body and "two-hour item" in day_body
+    assert "two-day item" not in day_body
+
+    week_body = client.get("/general?range=7d").get_data(as_text=True)
+    assert "two-day item" in week_body and "ten-day item" not in week_body
+
+    month_body = client.get("/general?range=30d").get_data(as_text=True)
+    assert "ten-day item" in month_body and "forty-day item" not in month_body
+
+
+def test_general_history_status_counts_are_clickable_thread_filters(collection, client):
+    now = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    _seed_feedback({
+        "sample": [
+            {"id": "working", "author": "user", "kind": "comment", "comment": "working ticket",
+             "status": "working", "ts": now},
+            {"id": "working-note", "author": "claude", "kind": "system", "comment": "working context",
+             "status": "update", "reply_to": ["working"], "ts": now},
+            {"id": "held", "author": "user", "kind": "comment", "comment": "held ticket",
+             "status": "held", "ts": now},
+            {"id": "done", "author": "user", "kind": "comment", "comment": "done ticket",
+             "status": "done", "ts": now},
+        ],
+    })
+
+    body = client.get("/general?range=24h").get_data(as_text=True)
+    assert "1 active thread" in body and "2 open threads" in body
+    assert "href='/general?range=24h&amp;filter=active'" in body
+    assert "href='/general?range=24h&amp;filter=open'" in body
+
+    active = client.get("/general?range=24h&filter=active").get_data(as_text=True)
+    assert "working ticket" in active and "working context" in active
+    assert "held ticket" not in active and "done ticket" not in active
+    assert "aria-pressed='true'" in active
+
+    open_threads = client.get("/general?range=24h&filter=open").get_data(as_text=True)
+    assert "working ticket" in open_threads and "working context" in open_threads
+    assert "held ticket" in open_threads and "done ticket" not in open_threads
+    assert "value='/general?range=7d&amp;filter=open'" in open_threads
+
+
+def test_general_history_live_refresh_uses_content_versions(collection, client):
+    from curiator import ledger
+    from curiator.config import load_config
+
+    now = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    _seed_feedback({"sample": [
+        {"id": "work", "author": "user", "kind": "comment", "comment": "status changes live",
+         "status": "working", "ts": now},
+    ]})
+
+    before = client.get("/general").get_data(as_text=True)
+    before_version = before.split("data-version='", 1)[1].split("'", 1)[0]
+    assert "window.setInterval(refresh" in before
+    assert "current.dataset.version !== next.dataset.version" in before
+    unchanged = client.get("/general").get_data(as_text=True)
+    assert unchanged.split("data-version='", 1)[1].split("'", 1)[0] == before_version
+
+    ledger.set_status(load_config(), "sample", ["work"], "done")
+    after = client.get("/general").get_data(as_text=True)
+    after_version = after.split("data-version='", 1)[1].split("'", 1)[0]
+    assert before_version != after_version
+    assert ">done</" in after
 
 
 def test_trace_route_and_status_badge_link(collection, shell_mod, client):

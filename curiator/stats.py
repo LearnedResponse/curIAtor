@@ -260,6 +260,54 @@ def summarize_git(cfg: dict) -> dict[str, Any]:
     }
 
 
+def summarize_replays(cfg: dict) -> dict[str, Any]:
+    """Aggregate retained replay manifests without opening private provider payloads."""
+    from .replay_lab import list_groups
+
+    groups = list_groups(cfg)
+    variants = [variant for group in groups for variant in (group.get("variants") or [])]
+    results = [variant.get("result") or {} for variant in variants]
+    durations = [
+        float(variant["duration_seconds"])
+        for variant in variants
+        if isinstance(variant.get("duration_seconds"), (int, float))
+    ]
+    browser_passes = sum(1 for result in results if (result.get("browser") or {}).get("ok") is True)
+    source_changes = sum(
+        1 for result in results
+        if (result.get("diff") or {}).get("dirty")
+        or (result.get("diff") or {}).get("commits")
+        or (result.get("diff") or {}).get("patch")
+    )
+    accepted = sum(
+        1 for group in groups
+        if (group.get("review") or {}).get("decision") == "accepted"
+        and (group.get("review") or {}).get("variant_id")
+    )
+    adapters = Counter(
+        str(((variant.get("result") or {}).get("effective_profile") or {}).get("adapter")
+            or (variant.get("profile") or {}).get("adapter") or "unknown")
+        for variant in variants
+    )
+    return {
+        "groups": len(groups),
+        "variants": len(variants),
+        "accepted_variants": accepted,
+        "browser_passes": browser_passes,
+        "browser_pass_rate_percent": _percent(browser_passes, len(variants)),
+        "source_change_variants": source_changes,
+        "source_change_rate_percent": _percent(source_changes, len(variants)),
+        "identical_task_groups": sum(
+            1 for group in groups
+            if (group.get("evidence_consistency") or {}).get("byte_identical_across_variants") is True
+        ),
+        "status_counts": dict(sorted(Counter(str(group.get("status") or "unknown") for group in groups).items())),
+        "exactness_counts": dict(sorted(Counter(str(group.get("exactness") or "unknown") for group in groups).items())),
+        "adapter_counts": dict(sorted(adapters.items())),
+        "duration": _latency_summary(durations),
+    }
+
+
 def summarize_runner(include_git: bool = True) -> dict[str, Any]:
     """Summarize the curIAtor runner that produced a stats report."""
     out: dict[str, Any] = {"version": __version__}
@@ -283,6 +331,7 @@ def summarize(cfg: dict, app: str | None = None, include_git: bool = True) -> di
         "gallery": cfg.get("gallery_path"),
         "repo_root": cfg.get("repo_root"),
         **summarize_ledger(cfg, app=app),
+        "replays": summarize_replays(cfg),
     }
     if include_git:
         out["git"] = summarize_git(cfg)

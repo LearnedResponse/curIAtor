@@ -241,6 +241,27 @@
       h("div", {className: "rshell-annotation-summary-count"}, label));
   }
 
+  function designRefTitle(ref, idx) {
+    if (ref && ref.label) return ref.label;
+    if (ref && ref.node_id) return "Figma node " + ref.node_id;
+    return "Figma reference " + (idx + 1);
+  }
+
+  function DesignReferenceSummary({entry}) {
+    const refs = (entry && entry.design_refs) || [];
+    if (!Array.isArray(refs) || !refs.length) return null;
+    return h("div", {className: "rshell-design-summary"},
+      h("div", {className: "rshell-annotation-summary-title"},
+        "Design reference" + (refs.length === 1 ? "" : "s"),
+        h("span", {className: "rshell-design-count"}, refs.length)),
+      refs.slice(0, 5).map((ref, idx) => h("a", {key: ref.url || idx,
+        className: "rshell-design-link", href: ref.url, target: "_blank", rel: "noopener noreferrer",
+        title: "Open Figma node"},
+        h("span", {className: "rshell-design-provider"}, "Figma"),
+        h("span", null, designRefTitle(ref, idx)),
+        ref.node_id ? h("span", {className: "rshell-design-node"}, ref.node_id) : null)));
+  }
+
   function numberValue(value) {
     if (typeof value === "boolean") return null;
     const n = Number(value);
@@ -914,8 +935,324 @@
         msg ? h("div", {className: "rshell-new-app-msg"}, msg) : null));
   }
 
+  function WorkspaceWizard({app, open, onClose, onCreated}) {
+    const [name, setName] = useState("");
+    const [ref, setRef] = useState("HEAD");
+    const [mode, setMode] = useState("branch");
+    const [credentials, setCredentials] = useState("none");
+    const [agentNetwork, setAgentNetwork] = useState(true);
+    const [agentSandbox, setAgentSandbox] = useState("container");
+    const [busy, setBusy] = useState(false);
+    const [msg, setMsg] = useState("");
+    useEffect(() => {
+      if (!open) return;
+      setName(app ? app.key + "-fork" : "");
+      setRef("HEAD");
+      setMode("branch");
+      setCredentials("none");
+      setAgentNetwork(true);
+      setAgentSandbox("container");
+      setBusy(false);
+      setMsg("");
+    }, [open, app && app.key]);
+    if (!open || !app) return null;
+    function submit(evt) {
+      evt.preventDefault();
+      setBusy(true);
+      setMsg("Creating…");
+      api("/api/workspaces", {method: "POST", body: JSON.stringify({
+        app: app.key, name, ref, preview: mode === "preview", credentials,
+        agent_network: agentNetwork, agent_sandbox: agentSandbox
+      })}).then((data) => {
+        setBusy(false);
+        if (onCreated) onCreated(data.workspace);
+      }).catch((err) => {
+        setBusy(false);
+        setMsg(err.error || "Workspace creation failed.");
+      });
+    }
+    return h("div", {className: "rshell-modal-backdrop"},
+      h("form", {className: "rshell-workspace-modal", onSubmit: submit},
+        h("div", {className: "rshell-modal-head"},
+          h("h3", null, "Fork " + app.title),
+          h("button", {className: "rshell-modal-close", type: "button", title: "Close", onClick: onClose}, "×")),
+        h("div", {className: "rshell-workspace-body"},
+          h("label", {className: "rshell-field"}, h("span", null, "name"),
+            h("input", {className: "rshell-input", value: name, autoFocus: true,
+              onChange: (e) => setName(e.target.value)})),
+          h("label", {className: "rshell-field"}, h("span", null, "Git ref"),
+            h("input", {className: "rshell-input", value: ref, onChange: (e) => setRef(e.target.value)})),
+          h("div", {className: "rshell-field"}, h("span", null, "mode"),
+            h("div", {className: "rshell-segments"},
+              [["branch", "Editable"], ["preview", "Preview"]].map(([value, label]) =>
+                h("button", {key: value, type: "button", className: mode === value ? "active" : "",
+                  onClick: () => setMode(value)}, label)))),
+          h("label", {className: "rshell-field"}, h("span", null, "agent credentials"),
+            h("select", {className: "rshell-select", value: credentials,
+              onChange: (e) => setCredentials(e.target.value)},
+              h("option", {value: "none"}, "None"),
+              h("option", {value: "codex"}, "Codex"),
+              h("option", {value: "claude"}, "Claude"))),
+          credentials !== "none" ? h("label", {className: "rshell-check-row"},
+            h("input", {type: "checkbox", checked: agentNetwork,
+              onChange: (e) => setAgentNetwork(e.target.checked)}),
+            h("span", null, "Allow agent network access")) : null,
+          credentials === "codex" ? h("label", {className: "rshell-field"},
+            h("span", null, "agent isolation"),
+            h("select", {className: "rshell-select", value: agentSandbox,
+              onChange: (e) => setAgentSandbox(e.target.value)},
+              h("option", {value: "container"}, "Container boundary"),
+              h("option", {value: "workspace-write"}, "Nested sandbox"))) : null),
+        h("div", {className: "rshell-modal-actions"},
+          h("button", {className: "rshell-button secondary", type: "button", onClick: onClose}, "Cancel"),
+          h("button", {className: "rshell-button primary", type: "submit", disabled: busy || !name.trim() || !ref.trim()},
+            busy ? "Creating…" : mode === "preview" ? "Create preview" : "Create fork")),
+        msg ? h("div", {className: "rshell-new-app-msg"}, msg) : null));
+  }
+
+  function WorkspacePanel({open, workspaces, onClose, onRefresh}) {
+    const [detail, setDetail] = useState(null);
+    const [msg, setMsg] = useState("");
+    if (!open) return null;
+    function action(ws, name, body) {
+      setMsg(name + "…");
+      return api("/api/workspaces/" + ws.id + "/" + name,
+        {method: "POST", body: JSON.stringify(body || {})}).then(() => {
+          setMsg("");
+          setDetail(null);
+          return onRefresh();
+        }).catch((err) => setMsg(err.error || (name + " failed")));
+    }
+    function compare(ws) {
+      setMsg("Comparing…");
+      api("/api/workspaces/" + ws.id + "?diff=1").then((data) => {
+        setDetail(data.diff || {});
+        setMsg("");
+      }).catch((err) => setMsg(err.error || "Compare failed"));
+    }
+    function discard(ws) {
+      setMsg("Checking source…");
+      api("/api/workspaces/" + ws.id + "/delete", {method: "POST", body: "{}"}).then(() => {
+        setMsg("");
+        setDetail(null);
+        onRefresh();
+      }).catch((err) => {
+        if (!window.confirm((err.error || "Workspace has unpreserved work.") + "\n\nDiscard it permanently?")) {
+          setMsg(err.error || "Discard cancelled.");
+          return;
+        }
+        action(ws, "delete", {force: true});
+      });
+    }
+    function applyAccepted(ws) {
+      if (!window.confirm("Apply this kept branch to the current canonical checkout?")) return;
+      action(ws, "apply");
+    }
+    return h("div", {className: "rshell-modal-backdrop"},
+      h("div", {className: "rshell-workspace-panel"},
+        h("div", {className: "rshell-modal-head"}, h("h3", null, "Workspaces"),
+          h("button", {className: "rshell-modal-close", title: "Close", onClick: onClose}, "×")),
+        h("div", {className: "rshell-workspace-list"},
+          workspaces.length ? workspaces.map((ws) => h("div", {className: "rshell-workspace-item", key: ws.id},
+            h("div", {className: "rshell-workspace-item-head"},
+              h("b", null, ws.name), h("span", {className: "state " + ws.status}, ws.status)),
+            h("div", {className: "rshell-workspace-meta"}, ws.app_key, " · ", ws.mode, " · ",
+              (ws.branch || ws.owning_repo_base_sha.slice(0, 10))),
+            h("div", {className: "rshell-workspace-actions"},
+              ws.status === "running" && ws.url ? h("a", {href: ws.url, target: "_blank"}, "Open") : null,
+              ws.status === "running" ? h("button", {onClick: () => action(ws, "stop")}, "Stop") : null,
+              ws.status === "stopped" ? h("button", {onClick: () => action(ws, "start")}, "Start") : null,
+              ws.mode === "preview" ? h("button", {onClick: () => action(ws, "edit")}, "Start editing") : null,
+              h("button", {onClick: () => compare(ws)}, "Compare"),
+              ws.mode === "branch" && !ws.preserved_ref
+                ? h("button", {onClick: () => action(ws, "keep")}, "Keep branch") : null,
+              ws.preserved_ref && ws.status !== "applied"
+                ? h("button", {onClick: () => applyAccepted(ws)}, "Apply to canonical") : null,
+              h("button", {className: "danger", onClick: () => discard(ws)}, "Discard")))
+          ) : h("div", {className: "rshell-empty"}, "No workspaces.")),
+        detail ? h("pre", {className: "rshell-workspace-diff"},
+          (detail.status || "clean") + "\n" + (detail.commits || []).join("\n") + "\n\n" + (detail.patch || "")) : null,
+        msg ? h("div", {className: "rshell-new-app-msg"}, msg) : null));
+  }
+
+  function ReplayModal({feedbackId, initialGroupId, onClose}) {
+    const [audit, setAudit] = useState(null);
+    const [selectedProfiles, setSelectedProfiles] = useState(["baseline"]);
+    const [confirmResources, setConfirmResources] = useState(false);
+    const [groupId, setGroupId] = useState(null);
+    const [group, setGroup] = useState(null);
+    const [busy, setBusy] = useState(false);
+    const [msg, setMsg] = useState("");
+
+    useEffect(() => {
+      if (!feedbackId) return;
+      setAudit(null);
+      setSelectedProfiles(["baseline"]);
+      setConfirmResources(false);
+      setGroupId(initialGroupId || null);
+      setGroup(null);
+      setBusy(false);
+      setMsg("Checking replay completeness…");
+      api("/api/replays/inspect/" + encodeURIComponent(feedbackId)).then((data) => {
+        setAudit(data.replay);
+        setMsg("");
+      }).catch((err) => setMsg(err.error || "Replay audit failed."));
+    }, [feedbackId, initialGroupId]);
+
+    useEffect(() => {
+      if (!groupId) return undefined;
+      let active = true;
+      let timer = null;
+      function poll() {
+        api("/api/replays/" + encodeURIComponent(groupId)).then((data) => {
+          if (!active) return;
+          const next = data.replay;
+          setGroup(next);
+          setMsg("");
+          if (next.status !== "complete" && next.status !== "deleted") {
+            timer = setTimeout(poll, 2000);
+          }
+        }).catch((err) => {
+          if (!active) return;
+          setMsg(err.error && !err.error.includes("not found") ? err.error : "Starting replay workspace…");
+          timer = setTimeout(poll, 1500);
+        });
+      }
+      poll();
+      return () => {
+        active = false;
+        if (timer) clearTimeout(timer);
+      };
+    }, [groupId]);
+
+    if (!feedbackId) return null;
+    const profiles = (audit && audit.profiles) || [];
+    const runnable = audit && audit.workspace_ready && ["exact", "source-exact"].includes(audit.exactness);
+    function toggleProfile(name) {
+      if (selectedProfiles.includes(name)) {
+        if (selectedProfiles.length > 1) setSelectedProfiles(selectedProfiles.filter((item) => item !== name));
+      } else if (selectedProfiles.length < 3) {
+        setSelectedProfiles([...selectedProfiles, name]);
+      }
+    }
+    function launch() {
+      setBusy(true);
+      setMsg("Starting replay workspace…");
+      api("/api/replays", {method: "POST", body: JSON.stringify({
+        feedback_id: feedbackId,
+        profiles: selectedProfiles,
+        confirm_resources: confirmResources
+      })}).then((data) => {
+        setGroupId(data.group_id);
+        setBusy(false);
+      }).catch((err) => {
+        setBusy(false);
+        setMsg(err.error || "Replay launch failed.");
+      });
+    }
+    function groupAction(action, body) {
+      setBusy(true);
+      setMsg(action === "keep" ? "Preserving branch…" : "Discarding replay resources…");
+      api("/api/replays/" + encodeURIComponent(group.id) + "/" + action,
+        {method: "POST", body: JSON.stringify(body || {})}).then((data) => {
+          setGroup(data.replay);
+          setBusy(false);
+          setMsg("");
+        }).catch((err) => {
+          setBusy(false);
+          setMsg(err.error || (action + " failed"));
+        });
+    }
+    function discard() {
+      if (!window.confirm("Delete these replay containers and volumes? Preserved Git branches remain available.")) return;
+      groupAction("delete", {force: true});
+    }
+    const consistency = group && group.evidence_consistency;
+    return h("div", {className: "rshell-modal-backdrop"},
+      h("div", {className: "rshell-replay-modal"},
+        h("div", {className: "rshell-modal-head"},
+          h("div", null, h("h3", null, "Replay feedback"),
+            h("span", {className: "rshell-replay-id"}, feedbackId)),
+          h("button", {className: "rshell-modal-close", title: "Close", onClick: onClose}, "×")),
+        h("div", {className: "rshell-replay-body"},
+          audit ? h("div", {className: "rshell-replay-audit"},
+            h("b", null, audit.exactness),
+            h("span", null, audit.workspace_ready ? "source snapshot ready" : "workspace unavailable"),
+            (audit.reasons || []).map((reason) => h("div", {key: reason}, reason))) : null,
+          !groupId && audit ? h("div", {className: "rshell-replay-launch"},
+            h("div", {className: "rshell-field"}, h("span", null, "profiles"),
+              h("div", {className: "rshell-replay-profiles"}, profiles.map((name) =>
+                h("label", {key: name},
+                  h("input", {type: "checkbox", checked: selectedProfiles.includes(name),
+                    onChange: () => toggleProfile(name)}), h("span", null, name))))),
+            selectedProfiles.length > 1 ? h("label", {className: "rshell-check-row"},
+              h("input", {type: "checkbox", checked: confirmResources,
+                onChange: (e) => setConfirmResources(e.target.checked)}),
+              h("span", null, "Confirm provider cost and one Docker workspace per variant")) : null,
+            h("button", {className: "rshell-button primary", onClick: launch,
+              disabled: busy || !runnable || (selectedProfiles.length > 1 && !confirmResources)},
+              busy ? "Starting…" : selectedProfiles.length > 1 ? "Run variants" : "Run replay")) : null,
+          group ? h(React.Fragment, null,
+            h("div", {className: "rshell-replay-common"},
+              h("span", null, group.status),
+              h("span", null, group.exactness),
+              consistency ? h("span", {className: consistency.byte_identical_across_variants ? "ok" : "bad"},
+                consistency.byte_identical_across_variants ? "identical task evidence" : "task evidence mismatch") : null),
+            h("div", {className: "rshell-replay-grid"}, (group.variants || []).map((variant) => {
+              const result = variant.result || {};
+              const browser = result.browser || {};
+              const diff = result.diff || {};
+              const metricResult = (browser.results || []).find((item) => item.metric_artifact);
+              const metricArtifact = metricResult && metricResult.metric_artifact;
+              const effective = result.effective_profile || {};
+              const profile = [effective.adapter, effective.model, effective.autonomy].some(Boolean)
+                ? effective : (variant.profile || {});
+              const accepted = group.review && group.review.variant_id === variant.id;
+              const screenshot = browser.ok && group.status !== "deleted"
+                ? "/api/replays/" + group.id + "/" + variant.id + "/screenshot?v=" + encodeURIComponent(group.updated_at || "")
+                : null;
+              return h("section", {className: "rshell-replay-variant", key: variant.id},
+                h("div", {className: "rshell-replay-variant-head"},
+                  h("b", null, (variant.profile && variant.profile.name) || variant.id),
+                  h("span", {className: "state " + variant.status}, variant.status || "unknown")),
+                h("div", {className: "rshell-replay-meta"},
+                  [profile.adapter, profile.model, profile.autonomy].filter(Boolean).join(" · ") || "profile pending",
+                  variant.duration_seconds != null ? " · " + variant.duration_seconds + "s" : ""),
+                screenshot ? h("img", {className: "rshell-replay-shot", src: screenshot,
+                  alt: "Rendered replay result for " + ((variant.profile && variant.profile.name) || variant.id)}) : null,
+                h("div", {className: "rshell-replay-checks"},
+                  h("span", {className: browser.ok ? "ok" : "bad"}, browser.ok ? "browser passed" : "browser pending/failed"),
+                  h("span", null, result.feedback_status || result.workspace_status || "pending"),
+                  h("span", null, (diff.commits || []).length + " commit" + ((diff.commits || []).length === 1 ? "" : "s"))),
+                h("div", {className: "rshell-workspace-actions"},
+                  result.url && group.status !== "deleted" ? h("a", {href: result.url, target: "_blank"}, "Open live") : null,
+                  (diff.commits || []).length && !(group.review && group.review.decision === "accepted")
+                    ? h("button", {onClick: () => groupAction("keep", {variant_id: variant.id}), disabled: busy}, "Keep branch") : null,
+                  accepted ? h("b", {className: "rshell-replay-kept"}, "Kept") : null),
+                metricArtifact ? h("details", {className: "rshell-replay-diff"},
+                  h("summary", null, "Metric artifact"),
+                  h("pre", null, JSON.stringify(metricArtifact, null, 2))) : null,
+                diff.patch ? h("details", {className: "rshell-replay-diff"},
+                  h("summary", null, "Source diff"), h("pre", null, diff.patch)) : null);
+            })),
+            group.status !== "deleted" ? h("div", {className: "rshell-replay-footer"},
+              h("button", {className: "rshell-button secondary danger", onClick: discard, disabled: busy},
+                "Discard replay resources")) : null) : null,
+          msg ? h("div", {className: "rshell-new-app-msg"}, msg) : null)));
+  }
+
+  function WorkspaceBanner({workspace}) {
+    if (!workspace) return null;
+    const target = workspace.control_url
+      ? workspace.control_url + "/?workspaces=1&workspace=" + encodeURIComponent(workspace.id) : null;
+    return h("div", {className: "rshell-workspace-banner"},
+      h("b", null, "Fork: " + workspace.name),
+      h("span", null, workspace.mode, " · ", (workspace.branch || workspace.base_sha || "").slice(0, 24)),
+      target ? h("a", {href: target, target: "_blank"}, "Manage") : null);
+  }
+
   function Catalog({apps, selected, setSelected, search, setSearch, sort, setSort, reverse, setReverse,
-      open, collapsed, onCollapse, onNewApp}) {
+      open, collapsed, onCollapse, onNewApp, workspaces, onFork, onWorkspaces}) {
     const rows = useMemo(() => {
       const q = (search || "").toLowerCase();
       const filtered = apps
@@ -966,18 +1303,31 @@
               }}, "+ New app")),
           h("div", {className: "rshell-row-meta"}, "gallery & runner feedback",
             general.metrics && general.metrics.open ? " · ●" + general.metrics.open + " open" : "")) : null,
-        h("div", {className: "rshell-app-count"}, rows.length + " apps"),
-        rows.map((a) => h("div", {key: a.key, className: "rshell-row" + (a.key === selected ? " active" : ""),
-          onClick: () => setSelected(a.key)},
-          h("div", {className: "rshell-row-title"}, a.port ? a.port + " · " : "", a.title),
-          h("div", {className: "rshell-row-meta"},
-            a.metrics.avg_stars ? "★" + a.metrics.avg_stars + " " : "",
-            a.metrics.open ? "●" + a.metrics.open + " open" : a.kind),
-          h("div", null, (a.tags || []).map((t) => h("span", {key: t, className: "rshell-tag",
-            style: {background: a.color || "#888"}}, t)))))));
+        h("div", {className: "rshell-app-count"},
+          h("span", null, rows.length + " apps"),
+          workspaces.length ? h("button", {onClick: onWorkspaces}, workspaces.length + " workspace" +
+            (workspaces.length === 1 ? "" : "s")) : null),
+        rows.map((a) => h(React.Fragment, {key: a.key},
+          h("div", {className: "rshell-row" + (a.key === selected ? " active" : ""),
+            onClick: () => setSelected(a.key)},
+            h("div", {className: "rshell-row-title-line"},
+              h("div", {className: "rshell-row-title"}, a.port ? a.port + " · " : "", a.title),
+              h("button", {className: "rshell-fork-btn", title: "Fork app in workspace", onClick: (evt) => {
+                evt.stopPropagation(); onFork(a);
+              }}, "⑂")),
+            h("div", {className: "rshell-row-meta"},
+              a.metrics.avg_stars ? "★" + a.metrics.avg_stars + " " : "",
+              a.metrics.open ? "●" + a.metrics.open + " open" : a.kind),
+            h("div", null, (a.tags || []).map((t) => h("span", {key: t, className: "rshell-tag",
+              style: {background: a.color || "#888"}}, t)))),
+          workspaces.filter((ws) => ws.app_key === a.key).map((ws) => h("button", {key: ws.id,
+            className: "rshell-workspace-child", title: ws.branch || ws.owning_repo_base_sha,
+            onClick: () => ws.url ? window.open(ws.url, "_blank") : onWorkspaces()},
+            h("span", {className: "dot " + ws.status}), "⑂ ", ws.name,
+            h("span", null, ws.status)))))));
   }
 
-  function Entry({entry, depth, children, actions, onReply, onAction, onPreview}) {
+  function Entry({entry, depth, children, actions, onReply, onAction, onPreview, canReplay, onReplay}) {
     const isSystem = entry.kind === "system" || entry.author === "claude";
     const marginLeft = Math.min(depth * 14, 56);
     const st = entry.status || "new";
@@ -999,15 +1349,18 @@
         isSystem ? h("b", {style: {color: "#2980b9"}}, "⚙ " + actor(entry)) : null,
         !isSystem && entry.stars ? h("span", {style: {color: "#cc7a00", fontSize: 13, marginRight: 6}}, "★".repeat(entry.stars)) : null,
         status, " ", ts(entry.ts), entry.user && entry.user.name ? " · " + entry.user.name : "",
+        canReplay && entry.replay_eligible ? h("button", {className: "rshell-replay-entry",
+          title: "Replay this completed task in an isolated workspace", onClick: () => onReplay(entry.id)}, "Replay") : null,
         h("button", {className: "rshell-reply", onClick: () => onReply(entry)}, "reply")),
       h("div", {className: "rshell-entry-body"}, entry.comment || ""),
       entry.shot_url ? h("img", {className: "rshell-shot", src: entry.shot_url}) : null,
+      h(DesignReferenceSummary, {entry}),
       h(AnnotationSummary, {entry, onPreview}),
       h(VoiceSummary, {entry}),
       actionBlock);
     return h("div", {className: "rshell-thread"}, body,
       (children[entry.id] || []).map((c) => h(Entry, {key: c.id, entry: c, depth: depth + 1, children,
-        actions, onReply, onAction, onPreview})));
+        actions, onReply, onAction, onPreview, canReplay, onReplay})));
   }
 
   function AccountMenu({boot}) {
@@ -1018,7 +1371,12 @@
     const verified = Boolean(user && user.name && mode !== "none");
     const name = user.name || "anonymous";
     const items = [];
-    if (auth.is_admin) items.push(["Queue", "/queue", "app-frame"], ["Settings", "/settings", "app-frame"]);
+    if (auth.is_admin) {
+      const workspaceHref = boot.workspace && boot.workspace.control_url
+        ? boot.workspace.control_url + "/?workspaces=1" : "/?workspaces=1";
+      items.push(["Workspaces", workspaceHref, "_top"], ["Queue", "/queue", "app-frame"],
+        ["Settings", "/settings", "app-frame"]);
+    }
     if (verified) {
       items.push(["Profile", "/profile", "app-frame"], ["Sign out", "/logout", "_top"]);
     } else {
@@ -1037,7 +1395,7 @@
   }
 
   function Feedback({boot, selected, selectedApp, feedback, setFeedback, reloadApps,
-      open, collapsed, onCollapse}) {
+      open, collapsed, onCollapse, onReplay}) {
     const [stars, setStars] = useState("");
     const [comment, setComment] = useState("");
     const [shot, setShot] = useState(null);
@@ -1049,6 +1407,10 @@
     const [retainedAudioRef, setRetainedAudioRef] = useState(null);
     const [narrativeClockStart, setNarrativeClockStart] = useState(null);
     const [replyTo, setReplyTo] = useState(null);
+    const [designRefs, setDesignRefs] = useState([]);
+    const [designAttachOpen, setDesignAttachOpen] = useState(false);
+    const [designUrl, setDesignUrl] = useState("");
+    const [designLabel, setDesignLabel] = useState("");
     const [previewEntry, setPreviewEntry] = useState(null);
     const [msg, setMsg] = useState("");
     const [recording, setRecording] = useState(false);
@@ -1093,6 +1455,10 @@
       narrativeClockRef.current = null;
       if (narrativeClockStart !== null) setNarrativeClockStart(null);
       if (shot || shotApp || shotSource || annotations.length || shotEditorOpen) clearShotDraft();
+      if (designRefs.length) setDesignRefs([]);
+      if (designAttachOpen) setDesignAttachOpen(false);
+      if (designUrl) setDesignUrl("");
+      if (designLabel) setDesignLabel("");
     }, [selected]);
 
     const items = feedback.items || [];
@@ -1102,6 +1468,7 @@
     const auth = (boot && boot.auth) || {};
     const user = (boot && boot.user) || {};
     const voice = (boot && boot.voice) || {};
+    const figma = (((boot && boot.agent_capabilities) || {}).figma) || {};
     const anonymousHeld = Boolean(auth.allow_anonymous && auth.mode !== "none" && !(user && user.name));
 
     function refresh() {
@@ -1111,8 +1478,8 @@
     function save() {
       const draftShot = shot && (!shotApp || shotApp === selected) ? shot : null;
       const draftAnnotations = draftShot ? annotations : [];
-      if (!stars && !comment.trim() && !draftShot && !retainedAudioRef) {
-        setMsg("Add a rating, comment, or screenshot.");
+      if (!stars && !comment.trim() && !draftShot && !retainedAudioRef && !designRefs.length) {
+        setMsg("Add a rating, comment, screenshot, or design reference.");
         return;
       }
       setMsg(draftShot && draftAnnotations.length ? "Compositing annotation…" : "");
@@ -1122,6 +1489,7 @@
           annotations: screenshot ? draftAnnotations : [],
           transcript_segments: transcriptSegments,
           audio_ref: retainedAudioRef,
+          design_refs: designRefs,
           reply_to: target ? [target.id] : []};
         return api("/api/feedback/" + encodeURIComponent(selected), {method: "POST", body: JSON.stringify(payload)});
       })
@@ -1132,6 +1500,10 @@
           clearShotDraft();
           setTranscriptSegments([]);
           setRetainedAudioRef(null);
+          setDesignRefs([]);
+          setDesignAttachOpen(false);
+          setDesignUrl("");
+          setDesignLabel("");
           narrativeClockRef.current = null;
           setNarrativeClockStart(null);
           setReplyTo(null);
@@ -1372,6 +1744,43 @@
       r.readAsDataURL(file);
     }
 
+    function addDesignRef() {
+      const raw = designUrl.trim();
+      if (!raw) {
+        setMsg("Paste a node-specific Figma URL.");
+        return;
+      }
+      try {
+        const parsed = new URL(raw);
+        const host = parsed.hostname.toLowerCase();
+        const make = parsed.pathname.startsWith("/make/");
+        if (parsed.protocol !== "https:" || !["figma.com", "www.figma.com"].includes(host)) {
+          throw new Error("Use an https://figma.com URL.");
+        }
+        if (!make && !parsed.searchParams.get("node-id")) {
+          throw new Error("Copy a Figma URL for a specific frame or component with node-id.");
+        }
+      } catch (e) {
+        setMsg((e && e.message) || "Invalid Figma URL.");
+        return;
+      }
+      if (designRefs.some((ref) => ref.url === raw)) {
+        setMsg("That design reference is already attached.");
+        return;
+      }
+      if (designRefs.length >= 5) {
+        setMsg("A feedback item can carry at most five design references.");
+        return;
+      }
+      setDesignRefs(designRefs.concat([{provider: "figma", url: raw, label: designLabel.trim(), access: "read"}]));
+      setDesignUrl("");
+      setDesignLabel("");
+      setDesignAttachOpen(false);
+      setMsg(figma.read_context === "available"
+        ? "Figma node attached."
+        : "Figma node attached; it will wait for connector authorization before dispatch.");
+    }
+
     function annotationDoc() {
       try {
         const iframe = document.getElementById("app-frame");
@@ -1402,11 +1811,17 @@
       api("/api/action", {method: "POST", body: JSON.stringify({key: selected, value, reply_to: replyToId})})
         .then((data) => {
           setFeedback(data);
-          setMsg(data.entry && data.entry.status === "held"
-            ? "✓ recorded “" + value + "” — queued for review"
-            : "✓ recorded “" + value + "” — processing shortly");
+          if (data.proposal_result) {
+            setMsg(data.proposal_result.action === "approved"
+              ? "Proposal approved and merged into the accepted branch."
+              : "Proposal rejected; its branch was retained.");
+          } else {
+            setMsg(data.entry && data.entry.status === "held"
+              ? "✓ recorded “" + value + "” — queued for review"
+              : "✓ recorded “" + value + "” — processing shortly");
+          }
           reloadApps();
-        });
+        }).catch((e) => setMsg(e.error || "Action failed."));
     }
 
     return h("aside", {className: "rshell-feedback" + (open ? " open" : "") + (collapsed ? " collapsed" : "")},
@@ -1418,6 +1833,10 @@
         h("h4", null, "Feedback"),
         h("button", {className: "rshell-collapse-btn", title: "Collapse feedback", onClick: onCollapse}, "›")),
       h("div", {style: {fontSize: 11, color: "#777", marginBottom: 6}}, selectedApp ? selectedApp.title : "Select an app"),
+      selectedApp && selectedApp.proposal ? h("div", {className: "rshell-proposal-banner"},
+        h("b", null, "Proposal preview"),
+        h("code", null, selectedApp.proposal.branch),
+        h("span", null, "@" + String(selectedApp.proposal.sha || "").slice(0, 8))) : null,
       h("div", {style: {fontSize: 15, color: "#cc7a00", marginBottom: 6}},
         [1, 2, 3, 4, 5].map((n) => h("label", {key: n, style: {marginRight: 4}},
           h("input", {type: "radio", name: "stars", checked: Number(stars) === n, onChange: () => setStars(n),
@@ -1441,7 +1860,31 @@
         anonymousHeld ? null : h("button", {className: "rshell-button secondary",
           title: "Browser screen capture", onClick: nativeCapture}, "▣ Native"),
         anonymousHeld ? null : h("label", {className: "rshell-button secondary"}, "⬆ upload",
-          h("input", {type: "file", accept: "image/*", style: {display: "none"}, onChange: (e) => upload(e.target.files[0])}))),
+          h("input", {type: "file", accept: "image/*", style: {display: "none"}, onChange: (e) => upload(e.target.files[0])})),
+        figma.enabled ? h("button", {className: "rshell-button secondary", title: "Attach Figma node",
+          onClick: () => setDesignAttachOpen(!designAttachOpen)}, "◇ Design") : null),
+      designAttachOpen ? h("div", {className: "rshell-design-attach"},
+        h("div", {className: "rshell-design-attach-head"},
+          h("b", null, "Attach Figma node"),
+          h("span", {className: "rshell-design-state " + (figma.read_context || "unavailable")},
+            figma.read_context || "unavailable")),
+        h("input", {className: "rshell-input", type: "url", placeholder: "https://figma.com/design/…?node-id=…",
+          value: designUrl, onChange: (e) => setDesignUrl(e.target.value)}),
+        h("input", {className: "rshell-input", placeholder: "label (optional)", value: designLabel,
+          onChange: (e) => setDesignLabel(e.target.value), onKeyDown: (e) => {
+            if (e.key === "Enter") addDesignRef();
+          }}),
+        anonymousHeld ? h("div", {className: "rshell-design-note"},
+          "This submission will be held for moderation before any provider fetch.") : null,
+        h("div", {className: "rshell-design-actions"},
+          h("button", {className: "rshell-button secondary", onClick: () => setDesignAttachOpen(false)}, "Cancel"),
+          h("button", {className: "rshell-button primary", onClick: addDesignRef}, "Attach"))) : null,
+      designRefs.length ? h("div", {className: "rshell-design-drafts"}, designRefs.map((ref, idx) =>
+        h("div", {className: "rshell-design-draft", key: ref.url},
+          h("a", {href: ref.url, target: "_blank", rel: "noopener noreferrer"}, designRefTitle(ref, idx)),
+          h("button", {title: "Remove design reference", onClick: () => {
+            setDesignRefs(designRefs.filter((_item, itemIdx) => itemIdx !== idx));
+          }}, "×")))) : null,
       shot ? h(ShotThumbnail, {image: shot, annotations, onOpen: () => setShotEditorOpen(true)}) : null,
       h("button", {className: "rshell-button primary", onClick: save}, "Save feedback"),
       h("div", {className: "rshell-msg"}, msg),
@@ -1449,7 +1892,8 @@
       h("div", {style: {fontSize: 11, color: "#666", fontWeight: 700, marginBottom: 4}}, "prior feedback"),
       items.length ? t.roots.map((root) => h(Entry, {key: root.id, entry: root, depth: 0, children: t.children,
         actions: feedback.actions, onReply: (e) => setReplyTo({key: selected, id: e.id}), onAction: action,
-        onPreview: (e) => setPreviewEntry(e)}))
+        onPreview: (e) => setPreviewEntry(e), canReplay: boot.auth && boot.auth.is_admin && !boot.workspace,
+        onReplay}))
         : h("div", {style: {fontSize: 12, color: "#777"}}, "No feedback yet."));
   }
 
@@ -1467,12 +1911,21 @@
     const [catCollapsed, setCatCollapsed] = useState(false);
     const [fbCollapsed, setFbCollapsed] = useState(false);
     const [newAppOpen, setNewAppOpen] = useState(false);
+    const [workspaceApp, setWorkspaceApp] = useState(null);
+    const [workspacePanelOpen, setWorkspacePanelOpen] = useState(false);
+    const [workspaces, setWorkspaces] = useState([]);
+    const [replayFeedbackId, setReplayFeedbackId] = useState(null);
+    const [replayGroupId, setReplayGroupId] = useState(null);
     // Deep-link query args (everything except our own `app`) captured at load, forwarded to the mounted
     // app's iframe so `/?app=X&node=crit` behaves like `/app/X/?node=crit`. Cleared when the user
     // manually switches apps, since those args are specific to the deep-linked app.
     const [frameQuery, setFrameQuery] = useState(() => {
       const p = new URLSearchParams(location.search);
       p.delete("app");
+      p.delete("replay");
+      p.delete("replay_group");
+      p.delete("workspaces");
+      p.delete("workspace");
       return p.toString();
     });
 
@@ -1502,6 +1955,17 @@
       return loadApps();
     }
 
+    function loadWorkspaces() {
+      if (!boot || !boot.auth || !boot.auth.is_admin || boot.workspace) return Promise.resolve();
+      return api("/api/workspaces").then((data) => setWorkspaces(data.workspaces || [])).catch(() => {});
+    }
+
+    function workspaceCreated() {
+      setWorkspaceApp(null);
+      setWorkspacePanelOpen(true);
+      return loadWorkspaces();
+    }
+
     useEffect(() => {
       api("/api/bootstrap").then((b) => {
         const params = new URLSearchParams(location.search);
@@ -1510,6 +1974,12 @@
         setApps(b.apps || []);
         setGeneral(b.general || null);
         setSelectedState(fromUrl || b.general_key);
+        if (params.get("replay")) setReplayFeedbackId(params.get("replay"));
+        if (params.get("replay_group")) setReplayGroupId(params.get("replay_group"));
+        if (b.auth && b.auth.is_admin && !b.workspace) {
+          api("/api/workspaces").then((data) => setWorkspaces(data.workspaces || [])).catch(() => {});
+          if (params.get("workspaces") === "1") setWorkspacePanelOpen(true);
+        }
       });
     }, []);
 
@@ -1523,6 +1993,7 @@
       const id = setInterval(() => {
         loadApps();
         api("/api/feedback/" + encodeURIComponent(selected)).then(setFeedback);
+        loadWorkspaces();
       }, boot.poll_ms);
       return () => clearInterval(id);
     }, [boot, selected]);
@@ -1530,7 +2001,9 @@
     useEffect(() => {
       window.curiatorShell = Object.assign({}, window.curiatorShell || {}, {
         selectApp: (key) => setSelected(key),
-        openNewAppWizard: () => setNewAppOpen(true)
+        openNewAppWizard: () => setNewAppOpen(true),
+        openWorkspaces: () => setWorkspacePanelOpen(true),
+        openReplay: (feedbackId) => setReplayFeedbackId(feedbackId)
       });
     }, [boot]);
 
@@ -1543,22 +2016,33 @@
 
     return h("div", {className: "rshell"},
       h(NewAppWizard, {open: newAppOpen, onClose: () => setNewAppOpen(false), onCreated: newAppCreated}),
+      h(WorkspaceWizard, {app: workspaceApp, open: Boolean(workspaceApp), onClose: () => setWorkspaceApp(null),
+        onCreated: workspaceCreated}),
+      h(WorkspacePanel, {open: workspacePanelOpen, workspaces,
+        onClose: () => setWorkspacePanelOpen(false), onRefresh: loadWorkspaces}),
+      h(ReplayModal, {feedbackId: replayFeedbackId, initialGroupId: replayGroupId, onClose: () => {
+        setReplayFeedbackId(null);
+        setReplayGroupId(null);
+      }}),
       h("div", {className: "rshell-mobilebar"},
         h("button", {className: "shell-mbtn", onClick: () => { setCatOpen(!catOpen); setFbOpen(false); }}, "☰ Library"),
         h("div", {style: {flex: 1, textAlign: "center"}}, wordmark(14)),
         h("button", {className: "shell-mbtn", onClick: () => { setFbOpen(!fbOpen); setCatOpen(false); }}, "💬 Feedback")),
+      h(WorkspaceBanner, {workspace: boot.workspace}),
       h("div", {className: "rshell-main"},
         h("div", {className: "rshell-scrim" + (catOpen || fbOpen ? " open" : ""), onClick: () => { setCatOpen(false); setFbOpen(false); }}),
         h(Catalog, {apps: allApps, selected, setSelected, search, setSearch, sort, setSort, reverse, setReverse,
           open: catOpen, collapsed: catCollapsed, onCollapse: () => setCatCollapsed(true),
-          onNewApp: () => setNewAppOpen(true)}),
+          onNewApp: () => setNewAppOpen(true), workspaces,
+          onFork: (app) => setWorkspaceApp(app), onWorkspaces: () => setWorkspacePanelOpen(true)}),
         catCollapsed ? h("button", {className: "rshell-edge-tab left", title: "Expand library",
           onClick: () => setCatCollapsed(false)}, "Library") : null,
         h("iframe", {id: "app-frame", name: "app-frame", className: "rshell-frame", src}),
         fbCollapsed ? h("button", {className: "rshell-edge-tab right", title: "Expand feedback",
           onClick: () => setFbCollapsed(false)}, "Feedback") : null,
         h(Feedback, {boot, selected, selectedApp, feedback, setFeedback, reloadApps: loadApps,
-          open: fbOpen, collapsed: fbCollapsed, onCollapse: () => setFbCollapsed(true)})));
+          open: fbOpen, collapsed: fbCollapsed, onCollapse: () => setFbCollapsed(true),
+          onReplay: (feedbackId) => setReplayFeedbackId(feedbackId)})));
   }
 
   ReactDOM.createRoot(document.getElementById("react-entry-point")).render(h(App));

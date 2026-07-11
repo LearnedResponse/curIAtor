@@ -262,6 +262,23 @@ def test_smoke_browser_opens_apps_through_shell(collection, capsys, monkeypatch)
     assert payload["results"][0]["browser_smoke"]["message"] == "Sample app rendered"
 
 
+def test_smoke_retains_json_stdout_as_metric_artifact(collection, capsys):
+    from curiator import cli
+
+    metric_script = collection / "apps" / "metric_smoke.py"
+    metric_script.write_text('print(\'{"score": 0.875, "counts": {"tp": 7, "fn": 1}}\')\n')
+    gallery = collection / "gallery.yaml"
+    gallery.write_text(gallery.read_text().replace(
+        "source: apps/sample.py",
+        "source: apps/sample.py\n    smoke: python apps/metric_smoke.py",
+    ))
+
+    assert cli.main(["smoke", "--app", "sample", "--json"]) == 0
+    result = json.loads(capsys.readouterr().out)["results"][0]
+    assert json.loads(result["smoke_output"])["score"] == 0.875
+    assert result["metric_artifact"] == {"score": 0.875, "counts": {"tp": 7, "fn": 1}}
+
+
 def test_smoke_browser_writes_json_output_and_passes_artifact_dir(collection, capsys, monkeypatch):
     from curiator import browser_smoke, cli
 
@@ -301,6 +318,22 @@ def test_smoke_browser_writes_json_output_and_passes_artifact_dir(collection, ca
     assert browser["console_log"] == "feedback/replies/f1-browser-smoke/sample.console.json"
 
 
+def test_smoke_browser_passes_explicit_mobile_viewport(collection, capsys, monkeypatch):
+    from curiator import browser_smoke, cli
+
+    calls = []
+
+    def fake_browser_smoke_apps(cfg, apps, *, browser_bin=None, timeout=15.0, artifact_dir=None, viewport=None):
+        calls.append(viewport)
+        return {app: {"ok": True, "message": "rendered", "viewport": viewport} for app in apps}
+
+    monkeypatch.setattr(browser_smoke, "browser_smoke_apps", fake_browser_smoke_apps)
+    assert cli.main(["smoke", "--browser", "--viewport", "390x844", "--json"]) == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert calls == [(390, 844)]
+    assert payload["results"][0]["browser_smoke"]["viewport"] == [390, 844]
+
+
 def test_smoke_browser_failure_fails_app_result(collection, capsys, monkeypatch):
     from curiator import browser_smoke, cli
 
@@ -328,6 +361,80 @@ def test_browser_smoke_expression_rejects_proxy_start_diagnostic():
     assert 'lower.includes("proxy could not start")' in expression
     assert 'lower.includes("proxy is not reachable")' in expression
     assert 'lower.includes("requires javascript to load and work properly")' in expression
+
+
+def test_browser_smoke_counts_console_and_network_errors():
+    from curiator import browser_smoke
+
+    assert browser_smoke._console_error_count([
+        {"level": "error"},
+        {"level": "exception"},
+        {"level": "warning"},
+        {"level": "info"},
+    ]) == 2
+
+
+def test_browser_smoke_reload_drops_cached_mount_failure(monkeypatch):
+    from curiator import browser_smoke
+
+    seen = {}
+
+    class Response:
+        status = 200
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+    def fake_open(request, timeout):
+        seen["url"] = request.full_url
+        seen["method"] = request.method
+        seen["timeout"] = timeout
+        return Response()
+
+    monkeypatch.setattr(browser_smoke.urllib.request, "urlopen", fake_open)
+    assert browser_smoke._reload_app("http://127.0.0.1:8399", "shared app") is True
+    assert seen == {
+        "url": "http://127.0.0.1:8399/reload/shared%20app",
+        "method": "POST",
+        "timeout": 3.0,
+    }
+
+
+def test_browser_smoke_fallback_shell_uses_workspace_state_dir(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+
+    from curiator import browser_smoke
+
+    waits = iter([False, True])
+    seen = {}
+
+    def fake_popen(command, **kwargs):
+        seen["command"] = command
+        seen["kwargs"] = kwargs
+        return SimpleNamespace(poll=lambda: None, terminate=lambda: None)
+
+    monkeypatch.setattr(browser_smoke, "_wait_url", lambda *_args, **_kwargs: next(waits))
+    monkeypatch.setattr(browser_smoke, "_shell_path", lambda: tmp_path / "web_shell.py")
+    monkeypatch.setattr(browser_smoke.subprocess, "Popen", fake_popen)
+    state = tmp_path / "state"
+    cfg = {
+        "gallery_path": str(tmp_path / "gallery.yaml"),
+        "state_dir": str(state),
+        "repo_root": str(tmp_path),
+        "shell": {"port": 8345},
+    }
+
+    proc, url = browser_smoke._start_shell_if_needed(cfg, timeout=1)
+
+    assert proc is not None
+    assert url == "http://127.0.0.1:8345"
+    assert seen["command"][-4:] == [
+        "--gallery", str((tmp_path / "gallery.yaml").resolve()),
+        "--state-dir", str(state.resolve()),
+    ]
 
 
 def test_smoke_reports_failing_configured_smoke(collection, capsys):

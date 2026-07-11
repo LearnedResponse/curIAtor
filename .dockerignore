@@ -7,3 +7,11 @@ feedback/task_*.md
 docs/demo.gif
 collection/
 .venv/
+galleries/
+.planning/
+.clj-kondo/
+.lsp/
+feedback/
+release-evidence/
+dist/
+build/

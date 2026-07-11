@@ -85,7 +85,10 @@ def cmd_status(args) -> int:
     if cfg.get("link_path"):
         print(f"  link:    {cfg['link_path']}")
     print(f"  shell:   {_shell_url(cfg, app)}")
-    print(f"  git:     commit={git.get('commit')} branch={git.get('branch') or branch} include_ledger={git.get('include_ledger')}")
+    git_line = f"commit={git.get('commit')} branch={git.get('branch') or branch} include_ledger={git.get('include_ledger')}"
+    if git.get("branch") == "per-run":
+        git_line += f" accepted={git.get('accepted_branch') or 'main'}"
+    print(f"  git:     {git_line}")
     print(f"  repo:    {root} [{branch}{', dirty' if dirty else ', clean'}]")
     if app:
         spec = app_spec(cfg, app) or {}
@@ -103,6 +106,16 @@ def cmd_status(args) -> int:
         commands = spec.get("commands") if isinstance(spec.get("commands"), dict) else {}
         if commands.get("preview"):
             print(f"  preview: {commands['preview']}")
+        if git.get("branch") == "per-run":
+            from .proposals import list_proposals
+
+            proposals = [row for row in list_proposals(cfg, app=app) if row.get("state") in {"working", "open"}]
+            if proposals:
+                row = proposals[0]
+                print(
+                    f"  proposal: {row['state']} {row['branch']}@{str(row.get('sha') or '')[:8]}"
+                    f"{' (live preview)' if row['state'] == 'open' else ''}"
+                )
         print(f"  feedback:{open_n} open / {total} total")
         print(f"  next:    curiator work --app {app}")
     else:
@@ -133,7 +146,8 @@ def _doctor_scan_portability(node, where: str, issues: list[dict], needles: tupl
         for key, value in node.items():
             loc = f"{where}.{key}" if where else str(key)
             if isinstance(value, str):
-                if str(key) in _PORTABLE_PATH_KEYS and _looks_absolute_path(value):
+                is_http_route = str(key) == "path" and where.endswith(".smoke_http")
+                if str(key) in _PORTABLE_PATH_KEYS and not is_http_route and _looks_absolute_path(value):
                     issues.append({
                         "severity": "error",
                         "where": loc,
@@ -439,6 +453,55 @@ def _doctor_warn_proxy_base_path(issues: list[dict], *, name: str, root: Path, m
             "message": "FastAPI app does not appear to configure root_path for /app/<name>/",
         })
 
+    settings_text = _first_config_text(root, ("settings.js", "settings.cjs"))
+    is_nodered = (
+        '"node-red"' in package_text
+        or "'node-red'" in package_text
+        or "node-red --settings" in command_text
+        or bool(settings_text and "httpadminroot" in settings_text.lower())
+    )
+    if is_nodered:
+        if not mount.get("preserve_prefix"):
+            issues.append({
+                "severity": "warning",
+                "where": f"app {name} proxy",
+                "message": "Node-RED mount should set preserve_prefix: true for editor assets and /comms",
+            })
+        compact = settings_text.lower().replace(" ", "")
+        dynamic_prefix = "curiator_app" in compact and "/app/" in compact
+        literal_prefix = f"/app/{name}/" in compact
+        if not settings_text:
+            issues.append({
+                "severity": "warning",
+                "where": f"app {name} proxy",
+                "message": "Node-RED project has no settings.js/settings.cjs base-path configuration",
+            })
+        else:
+            if "httpadminroot" not in compact or not (dynamic_prefix or literal_prefix):
+                issues.append({
+                    "severity": "warning",
+                    "where": f"app {name} proxy",
+                    "message": (
+                        f"Node-RED settings must put httpAdminRoot under /app/{name}/ "
+                        "(or derive it from CURIATOR_APP)"
+                    ),
+                })
+            if "httpnoderoot" not in compact or not (dynamic_prefix or f"/app/{name}/api/" in compact):
+                issues.append({
+                    "severity": "warning",
+                    "where": f"app {name} proxy",
+                    "message": (
+                        f"Node-RED settings must put httpNodeRoot under /app/{name}/api/ "
+                        "(or derive it from CURIATOR_APP)"
+                    ),
+                })
+            if "credentialsecret" not in compact:
+                issues.append({
+                    "severity": "warning",
+                    "where": f"app {name} dependencies",
+                    "message": "Node-RED settings should configure credentialSecret for repeatable flows",
+                })
+
 
 def _doctor_issues(cfg: dict) -> list[dict]:
     import yaml
@@ -450,6 +513,22 @@ def _doctor_issues(cfg: dict) -> list[dict]:
     needles = tuple({str(repo), str(Path.home())} - {"", "/"})
     _doctor_scan_portability(raw, "gallery.yaml", issues, needles)
     _doctor_warn_voice_config(issues, cfg, repo)
+
+    from .proposals import doctor_issues as proposal_doctor_issues
+
+    issues.extend(proposal_doctor_issues(cfg))
+
+    from .dependencies import normalize
+
+    dependency_graph = normalize(cfg, strict=False)
+    issues.extend(
+        {"severity": "error", "where": "dependency graph", "message": message}
+        for message in dependency_graph["errors"]
+    )
+    issues.extend(
+        {"severity": "warning", "where": "dependency graph", "message": message}
+        for message in dependency_graph["warnings"]
+    )
 
     link = cfg.get("link") or {}
     if link:
@@ -467,6 +546,21 @@ def _doctor_issues(cfg: dict) -> list[dict]:
         mount = spec.get("mount") or {}
         root_path = Path(spec.get("root") or repo)
         source_path = Path(spec.get("source") or "")
+        try:
+            root_rel = root_path.resolve().relative_to(repo).as_posix()
+        except ValueError:
+            root_rel = None
+        if root_rel and root_rel != ".":
+            index_row = _git_output(repo, "ls-files", "-s", "--", root_rel) or ""
+            if index_row.startswith("160000 ") and not _is_git_toplevel(root_path):
+                issues.append({
+                    "severity": "error",
+                    "where": f"app {name} root",
+                    "message": (
+                        f"nested app gitlink is not materialized at {root_rel}; clone/init the app subrepo "
+                        "before running or publishing this collection"
+                    ),
+                })
         for label in ("root", "source"):
             raw_path = spec.get(label)
             if not raw_path:
@@ -558,7 +652,10 @@ def _doctor_issues(cfg: dict) -> list[dict]:
 def _print_agent_report(report: dict) -> None:
     print("Agent capabilities:")
     for name, capability in report.get("capabilities", {}).items():
-        status = "available" if capability.get("available") else "missing"
+        if name == "figma":
+            status = capability.get("read_context") or "unavailable"
+        else:
+            status = "available" if capability.get("available") else "missing"
         print(f"  {name}: {status} — {capability.get('reason')}")
     tools = report.get("tools") or {}
     for name in ("browser", "playwright", "docker", "git", "gh", "sqlite"):
@@ -573,9 +670,18 @@ def cmd_doctor(args) -> int:
     issues = _doctor_issues(cfg)
     errors = [i for i in issues if i.get("severity") == "error"]
     warnings = [i for i in issues if i.get("severity") == "warning"]
-    agent = agent_report(cfg) if getattr(args, "agent", False) else None
+    agent = agent_report(cfg, probe_runtime=True) if getattr(args, "agent", False) else None
+    from .dependencies import normalize, public_graph
+
+    dependency_graph = public_graph(normalize(cfg, strict=False))
     if args.json:
-        payload = {"ok": not errors, "errors": len(errors), "warnings": len(warnings), "issues": issues}
+        payload = {
+            "ok": not errors,
+            "errors": len(errors),
+            "warnings": len(warnings),
+            "issues": issues,
+            "dependencies": dependency_graph,
+        }
         if agent is not None:
             payload["agent"] = agent
         print(json.dumps(payload, indent=2))
@@ -588,6 +694,17 @@ def cmd_doctor(args) -> int:
             print(f"  {issue['severity'].upper()} {issue['where']}: {issue['message']}")
     if agent is not None:
         _print_agent_report(agent)
+    if dependency_graph["components"]:
+        print("Shared dependencies:")
+        for component in dependency_graph["components"]:
+            dependencies = ", ".join(component["depends_on"]) or "none"
+            print(
+                f"  component {component['key']}: {component['source']} "
+                f"(owner {component['owner_repo']}; depends on {dependencies})"
+            )
+        for app_row in dependency_graph["apps"]:
+            closure = ", ".join(app_row["closure"]) or "none"
+            print(f"  app {app_row['app']}: {closure}")
     return 1 if errors else 0
 
 
@@ -633,7 +750,18 @@ def _smoke_result_for_spec(cfg: dict, spec: dict, *, http: bool = False) -> dict
     result = _smoke_result_metadata(cfg, spec)
     try:
         name = result["app"]
-        ok, message = gitmem.smoke_app(cfg, name, spec.get("source"))
+        details = gitmem.smoke_app_details(cfg, name, spec.get("source"))
+        ok, message = bool(details["ok"]), str(details["message"])
+        smoke_output = str(details.get("stdout") or "")
+        if smoke_output:
+            result["smoke_output"] = smoke_output
+            try:
+                metric_artifact = json.loads(smoke_output)
+            except json.JSONDecodeError:
+                pass
+            else:
+                if isinstance(metric_artifact, (dict, list)):
+                    result["metric_artifact"] = metric_artifact
         if ok and http:
             http_result = gitmem.http_smoke_app(cfg, name, spec.get("source"), spec)
             result["http_smoke"] = http_result
@@ -652,15 +780,14 @@ def _merge_browser_smoke_results(
     *,
     browser_bin: str | None = None,
     artifact_dir: str | None = None,
+    viewport: tuple[int, int] | None = None,
 ) -> list[dict]:
     from .browser_smoke import browser_smoke_apps
 
-    by_app = browser_smoke_apps(
-        cfg,
-        [str(r["app"]) for r in results],
-        browser_bin=browser_bin,
-        artifact_dir=artifact_dir,
-    )
+    kwargs = {"browser_bin": browser_bin, "artifact_dir": artifact_dir}
+    if viewport:
+        kwargs["viewport"] = viewport
+    by_app = browser_smoke_apps(cfg, [str(r["app"]) for r in results], **kwargs)
     for result in results:
         browser = by_app.get(str(result["app"])) or {"ok": False, "message": "browser smoke result missing"}
         result["browser_smoke"] = browser
@@ -681,6 +808,7 @@ def _smoke_results(
     browser: bool = False,
     browser_bin: str | None = None,
     artifact_dir: str | None = None,
+    viewport: tuple[int, int] | None = None,
 ) -> list[dict]:
     specs = _smoke_work_specs(cfg, app)
     if jobs <= 1 or len(specs) <= 1:
@@ -690,6 +818,7 @@ def _smoke_results(
             results,
             browser_bin=browser_bin,
             artifact_dir=artifact_dir,
+            viewport=viewport,
         ) if browser else results
 
     from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -709,13 +838,31 @@ def _smoke_results(
         merged,
         browser_bin=browser_bin,
         artifact_dir=artifact_dir,
+        viewport=viewport,
     ) if browser else merged
+
+
+def _parse_viewport(raw: str | None) -> tuple[int, int] | None:
+    if not raw:
+        return None
+    match = re.fullmatch(r"(\d{2,5})[xX](\d{2,5})", raw.strip())
+    if not match:
+        raise ValueError("viewport must use WIDTHxHEIGHT, for example 390x844")
+    width, height = (int(match.group(1)), int(match.group(2)))
+    if not (240 <= width <= 10000 and 240 <= height <= 10000):
+        raise ValueError("viewport width and height must each be between 240 and 10000 pixels")
+    return width, height
 
 
 def cmd_smoke(args) -> int:
     cfg = load_config()
     if args.jobs < 1:
         print("curiator: smoke --jobs must be >= 1")
+        return 2
+    try:
+        viewport = _parse_viewport(getattr(args, "viewport", None))
+    except ValueError as exc:
+        print(f"curiator: smoke --viewport {exc}")
         return 2
     results = _smoke_results(
         cfg,
@@ -725,6 +872,7 @@ def cmd_smoke(args) -> int:
         browser=args.browser,
         browser_bin=args.browser_bin,
         artifact_dir=args.artifact_dir,
+        viewport=viewport,
     )
     ok = all(r["ok"] for r in results)
     payload = {"ok": ok, "results": results}
@@ -1058,8 +1206,9 @@ Use the scaffold command; it creates `apps/<name>/` and updates `gallery.yaml`:
 
     curiator app create revenue --template dash --title "Revenue dashboard"
 
-Templates: `dash`, `static`, `python`, `node`, `flask`, `fastapi`, `rust`, `react`, `svelte`, `vue`, `next`, `streamlit`, `gradio`.
+Templates: `dash`, `static`, `python`, `node`, `nodered`, `flask`, `fastapi`, `rust`, `react`, `svelte`, `vue`, `next`, `streamlit`, `gradio`.
 Node, Flask, FastAPI, and Rust use lightweight server scaffolds behind same-origin proxy mounts.
+Node-RED uses a prefix-preserving editor/API mount with a structural flow smoke.
 React/Svelte/Vue use Vite; React/Svelte/Vue/Next can auto-detect npm/pnpm/yarn/bun. Next, Streamlit, and Gradio use prefix-preserving proxy mounts.
 You can still edit `gallery.yaml` manually for existing apps.
 
@@ -1071,9 +1220,13 @@ feedback/shots/
 feedback/audio/
 feedback/tasks/
 feedback/replies/
+feedback/runs/
+feedback/replays/
 feedback/app_feedback.sqlite*
 feedback/app_feedback.json
 .curiator-users.json
+.curiator/cache/
+.curiator/worktrees/
 __pycache__/
 *.pyc
 """

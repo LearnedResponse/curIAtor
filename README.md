@@ -128,15 +128,22 @@ agent capabilities such as browser-smoke and Docker packaging. Add `curiator smo
 want proxy apps started briefly and checked over HTTP, or `curiator smoke --browser` when you need
 headless Brave to prove the app renders through the same-origin shell. For per-task proof receipts,
 `curiator smoke --browser --artifact-dir ... --output ... --json` writes screenshot, console-log, and
-JSON artifacts under `feedback/replies/`. Use `curiator release-preflight --http-smoke` or
-`curiator release-preflight --browser-smoke` to carry those opt-in checks into dependency-prepared
-publication preflights. In this checkout, `curiator release-preflight` runs those checks across the
+JSON artifacts under `feedback/replies/`. Use `curiator release-preflight --prepare-dependencies`
+to run explicit per-app `commands.bootstrap` steps before `--http-smoke` or `--browser-smoke` in
+publication preflights; use `curiator release-preflight --browser-smoke` for the shell-render gate
+without dependency preparation. In this checkout, `curiator release-preflight` runs those checks across the
 nested public example galleries under `galleries/` and rejects tracked runtime/auth artifacts such as
 local user stores, task traces, screenshots, SQLite sidecars, env files, cache files, and installed
 dependency directories, plus local editable/path dependency pins in requirements files; add `--fresh-clone` to
 verify the committed state survives a same-machine clone, and `--strict` to make doctor warnings fail
-publication gates. Add `--include-optional` when checking finance, phylogenetics, and ML alongside the
+publication gates. Add `--include-optional` when checking finance, phylogenetics, ML, and Node-RED alongside the
 minimum release set.
+
+For apps with a defended accepted-state boundary, opt into `git.branch: per-run`. Each feedback run
+then edits `curiator/run/<feedback_id>` in an ignored Git worktree, and `done` publishes that branch as
+the live shell preview with admin-only Approve/Reject actions. Approve smoke-tests and merges into
+`git.accepted_branch` (default `main`); Reject retains the branch without changing accepted state.
+Inspect the Git-derived registry with `curiator proposal list`. The default remains `git.branch: null`.
 Screenshot capture details and fidelity tradeoffs are in [`docs/SCREENSHOT_CAPTURE.md`](docs/SCREENSHOT_CAPTURE.md).
 Release gates and publication steps are tracked in [`docs/RELEASE.md`](docs/RELEASE.md).
 

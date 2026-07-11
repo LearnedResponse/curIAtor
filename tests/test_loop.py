@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from curiator import ledger
+from curiator import ledger, run_recovery
 from curiator.loop import adapters, loop, runlog
 
 
@@ -39,8 +39,8 @@ def test_run_once_dispatches_serially_in_order(cfg, monkeypatch, capsys):
     n = loop.run_once(cfg)
     assert n == 2
     assert seen == ["first", "second"]                              # serial, in order
-    # each item flipped new → working before dispatch
-    assert all(e["status"] == "working" for e in ledger.load(cfg)["sample"] if e["author"] == "user")
+    # A stub that exits without replying is source-clean, so both claims are safely requeued.
+    assert all(e["status"] == "new" for e in ledger.load(cfg)["sample"] if e["author"] == "user")
     # the run is visible on stdout: a ● new-feedback + ▶ launching line per item (what `serve` streams)
     out = capsys.readouterr().out
     assert out.count("● new feedback on sample") == 2 and out.count("▶ launching") == 2
@@ -70,6 +70,56 @@ def test_run_once_forces_explicit_anonymous_feedback_to_held(cfg, monkeypatch):
     assert user["status"] == "held"
     assert "anonymous feedback never auto-dispatches" in note["comment"]
     assert seen == []
+
+
+def test_run_once_holds_figma_feedback_until_connector_is_verified(cfg, monkeypatch):
+    from curiator import agent_capabilities
+
+    cfg["agent"]["adapter"] = "codex"
+    monkeypatch.setattr(agent_capabilities, "_figma_plugin_installed", lambda _adapter: (True, "installed"))
+    fid = ledger.save_entry(
+        cfg,
+        "sample",
+        comment="match this frame",
+        extra={"design_refs": [{
+            "provider": "figma",
+            "url": "https://www.figma.com/design/Abcd1234/Aviato?node-id=12-34",
+            "file_key": "Abcd1234",
+            "node_id": "12:34",
+            "access": "read",
+        }]},
+    )
+
+    class Stub:
+        @staticmethod
+        def run(_task):  # pragma: no cover - capability gate must prevent dispatch
+            raise AssertionError("unauthorized Figma task dispatched")
+
+    monkeypatch.setattr("curiator.loop.adapters.get", lambda _cfg: Stub)
+    assert loop.run_once(cfg) == 0
+    data = ledger.load(cfg)["sample"]
+    assert next(entry for entry in data if entry["id"] == fid)["status"] == "held"
+    assert any("doctor reports auth-required" in (entry.get("comment") or "") for entry in data)
+
+
+def test_moderation_approved_anonymous_feedback_can_dispatch(cfg, monkeypatch):
+    fid = ledger.save_entry(
+        cfg,
+        "sample",
+        comment="approved public note",
+        user={"id": "anonymous", "email": "", "name": "anonymous", "groups": []},
+        extra={"moderation_approved_at": "2026-07-10T00:00:00+00:00"},
+    )
+    seen = []
+
+    class Stub:
+        @staticmethod
+        def run(task):
+            seen.append(task.entry["id"])
+
+    monkeypatch.setattr("curiator.loop.adapters.get", lambda _cfg: Stub)
+    assert loop.run_once(cfg) == 1
+    assert seen == [fid]
 
 
 def test_run_once_holds_feedback_when_global_daily_quota_is_spent(cfg, monkeypatch):
@@ -148,7 +198,7 @@ def test_run_once_holds_account_over_per_user_quota_but_not_trusted(cfg, monkeyp
     note = next(e for e in data if e.get("kind") == "system" and held_id in (e.get("reply_to") or []))
     assert held["status"] == "held"
     assert "per_user_daily=1" in note["comment"]
-    assert trusted["status"] == "working"
+    assert trusted["status"] == "new"                              # stub exited cleanly without a reply
     assert trusted.get("dispatched_at")
     assert seen == [trusted_id]
 
@@ -166,9 +216,9 @@ def test_run_once_resets_item_on_adapter_error(cfg, monkeypatch):
     data = ledger.load(cfg)
     user = [e for e in data["sample"] if e["author"] == "user"][0]
     assert user["status"] == "new"                                  # reset, not stuck on 'working'
-    note = next(e for e in data["sample"] if e["author"] == "claude")
-    assert "loop error" in (note.get("comment") or "")
-    assert note.get("ts"), "loop-error notes must carry a ts — a null ts crashes render_history's sort"
+    notes = [e for e in data["sample"] if e["author"] == "claude"]
+    assert any("loop error" in (note.get("comment") or "") for note in notes)
+    assert all(note.get("ts") for note in notes), "loop-error notes must carry a ts"
 
 
 def test_run_once_resets_and_reraises_on_agent_interruption(cfg, monkeypatch):
@@ -283,9 +333,10 @@ def test_recover_interrupted_working_requeues_watcher_claim(cfg):
     ledger.set_status(cfg, "sample", [fid], "working")
     task = adapters.build_task(cfg, "sample", {**entry, "status": "working"})
     runlog.init_trace(task, "codex")
+    run_recovery.create_checkpoint(task, "codex")
     runlog.note(task, "status set to working; launching codex")
 
-    assert loop.recover_interrupted_working(cfg) == 1
+    assert loop.recover_interrupted_working(cfg) == {"total": 1, "requeued": 1, "held": 0}
 
     data = ledger.load(cfg)["sample"]
     user = next(e for e in data if e["id"] == fid)
@@ -293,7 +344,50 @@ def test_recover_interrupted_working_requeues_watcher_claim(cfg):
     trace = Path(task.reply_file).read_text()
     assert user["status"] == "new"
     assert "stale working claim" in note["comment"]
-    assert "requeued for another pass" in trace
+    assert "safely requeued" in trace
+
+
+def test_recover_interrupted_working_holds_missing_checkpoint(cfg):
+    fid = ledger.save_entry(cfg, "sample", comment="legacy stale claim", ts="t")
+    ledger.set_status(cfg, "sample", [fid], "working")
+
+    assert loop.recover_interrupted_working(cfg) == {"total": 1, "requeued": 0, "held": 1}
+
+    data = ledger.load(cfg)["sample"]
+    user = next(e for e in data if e["id"] == fid)
+    note = next(e for e in data if e.get("kind") == "system" and fid in (e.get("reply_to") or []))
+    assert user["status"] == "held"
+    assert "checkpoint is unavailable" in note["comment"]
+
+
+def test_run_once_holds_partial_edit_on_interruption(cfg, monkeypatch):
+    fid = ledger.save_entry(cfg, "sample", comment="interrupt after edit", ts="t")
+
+    class InterruptedAfterEdit:
+        @staticmethod
+        def run(task):
+            Path(task.source).write_text("partial source edit\n")
+            raise runlog.AgentInterrupted("agent interrupted by signal 15")
+
+    monkeypatch.setattr("curiator.loop.adapters.get", lambda _cfg: InterruptedAfterEdit)
+    with pytest.raises(runlog.AgentInterrupted):
+        loop.run_once(cfg)
+
+    data = ledger.load(cfg)["sample"]
+    user = next(e for e in data if e["id"] == fid)
+    note = next(e for e in data if e.get("kind") == "system" and fid in (e.get("reply_to") or []))
+    assert user["status"] == "held"
+    assert "Partial source changes were preserved" in note["comment"]
+    report = run_recovery.recovery_report(cfg, fid)
+    assert report["source_delta"] is True
+    assert report["restore_safe"] is True
+
+    # Repeated watcher starts do not duplicate notes, retry partial source, or lose the checkpoint.
+    note_count = len([e for e in data if e.get("kind") == "system" and fid in (e.get("reply_to") or [])])
+    assert loop.recover_interrupted_working(cfg) == {"total": 0, "requeued": 0, "held": 0}
+    data_after = ledger.load(cfg)["sample"]
+    assert len([e for e in data_after if e.get("kind") == "system" and fid in (e.get("reply_to") or [])]) == note_count
+    assert run_recovery.checkpoint_path(cfg, fid).exists()
 
 
 def test_recover_interrupted_working_skips_interactive_claim(cfg):
@@ -304,7 +398,7 @@ def test_recover_interrupted_working_skips_interactive_claim(cfg):
     runlog.init_trace(task, "interactive")
     runlog.note(task, "opened for interactive CLI work")
 
-    assert loop.recover_interrupted_working(cfg) == 0
+    assert loop.recover_interrupted_working(cfg) == {"total": 0, "requeued": 0, "held": 0}
 
     data = ledger.load(cfg)["sample"]
     user = next(e for e in data if e["id"] == fid)

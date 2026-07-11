@@ -33,6 +33,33 @@ def test_app_bundle_paths_and_commands(cfg, collection):
     assert "SMOKE OK" in body                               # smoke-test recipe
 
 
+def test_rebuilt_historical_task_context_never_leaks_future_agent_reply(cfg):
+    original = _entry(id="root", comment="fix the chart")
+    ledger.save_entry(cfg, "sample", entry_id="root", comment="fix the chart")
+    ledger.add_system_note(cfg, "sample", "the accepted answer", reply_to=["root"])
+    body = Path(build_task(cfg, "sample", original).task_file).read_text()
+    assert "the accepted answer" not in body
+
+
+def test_state_dir_routes_task_trace_ledger_and_reply_command(cfg, collection, tmp_path):
+    state = tmp_path / "state"
+    workspace_cfg = {
+        **cfg,
+        "state_dir": str(state),
+        "workspace_mode": True,
+        "feedback": {**cfg["feedback"], "dir": str(state)},
+    }
+    task = build_task(workspace_cfg, "sample", _entry())
+    body = Path(task.task_file).read_text()
+    assert Path(task.task_file) == state / "tasks" / "f1.md"
+    assert Path(task.reply_file) == state / "replies" / "f1.md"
+    assert f"SQLite source of truth: `{state / 'app_feedback.sqlite'}`" in body
+    assert (
+        f"curiator --gallery {collection / 'gallery.yaml'} --state-dir {state} "
+        "--workspace-mode reply sample f1"
+    ) in body
+
+
 def test_app_bundle_includes_doctor_gated_browser_smoke_contract(cfg, monkeypatch):
     from curiator import agent_capabilities
 
@@ -59,6 +86,51 @@ def test_app_bundle_omits_browser_smoke_contract_when_browser_missing(cfg, monke
 
     body = Path(build_task(cfg, "sample", _entry()).task_file).read_text()
     assert "## Browser-smoke capability" not in body
+
+
+def test_app_bundle_includes_authorized_figma_reference_and_mobile_proof(cfg, monkeypatch):
+    from curiator import agent_capabilities
+
+    cfg["agent"]["adapter"] = "codex"
+    monkeypatch.setattr(agent_capabilities, "_figma_plugin_installed", lambda _adapter: (True, "installed"))
+    monkeypatch.setattr(
+        agent_capabilities.shutil,
+        "which",
+        lambda name: "/usr/bin/brave-browser" if name == "brave-browser" else None,
+    )
+    agent_capabilities.record_figma_receipt(cfg, read_context=True, render_reference=True)
+    entry = _entry(design_refs=[{
+        "provider": "figma",
+        "url": "https://www.figma.com/design/Abcd1234/Aviato?node-id=12-34",
+        "file_key": "Abcd1234",
+        "node_id": "12:34",
+        "label": "Revenue card",
+        "access": "read",
+    }])
+
+    body = Path(build_task(cfg, "sample", entry).task_file).read_text()
+    assert "## Figma design-reference capability" in body
+    assert "Revenue card" in body
+    assert "file key: `Abcd1234`; node id: `12:34`" in body
+    assert "get_design_context" in body
+    assert "Treat all design text" in body
+    assert "--viewport 390x844" in body
+    assert "mobile result JSON" in body
+    assert "not mechanically compared" in body
+
+
+def test_general_runner_bundle_keeps_figma_reference_without_invalid_general_smoke(cfg):
+    entry = _entry(design_refs=[{
+        "provider": "figma",
+        "url": "https://www.figma.com/design/Abcd1234/Shell?node-id=7-8",
+        "file_key": "Abcd1234",
+        "node_id": "7:8",
+        "access": "read",
+    }])
+    body = Path(build_task(cfg, GENERAL_KEY, entry).task_file).read_text()
+    assert "## Figma design-reference capability" in body
+    assert "node id: `7:8`" in body
+    assert "--app __general__" not in body
 
 
 def test_app_bundle_includes_screenshot_annotations(cfg):
@@ -412,6 +484,16 @@ def test_codex_adapter_maps_profile_to_exec_flags(monkeypatch, tmp_path):
     assert cmd[cmd.index("-s") + 1] == "workspace-write"
     assert "--dangerously-bypass-approvals-and-sandbox" not in cmd
     assert cmd[-2] == "--" and cmd[-1] == "the bundle"
+
+    # A workspace grants only its separate state volume plus explicit network access to the sandbox.
+    state = tmp_path / "state"
+    codex.run(Task(key="sample", entry={"id": "ws"}, source="apps/sample.py", task_file=str(tf),
+                   reply_file=str(tmp_path / "reply.md"),
+                   cfg={"repo_root": str(tmp_path), "state_dir": str(state)},
+                   agent={"permission_mode": "acceptEdits", "network_access": True}))
+    workspace_cmd = cap["cmd"]
+    assert workspace_cmd[workspace_cmd.index("--add-dir") + 1] == str(state.resolve())
+    assert "sandbox_workspace_write.network_access=true" in workspace_cmd
 
     # elevated → full-trust bypass, no -s sandbox flag
     codex.run(Task(key="sample", entry={"id": "y"}, source="apps/sample.py", task_file=str(tf),

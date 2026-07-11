@@ -204,6 +204,7 @@ Back up the mounted collection directory, not the container image. The important
 - `feedback/audio/`
 - `feedback/tasks/`
 - `feedback/replies/`
+- `feedback/runs/` while interrupted runs are awaiting recovery
 - `.curiator-users.json` for local auth
 - `.git/` and commits created by git-as-memory
 

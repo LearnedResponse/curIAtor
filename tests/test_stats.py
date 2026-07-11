@@ -110,7 +110,45 @@ def test_stats_cli_json_is_machine_readable(cfg, capsys):
     out = json.loads(capsys.readouterr().out)
     assert out["totals"]["cycles"] == 2
     assert out["apps"][0]["status_counts"] == {"done": 1, "new": 1}
+    assert out["replays"]["groups"] == 0
     assert "git" not in out
+
+
+def test_stats_aggregates_retained_replay_manifests(cfg):
+    from curiator import replay_lab
+
+    replay_lab._write_group(cfg, {
+        "replay_group_version": 1,
+        "id": "abcde12345",
+        "feedback_id": "feedback",
+        "app_key": "sample",
+        "status": "deleted",
+        "exactness": "source-exact",
+        "evidence_consistency": {"byte_identical_across_variants": True},
+        "review": {"decision": "accepted", "variant_id": "v2", "note": None},
+        "variants": [
+            {
+                "id": "v1", "duration_seconds": 12.5,
+                "profile": {"adapter": "codex"},
+                "result": {"browser": {"ok": True}, "diff": {"commits": ["abc"]}},
+            },
+            {
+                "id": "v2", "duration_seconds": 17.5,
+                "profile": {"adapter": "headless-cc"},
+                "result": {"browser": {"ok": True}, "diff": {"commits": ["def"]}},
+            },
+        ],
+    })
+
+    replay_stats = stats.summarize(cfg, include_git=False)["replays"]
+    assert replay_stats["groups"] == 1
+    assert replay_stats["variants"] == 2
+    assert replay_stats["accepted_variants"] == 1
+    assert replay_stats["browser_pass_rate_percent"] == 100.0
+    assert replay_stats["source_change_rate_percent"] == 100.0
+    assert replay_stats["identical_task_groups"] == 1
+    assert replay_stats["adapter_counts"] == {"codex": 1, "headless-cc": 1}
+    assert replay_stats["duration"]["median_seconds"] == 15.0
 
 
 def test_stats_cli_output_writes_selected_report(cfg, tmp_path, capsys):

@@ -48,7 +48,9 @@ _DEFAULT_ALSO_COMMIT = [
     "package.json", "package-lock.json", "pnpm-lock.yaml", "yarn.lock",
 ]
 _GENERAL_COLLECTION_GLOBS = [
+    ".gitignore",
     "apps/**",
+    "packages/**",
     "assets/**", "data/**",
 ]
 
@@ -78,7 +80,11 @@ def is_repo(cfg: dict) -> bool:
 
 
 def current_branch(cfg: dict) -> str:
-    return _git(cfg, "rev-parse", "--abbrev-ref", "HEAD").stdout.strip()
+    branch = _git(cfg, "rev-parse", "--abbrev-ref", "HEAD", check=False)
+    if branch.returncode == 0 and branch.stdout.strip() not in {"", "HEAD"}:
+        return branch.stdout.strip()
+    unborn = _git(cfg, "symbolic-ref", "--quiet", "--short", "HEAD", check=False)
+    return unborn.stdout.strip() or "HEAD"
 
 
 @contextlib.contextmanager
@@ -99,6 +105,8 @@ def _lock(cfg: dict):
 
 def ensure_branch(cfg: dict, branch: str | None) -> None:
     """Make `branch` current (the sandbox/env branch), carrying uncommitted changes. Empty ⇒ stay on HEAD."""
+    if branch == "per-run":
+        return
     if not branch or current_branch(cfg) == branch:
         return
     exists = _git(cfg, "rev-parse", "--verify", "--quiet", f"refs/heads/{branch}", check=False).returncode == 0
@@ -444,30 +452,42 @@ def http_smoke_app(cfg: dict, app: str, src: str | None, spec: dict | None = Non
                         engine_proc.wait(timeout=2)
 
 
-def smoke_app(cfg: dict, app: str, src: str | None) -> tuple[bool, str]:
+def smoke_app_details(cfg: dict, app: str, src: str | None) -> dict:
+    """Run one smoke command and retain bounded stdout for reproducible metric artifacts."""
     spec = _app_spec(cfg, app) or {}
     rendered = smoke_command(cfg, spec, app, src)
     if rendered:
         root = spec.get("root") or Path(cfg["repo_root"])
         timeout, err = _smoke_timeout(cfg, spec)
         if err:
-            return False, err
+            return {"ok": False, "message": err, "stdout": ""}
         try:
             r = subprocess.run(shlex.split(rendered), cwd=root, capture_output=True, text=True, timeout=timeout)
         except subprocess.TimeoutExpired:
             label = int(timeout) if timeout and float(timeout).is_integer() else timeout
-            return False, f"timeout after {label}s"
+            return {"ok": False, "message": f"timeout after {label}s", "stdout": ""}
+        stdout = (r.stdout or "").strip()[:100_000]
         if r.returncode == 0:
-            return True, "passed"
-        return False, (r.stderr or r.stdout or f"exit {r.returncode}").strip()[:500]
+            return {"ok": True, "message": "passed", "stdout": stdout}
+        return {
+            "ok": False,
+            "message": (r.stderr or r.stdout or f"exit {r.returncode}").strip()[:500],
+            "stdout": stdout,
+        }
 
     if src:
         p = Path(cfg["repo_root"]) / src
         if p.is_file() and p.suffix == ".py":
-            return smoke_source(p)
+            ok, message = smoke_source(p)
+            return {"ok": ok, "message": message, "stdout": ""}
         if p.is_dir():
-            return True, "n/a (no smoke configured for directory source)"
-    return True, "n/a (no smoke configured)"
+            return {"ok": True, "message": "n/a (no smoke configured for directory source)", "stdout": ""}
+    return {"ok": True, "message": "n/a (no smoke configured)", "stdout": ""}
+
+
+def smoke_app(cfg: dict, app: str, src: str | None) -> tuple[bool, str]:
+    details = smoke_app_details(cfg, app, src)
+    return bool(details["ok"]), str(details["message"])
 
 
 def _path_changed_in(repo: Path, rel: str) -> bool:
@@ -755,6 +775,8 @@ def _commit_nested_app_repo(
     stars,
     status: str,
     smoke: str,
+    additional_paths: list[str] | None = None,
+    component_keys: list[str] | None = None,
 ) -> dict:
     """Commit an imported/nested app repository before the collection ledger commit.
 
@@ -763,15 +785,21 @@ def _commit_nested_app_repo(
     ledger/reply.
     """
     git = cfg.get("git", {}) or {}
-    paths = [source_rel]
-    exclude = {source_rel}
-    extra = [] if source_rel == "." else _extra_paths_in(repo, git.get("also_commit", _DEFAULT_ALSO_COMMIT), exclude)
+    paths = list(dict.fromkeys([source_rel, *(additional_paths or [])]))
+    exclude = set(paths)
+    extra = [] if "." in paths else _extra_paths_in(
+        repo,
+        git.get("also_commit", _DEFAULT_ALSO_COMMIT),
+        exclude,
+    )
     paths.extend(extra)
     _add_paths_in(repo, paths)
     if _git_in(repo, "diff", "--cached", "--quiet", check=False).returncode == 0:
         return {"committed": False, "reason": "nothing staged in nested app repo"}
 
     changed_desc = f"edited {source_rel}"
+    if component_keys:
+        changed_desc += f" + shared component(s) {', '.join(component_keys)}"
     if extra:
         changed_desc += f" (+{', '.join(extra)})"
     if status == "awaiting_approval":
@@ -797,6 +825,66 @@ def _commit_nested_app_repo(
         "branch": branch,
         "repo": str(repo),
         "paths": paths,
+        "components": component_keys or [],
+    }
+
+
+def _commit_nested_component_repo(
+    cfg: dict,
+    app: str,
+    feedback_id: str,
+    *,
+    repo: Path,
+    component_keys: list[str],
+    source_rels: list[str],
+    summary: str,
+    comment: str,
+    stars,
+    status: str,
+) -> dict:
+    """Commit one or more shared components owned by the same nested repository."""
+    git = cfg.get("git", {}) or {}
+    paths = list(dict.fromkeys(source_rels))
+    exclude = set(paths)
+    extra = [] if "." in paths else _extra_paths_in(
+        repo,
+        git.get("also_commit", _DEFAULT_ALSO_COMMIT),
+        exclude,
+    )
+    paths.extend(extra)
+    _add_paths_in(repo, paths)
+    if _git_in(repo, "diff", "--cached", "--quiet", check=False).returncode == 0:
+        return {"committed": False, "reason": "nothing staged in nested component repo"}
+
+    changed_desc = (
+        f"edited shared component(s) {', '.join(component_keys)} "
+        f"at {', '.join(source_rels)}"
+    )
+    if extra:
+        changed_desc += f" (+{','.join(extra)})"
+    smoke = "component and dependent-app smokes passed"
+    msg = _build_message(app, summary, comment, stars, changed_desc, smoke).replace("{fid}", feedback_id)
+    led = ledger.load(cfg)
+    original = next(
+        (
+            item for item in led.get(app, [])
+            if item.get("id") == feedback_id and item.get("author") != "claude"
+        ),
+        None,
+    )
+    from_email = ((original or {}).get("user") or {}).get("email")
+    if from_email:
+        msg += f"Feedback-From: {from_email}\n"
+    msg += f"Co-Authored-By: curiator[{_agent_label(cfg)}] <noreply@curiator.dev>\n"
+    commit_args = ["commit", "-m", msg] + (["-s"] if git.get("signoff", True) else [])
+    _git_in(repo, *_commit_identity_prefix(repo), *commit_args)
+    return {
+        "committed": True,
+        "sha": _git_in(repo, "rev-parse", "--short", "HEAD").stdout.strip(),
+        "branch": _git_in(repo, "rev-parse", "--abbrev-ref", "HEAD").stdout.strip(),
+        "repo": str(repo),
+        "paths": paths,
+        "components": component_keys,
     }
 
 
@@ -813,6 +901,34 @@ def commit_run(cfg: dict, app: str, feedback_id: str, *, status: str, note_text:
         fb = next((e for e in led.get(app, [])
                    if e.get("id") == feedback_id and e.get("author") != "claude"), None)
         comment, stars = (fb or {}).get("comment", ""), (fb or {}).get("stars")
+
+        from . import dependencies
+
+        try:
+            dependency_graph = dependencies.normalize(cfg)
+            writable_component_keys = dependencies.writable_components(dependency_graph, app, fb or {})
+            changed_component_keys = dependencies.changed_components(
+                dependency_graph,
+                writable_component_keys,
+            )
+        except dependencies.DependencyError as exc:
+            return {"committed": False, "reason": f"invalid shared dependency scope: {exc}"}
+        collection_root = Path(cfg["repo_root"]).resolve()
+        root_component_paths: list[str] = []
+        nested_component_groups: dict[str, dict] = {}
+        for key in changed_component_keys:
+            component = dependency_graph["components"][key]
+            owner = Path(component["owner_repo"]).resolve()
+            if owner == collection_root:
+                if component.get("collection_rel"):
+                    root_component_paths.append(component["collection_rel"])
+                continue
+            group = nested_component_groups.setdefault(
+                str(owner),
+                {"repo": owner, "keys": [], "paths": [], "parent_path": component.get("owner_repo_rel")},
+            )
+            group["keys"].append(key)
+            group["paths"].append(component["source_rel"])
 
         spec = _app_spec(cfg, app) or {}
         src = spec.get("source_rel")
@@ -836,30 +952,87 @@ def commit_run(cfg: dict, app: str, feedback_id: str, *, status: str, note_text:
                     _git(cfg, "checkout", "--", src)         # never commit a broken app
                 return {"committed": False, "reason": f"smoke-test failed, reverted edit: {msg}"}
             smoke = msg
-            if nested_repo and nested_source:
-                nested_commit = _commit_nested_app_repo(
-                    cfg,
-                    app,
-                    feedback_id,
-                    repo=nested_repo,
-                    source_rel=nested_source,
-                    summary=summary,
-                    comment=comment,
-                    stars=stars,
-                    status=status,
-                    smoke=smoke,
-                )
-                if not nested_commit.get("committed"):
-                    return {"committed": False, "reason": nested_commit.get("reason", "nested app repo was not committed")}
+        elif changed_component_keys:
+            smoke = "component and dependent-app smokes passed"
+        same_owner_components = None
+        if changed and nested_repo:
+            same_owner_components = nested_component_groups.pop(str(nested_repo.resolve()), None)
+
+        component_commits: list[dict] = []
+        for group in nested_component_groups.values():
+            component_commit = _commit_nested_component_repo(
+                cfg,
+                app,
+                feedback_id,
+                repo=group["repo"],
+                component_keys=group["keys"],
+                source_rels=group["paths"],
+                summary=summary,
+                comment=comment,
+                stars=stars,
+                status=status,
+            )
+            if not component_commit.get("committed"):
+                return {
+                    "committed": False,
+                    "reason": component_commit.get("reason", "nested component repo was not committed"),
+                }
+            component_commits.append(component_commit)
+
+        if changed and nested_repo and nested_source:
+            nested_commit = _commit_nested_app_repo(
+                cfg,
+                app,
+                feedback_id,
+                repo=nested_repo,
+                source_rel=nested_source,
+                summary=summary,
+                comment=comment,
+                stars=stars,
+                status=status,
+                smoke=smoke,
+                additional_paths=(same_owner_components or {}).get("paths"),
+                component_keys=(same_owner_components or {}).get("keys"),
+            )
+            if not nested_commit.get("committed"):
+                return {
+                    "committed": False,
+                    "reason": nested_commit.get("reason", "nested app repo was not committed"),
+                }
+
+        changed_parts = []
         if changed:
-            changed_desc = f"edited {src}"
-            if nested_commit:
-                changed_desc += f" (nested app {Path(nested_commit['repo']).name}@{nested_commit['sha']})"
-        else:
+            changed_parts.append(f"edited {src}")
+        if changed_component_keys:
+            changed_parts.append(f"shared component(s) {', '.join(changed_component_keys)}")
+        if component_commits:
+            changed_parts.append(
+                "nested component " + ", ".join(
+                    f"{Path(item['repo']).name}@{item['sha']}" for item in component_commits
+                )
+            )
+        if nested_commit:
+            changed_parts.append(
+                f"nested app {Path(nested_commit['repo']).name}@{nested_commit['sha']}"
+            )
+        changed_desc = "; ".join(changed_parts)
+        if not changed_desc:
             changed_desc = "plan only" if status == "awaiting_approval" else "ack / no source change"
 
         ledger_rel = _ledger_relpath(cfg)
-        exclude = {parent_stage_src or "", ledger_rel}
+        component_parent_paths = [
+            str(group["parent_path"])
+            for group in nested_component_groups.values()
+            if group.get("parent_path")
+        ]
+        if same_owner_components and same_owner_components.get("parent_path"):
+            component_parent_paths.append(str(same_owner_components["parent_path"]))
+        parent_paths = list(dict.fromkeys([
+            *([parent_stage_src] if changed and parent_stage_src else []),
+            *root_component_paths,
+            *component_parent_paths,
+        ]))
+        exclude = {*parent_paths, ledger_rel}
         general_extra = _general_collection_paths(cfg, fb, exclude) if app == _GENERAL_KEY else []
         general_nested_commits: list[dict] = []
         if app == _GENERAL_KEY and general_extra:
@@ -885,9 +1058,7 @@ def commit_run(cfg: dict, app: str, feedback_id: str, *, status: str, note_text:
             changed_desc += f" (+{', '.join(extra)})"     # dependency manifests captured in the same commit
 
         ensure_branch(cfg, git.get("branch"))
-        paths = ([parent_stage_src] if changed and parent_stage_src else []) + (
-            [ledger_rel] if git.get("include_ledger", False) else []
-        ) + extra
+        paths = parent_paths + ([ledger_rel] if git.get("include_ledger", False) else []) + extra
         if paths:
             _add_paths(cfg, paths, ledger_rel)
         root_committed = _git(cfg, "diff", "--cached", "--quiet", check=False).returncode != 0
@@ -904,6 +1075,9 @@ def commit_run(cfg: dict, app: str, feedback_id: str, *, status: str, note_text:
             result.update({"committed": True, "sha": sha, "branch": current_branch(cfg)})
         if nested_commit:
             result["app_commits"] = [nested_commit]
+        if component_commits:
+            result["component_commits"] = component_commits
+            result["committed"] = True
         if general_nested_commits:
             result.setdefault("app_commits", []).extend(general_nested_commits)
         memory_commits = _commit_nested_memories(

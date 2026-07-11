@@ -113,7 +113,7 @@ def test_release_preflight_can_include_optional_public_galleries(tmp_path, monke
     from curiator import cli
 
     required = ["curiator-aviato", "curiator-ot", "curiator-geometry"]
-    optional = ["curiator-finance", "curiator-phylogenetics", "curiator-ml"]
+    optional = ["curiator-finance", "curiator-phylogenetics", "curiator-ml", "curiator-nodered"]
     for name in [*required, *optional]:
         _make_gallery(tmp_path, name=name)
     monkeypatch.chdir(tmp_path)
@@ -645,6 +645,8 @@ def test_release_preflight_flags_publish_unsafe_runtime_artifacts(tmp_path, monk
     )
     (repo / "feedback" / "tasks" / "abc.md").write_text("task bundle\n")
     (repo / "feedback" / "replies" / "abc.md").write_text("agent trace\n")
+    (repo / "feedback" / "runs" / "abc" / "checkpoint.json").parent.mkdir(parents=True)
+    (repo / "feedback" / "runs" / "abc" / "checkpoint.json").write_text("{}\n")
     (repo / "feedback" / "shots" / "abc.png").write_bytes(b"not really png")
     (repo / "feedback" / "audio" / "abc.webm").write_bytes(b"audio")
     (repo / "apps" / "__pycache__" / "sample.cpython-314.pyc").write_bytes(b"pyc")
@@ -671,6 +673,7 @@ def test_release_preflight_flags_publish_unsafe_runtime_artifacts(tmp_path, monk
     assert ".env.local" in files
     assert "feedback/tasks/abc.md" in files
     assert "feedback/replies/abc.md" in files
+    assert "feedback/runs/abc/checkpoint.json" in files
     assert "feedback/shots/abc.png" in files
     assert "feedback/audio/abc.webm" in files
     assert "feedback/app_feedback.json" in files
@@ -721,6 +724,66 @@ def test_release_preflight_can_check_a_fresh_clone(tmp_path, monkeypatch, capsys
     assert gallery["source_path"].endswith("galleries/curiator-demo")
     assert gallery["path"].startswith(str(tmp_path / "clones"))
     assert gallery["ok"] is True
+
+
+def test_release_preflight_can_prepare_explicit_app_dependencies_in_fresh_clone(
+    tmp_path,
+    monkeypatch,
+    capsys,
+):
+    from curiator import cli
+
+    repo = _make_gallery(tmp_path)
+    app = repo / "apps" / "prepared"
+    app.mkdir()
+    (app / ".gitignore").write_text("ready.txt\n")
+    (app / "bootstrap.py").write_text("from pathlib import Path\nPath('ready.txt').write_text('ready')\n")
+    (app / "smoke.py").write_text(
+        "from pathlib import Path\nassert Path('ready.txt').read_text() == 'ready'\n"
+    )
+    (repo / "gallery.yaml").write_text(textwrap.dedent("""\
+        apps:
+          - name: prepared
+            root: apps/prepared
+            source: .
+            smoke: python smoke.py
+            commands:
+              bootstrap: python bootstrap.py
+            mount: {kind: dash-inproc, module: smoke}
+        feedback: {dir: feedback}
+        shell: {port: 8399}
+    """))
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-q", "-m", "add prepared app")
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("CURIATOR_GALLERY", raising=False)
+
+    assert cli.main([
+        "release-preflight", "--gallery", "curiator-demo", "--fresh-clone", "--json",
+    ]) == 1
+    capsys.readouterr()
+
+    assert cli.main([
+        "release-preflight",
+        "--gallery", "curiator-demo",
+        "--fresh-clone",
+        "--prepare-dependencies",
+        "--json",
+    ]) == 0
+    payload = json.loads(capsys.readouterr().out)
+    gallery = payload["galleries"][0]
+    assert payload["checks"]["prepare_dependencies"] is True
+    assert gallery["dependency_prepare"] == {
+        "ok": True,
+        "results": [{
+            "app": "prepared",
+            "root": "apps/prepared",
+            "command": "python bootstrap.py",
+            "ok": True,
+            "message": "passed",
+        }],
+    }
+    assert gallery["smoke"]["ok"] is True
 
 
 def test_release_preflight_fresh_clone_fails_dirty_source_by_default(tmp_path, monkeypatch, capsys):

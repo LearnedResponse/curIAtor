@@ -96,6 +96,12 @@ def _connect(cfg: dict) -> sqlite3.Connection:
     return conn
 
 
+def ensure_schema(cfg: dict) -> None:
+    """Create/migrate the runtime DB schema without adding feedback entries."""
+    with closing(_connect(cfg)) as conn:
+        conn.commit()
+
+
 def _connect_for_load(cfg: dict) -> sqlite3.Connection | None:
     """Open an existing SQLite ledger without write-time setup.
 
@@ -295,3 +301,22 @@ def checkpoint(cfg: dict) -> None:
     """Flush WAL pages into the main SQLite file, useful before optional git snapshots."""
     with closing(_connect(cfg)) as conn:
         conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+
+
+def compact(cfg: dict) -> dict:
+    """Checkpoint and VACUUM the ledger through the supported API.
+
+    This is useful before publishing a tracked ledger: SQLite free pages can retain bytes from old,
+    already-sanitized payloads even though no live entry exposes them.
+    """
+    ensure_schema(cfg)
+    target = db_path(cfg)
+    before = target.stat().st_size if target.exists() else 0
+    with closing(_connect(cfg)) as conn:
+        conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+        conn.commit()
+        conn.execute("VACUUM")
+        conn.execute("PRAGMA optimize")
+        conn.commit()
+    after = target.stat().st_size if target.exists() else 0
+    return {"path": str(target), "before_bytes": before, "after_bytes": after, "saved_bytes": max(before - after, 0)}

@@ -388,6 +388,24 @@ def test_feedback_add_stores_sanitized_annotations_for_task_bundle(collection, m
     assert "#secret" not in body
 
 
+def test_feedback_add_stores_sanitized_figma_reference(collection, monkeypatch, capsys):
+    from curiator import cli, ledger
+    from curiator.config import load_config
+
+    monkeypatch.chdir(collection)
+    url = "https://www.figma.com/design/Abcd1234/Aviato?node-id=12-34"
+    assert cli.main([
+        "feedback", "add", "sample", "match this design",
+        "--design-ref", url,
+        "--design-label", "Revenue overview",
+    ]) == 0
+    entry = ledger.load(load_config())["sample"][-1]
+    assert entry["design_refs"][0]["url"] == url
+    assert entry["design_refs"][0]["node_id"] == "12:34"
+    assert entry["design_refs"][0]["label"] == "Revenue overview"
+    assert "with 1 design reference(s)" in capsys.readouterr().out
+
+
 def test_queue_reviews_held_feedback_without_dispatching_it(collection, monkeypatch, capsys):
     import json
     import pytest

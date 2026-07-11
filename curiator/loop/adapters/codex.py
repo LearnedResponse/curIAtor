@@ -59,7 +59,13 @@ def run(task) -> None:
     if _full_access(agent):
         cmd += ["--dangerously-bypass-approvals-and-sandbox"]   # no sandbox/approvals (elevated)
     else:
-        cmd += ["-s", _sandbox(agent)]
+        sandbox = _sandbox(agent)
+        cmd += ["-s", sandbox]
+        state_dir = task.cfg.get("state_dir")
+        if sandbox == "workspace-write" and state_dir:
+            cmd += ["--add-dir", str(Path(state_dir).resolve())]
+            if agent.get("network_access") is True:
+                cmd += ["-c", "sandbox_workspace_write.network_access=true"]
     cmd += ["--", prompt]                              # terminate options so the bundle is the PROMPT
 
     # stdin=DEVNULL: codex exec reads stdin even with a positional prompt ("Reading additional input

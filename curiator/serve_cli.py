@@ -37,7 +37,26 @@ def _child_env(cfg: dict) -> dict:
 
 
 def _gallery_cli_args(cfg: dict) -> list[str]:
-    return ["--gallery", str(Path(cfg["gallery_path"]).resolve())]
+    args = ["--gallery", str(Path(cfg["gallery_path"]).resolve())]
+    if cfg.get("state_dir"):
+        args += ["--state-dir", str(Path(cfg["state_dir"]).resolve())]
+    if cfg.get("agent_adapter_override"):
+        args += ["--agent-adapter", str(cfg["agent_adapter_override"])]
+    if cfg.get("agent_model_override"):
+        args += ["--agent-model", str(cfg["agent_model_override"])]
+    if cfg.get("agent_autonomy_override"):
+        args += ["--agent-autonomy", str(cfg["agent_autonomy_override"])]
+    if cfg.get("agent_network_override"):
+        args += ["--agent-network", str(cfg["agent_network_override"])]
+    if cfg.get("agent_sandbox_override"):
+        args += ["--agent-sandbox", str(cfg["agent_sandbox_override"])]
+    if cfg.get("workspace_mode"):
+        args.append("--workspace-mode")
+    return args
+
+
+def _watcher_command(cfg: dict) -> list[str]:
+    return [sys.executable, "-I", "-u", "-m", "curiator.cli", *_gallery_cli_args(cfg), "watch"]
 
 
 def _reload_in_shell(cfg: dict, app: str) -> str | None:
@@ -80,8 +99,7 @@ def _serve(cfg: dict, *, reset: bool = False, shell_kind: str | None = None) -> 
     env = _child_env(cfg)
     # -u: unbuffered, so the watcher's ●/▶/✓ feedback+agent lines stream out immediately (not block-buffered
     # behind the shell when serve's stdout isn't a TTY).
-    watcher = subprocess.Popen([sys.executable, "-u", "-m", "curiator.cli", *_gallery_cli_args(cfg), "watch"],
-                               cwd=cfg["repo_root"], env=env)
+    watcher = subprocess.Popen(_watcher_command(cfg), cwd=cfg["repo_root"], env=env)
     bar = "─" * 56
     print(f"\n{bar}\n  ◆ curIAtor is up")
     print(f"    gallery : {url}")

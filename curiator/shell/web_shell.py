@@ -13,13 +13,18 @@ import shutil
 import shlex
 import subprocess
 import tempfile
+import threading
 import uuid
+from datetime import datetime, timezone
 from pathlib import Path
+from urllib.parse import quote
 
 from flask import Flask, Response, jsonify, redirect, request, send_from_directory
 
 from curiator.shell import app_shell as core
 from curiator import auth, ledger
+from curiator.agent_capabilities import agent_report
+from curiator.design_refs import DesignReferenceError
 from curiator.transcripts import bounded_text, clean_transcript_segments
 
 
@@ -37,6 +42,9 @@ def _safe_entry(entry: dict) -> dict:
     trace = core._trace_path(entry.get("id"))
     if trace and trace.exists():
         out["trace_url"] = f"/feedback-trace/{entry.get('id')}"
+    out["replay_eligible"] = bool(
+        entry.get("id") and entry.get("kind") != "system" and entry.get("status") == "done"
+    )
     return out
 
 
@@ -61,6 +69,7 @@ def _apps_payload() -> list[dict]:
             "port": rec.get("port"),
             "source": rec.get("source") or rec.get("file"),
             "root": rec.get("root"),
+            "proposal": rec.get("proposal"),
             "metrics": {"avg_stars": avg, "open": n_open, "total": n_total},
             "updated": core.app_updated(rec, items),
             "revision": core.APP_REVISIONS.get(rec["key"], 0),
@@ -122,6 +131,8 @@ def _queue_page_html(message: str = "") -> str:
         return msg + "<p style='color:#777;font-size:13px'>No held feedback is waiting for review.</p>"
     cards = []
     for key, entry in rows:
+        from curiator import run_recovery
+
         user = entry.get("user") or {}
         author = user.get("email") or user.get("name") or entry.get("author") or "user"
         stars = "★" * int(entry.get("stars") or 0)
@@ -130,6 +141,41 @@ def _queue_page_html(message: str = "") -> str:
             shot = (f"<img src='/feedback-shot/{core._esc(Path(entry['screenshot']).name)}' "
                     "style='display:block;max-width:420px;margin-top:8px;border:1px solid #ddd;"
                     "border-radius:4px'>")
+        feedback_id = entry.get("id") or ""
+        recovery = None
+        if run_recovery.checkpoint_path(core.LEDGER_CFG, feedback_id).exists():
+            try:
+                recovery = run_recovery.recovery_report(core.LEDGER_CFG, feedback_id)
+            except run_recovery.CheckpointError:
+                recovery = {"restore_safe": False, "reason": "checkpoint is unreadable"}
+        if recovery:
+            changed = recovery.get("agent_run_paths") or []
+            conflicts = recovery.get("post_interruption_paths") or []
+            restore_disabled = "" if recovery.get("restore_safe") else " disabled title='Source changed after process end'"
+            recovery_controls = (
+                "<div style='margin-top:9px;padding-top:8px;border-top:1px solid #ddd'>"
+                "<div style='font-size:12px;font-weight:700;color:#6f42c1'>Interrupted run recovery</div>"
+                f"<div style='font-size:12px;color:#666;margin:3px 0 7px'>{len(changed)} run path(s) · "
+                f"{len(conflicts)} post-interruption path(s) · restore "
+                f"{'available' if recovery.get('restore_safe') else 'disabled'}</div>"
+                f"<form method='post' action='/queue/{core._esc(feedback_id)}/resume' style='display:inline'>"
+                "<button style='margin-right:5px'>Resume</button></form>"
+                f"<form method='post' action='/queue/{core._esc(feedback_id)}/preserve' style='display:inline'>"
+                "<button style='margin-right:5px'>Preserve branch</button></form>"
+                f"<form method='post' action='/queue/{core._esc(feedback_id)}/restore' style='display:inline'>"
+                f"<button style='margin-right:5px'{restore_disabled}>Restore baseline</button></form>"
+                f"<form method='post' action='/queue/{core._esc(feedback_id)}/discard-checkpoint' "
+                "style='display:inline'><button>Keep files</button></form></div>"
+            )
+            approve = ""
+        else:
+            recovery_controls = ""
+            approve = (
+                f"<form method='post' action='/queue/{core._esc(feedback_id)}/approve' "
+                "style='display:inline-block;margin-top:8px;margin-right:8px'>"
+                "<button style='background:#1f9d55;color:white;border:none;border-radius:5px;"
+                "padding:6px 13px;font-weight:700;cursor:pointer'>Approve</button></form>"
+            )
         cards.append(
             "<section style='border-left:4px solid #6f42c1;background:#fafafa;"
             "padding:10px 12px;margin:0 0 12px;border-radius:4px'>"
@@ -140,10 +186,7 @@ def _queue_page_html(message: str = "") -> str:
             f"<span style='color:#cc7a00'>{stars}</span></div>"
             f"<p style='font-size:14px;white-space:pre-wrap'>{core._esc(entry.get('comment') or '')}</p>"
             f"{shot}"
-            f"<form method='post' action='/queue/{core._esc(entry.get('id') or '')}/approve' "
-            "style='display:inline-block;margin-top:8px;margin-right:8px'>"
-            "<button style='background:#1f9d55;color:white;border:none;border-radius:5px;"
-            "padding:6px 13px;font-weight:700;cursor:pointer'>Approve</button></form>"
+            f"{recovery_controls}{approve}"
             f"<form method='post' action='/queue/{core._esc(entry.get('id') or '')}/reject' "
             "style='display:inline-flex;gap:6px;align-items:center;margin-top:8px'>"
             "<input name='reason' placeholder='optional rejection reason' "
@@ -193,6 +236,43 @@ def _voice_payload() -> dict:
         "retain_audio": bool(cfg.get("retain_audio")),
         "max_bytes": _voice_int("transcribe_max_bytes", 25 * 1024 * 1024, low=1, high=200 * 1024 * 1024),
         "timeout": _voice_int("transcribe_timeout", 60, low=1, high=600),
+    }
+
+
+def _workspace_payload(row: dict) -> dict:
+    payload = dict(row)
+    if row.get("host_port"):
+        payload["url"] = f"http://127.0.0.1:{row['host_port']}/?app={row['app_key']}"
+    return payload
+
+
+def _workspace_admin():
+    user = auth.current_user(core.REG.AUTH_CFG)
+    return user if auth.is_admin(core.REG.AUTH_CFG, user) else None
+
+
+def _workspace_runtime_payload() -> dict | None:
+    payload = None
+    state_dir = (core.LEDGER_CFG.get("state_dir") or
+                 (core.LEDGER_CFG.get("feedback") or {}).get("dir"))
+    if state_dir:
+        path = Path(state_dir) / "workspace.json"
+        try:
+            candidate = json.loads(path.read_text(encoding="utf-8"))
+            payload = candidate if isinstance(candidate, dict) else None
+        except (OSError, json.JSONDecodeError):
+            pass
+    if payload is not None:
+        return payload
+    if not os.environ.get("CURIATOR_WORKSPACE_ID"):
+        return None
+    return {
+        "id": os.environ.get("CURIATOR_WORKSPACE_ID"),
+        "name": os.environ.get("CURIATOR_WORKSPACE_NAME"),
+        "mode": os.environ.get("CURIATOR_WORKSPACE_MODE"),
+        "base_sha": os.environ.get("CURIATOR_WORKSPACE_BASE_SHA"),
+        "branch": os.environ.get("CURIATOR_WORKSPACE_BRANCH"),
+        "control_url": os.environ.get("CURIATOR_WORKSPACE_CONTROL_URL"),
     }
 
 
@@ -488,11 +568,207 @@ def build_flask_app() -> Flask:
                 "anonymous_feedback_window_seconds": core.REG.AUTH_CFG.get("anonymous_feedback_window_seconds"),
             },
             "voice": _voice_payload(),
+            "agent_capabilities": agent_report(core.LEDGER_CFG).get("capabilities", {}),
+            "workspace": _workspace_runtime_payload(),
         })
 
     @app.route("/api/apps")
     def _apps():
         return jsonify({"apps": _apps_payload(), "general": _general_payload()})
+
+    @app.route("/api/workspaces", methods=["GET", "POST"])
+    def _workspaces():
+        if not _workspace_admin():
+            return jsonify({"error": "admin access required"}), 403
+        from curiator.workspaces import WorkspaceError, WorkspaceManager
+
+        manager = WorkspaceManager(core.LEDGER_CFG)
+        if request.method == "GET":
+            try:
+                return jsonify({"workspaces": [_workspace_payload(row) for row in manager.list()]})
+            except WorkspaceError as exc:
+                return jsonify({"error": str(exc)}), 503
+        body = request.get_json(silent=True) or {}
+        try:
+            row = manager.create(
+                str(body.get("app") or ""),
+                ref=str(body.get("ref") or "HEAD"),
+                name=str(body.get("name") or "") or None,
+                preview=bool(body.get("preview")),
+                credentials=str(body.get("credentials") or "none"),
+                agent_network=body.get("agent_network") is not False,
+                agent_sandbox=str(body.get("agent_sandbox") or "container"),
+                feedback_id=str(body.get("feedback_id") or "") or None,
+                dispatch_feedback=bool(body.get("dispatch_feedback")),
+                background=True,
+            )
+        except WorkspaceError as exc:
+            return jsonify({"error": str(exc)}), 400
+        return jsonify({"workspace": _workspace_payload(row)}), 202
+
+    @app.route("/api/workspaces/<workspace_id>")
+    def _workspace_detail(workspace_id):
+        if not _workspace_admin():
+            return jsonify({"error": "admin access required"}), 403
+        from curiator.workspaces import WorkspaceError, WorkspaceManager
+
+        manager = WorkspaceManager(core.LEDGER_CFG)
+        try:
+            row = manager.get(workspace_id)
+            comparison = manager.diff(workspace_id) if request.args.get("diff") == "1" else None
+        except WorkspaceError as exc:
+            return jsonify({"error": str(exc)}), 400
+        return jsonify({"workspace": _workspace_payload(row), "diff": comparison})
+
+    @app.route("/api/workspaces/<workspace_id>/<action>", methods=["POST"])
+    def _workspace_action(workspace_id, action):
+        if not _workspace_admin():
+            return jsonify({"error": "admin access required"}), 403
+        from curiator.workspaces import WorkspaceError, WorkspaceManager
+
+        manager = WorkspaceManager(core.LEDGER_CFG)
+        body = request.get_json(silent=True) or {}
+        try:
+            if action == "start":
+                row = manager.start(workspace_id)
+            elif action == "stop":
+                row = manager.stop(workspace_id)
+            elif action == "edit":
+                row = manager.start_editing(workspace_id, body.get("branch"))
+            elif action == "keep":
+                row = manager.keep(workspace_id, body.get("branch"))
+            elif action == "apply":
+                row = manager.apply(workspace_id)
+            elif action == "delete":
+                row = manager.delete(workspace_id, force=bool(body.get("force")))
+            else:
+                return jsonify({"error": "unknown workspace action"}), 404
+        except WorkspaceError as exc:
+            return jsonify({"error": str(exc)}), 409
+        return jsonify({"workspace": _workspace_payload(row)})
+
+    @app.route("/api/replays/inspect/<feedback_id>")
+    def _replay_inspect(feedback_id):
+        if not _workspace_admin():
+            return jsonify({"error": "admin access required"}), 403
+        from curiator.replay import ReplayError, inspect, redacted_report
+        from curiator.replay_lab import profile_names
+
+        try:
+            report = redacted_report(inspect(core.LEDGER_CFG, feedback_id))
+        except ReplayError as exc:
+            return jsonify({"error": str(exc)}), 404
+        report["profiles"] = profile_names(core.LEDGER_CFG)
+        return jsonify({"replay": report})
+
+    @app.route("/api/replays", methods=["GET", "POST"])
+    def _replays():
+        if not _workspace_admin():
+            return jsonify({"error": "admin access required"}), 403
+        from curiator.replay import ReplayError, inspect
+        from curiator.replay_lab import list_groups, profile_names, redacted_group, run_group
+
+        if request.method == "GET":
+            return jsonify({"replays": [redacted_group(group) for group in list_groups(core.LEDGER_CFG)]})
+        body = request.get_json(silent=True) or {}
+        feedback_id = str(body.get("feedback_id") or "")
+        profiles = body.get("profiles") or ["baseline"]
+        if not isinstance(profiles, list) or not profiles or len(profiles) > 3:
+            return jsonify({"error": "choose one to three replay profiles"}), 400
+        profiles = [str(name) for name in profiles]
+        unknown = sorted(set(profiles) - set(profile_names(core.LEDGER_CFG)))
+        if unknown:
+            return jsonify({"error": f"unknown replay profile(s): {', '.join(unknown)}"}), 400
+        if len(profiles) > 1 and body.get("confirm_resources") is not True:
+            return jsonify({"error": "confirm provider cost and Docker resources for multiple variants"}), 400
+        try:
+            report = inspect(core.LEDGER_CFG, feedback_id)
+            if report.get("exactness") not in {"exact", "source-exact"} or not report.get("workspace_ready"):
+                raise ReplayError(
+                    f"feedback {feedback_id} is {report.get('exactness')}; source-exact replay is unavailable"
+                )
+        except ReplayError as exc:
+            return jsonify({"error": str(exc)}), 400
+        group_id = uuid.uuid4().hex[:10]
+        thread = threading.Thread(
+            target=run_group,
+            kwargs={
+                "cfg": core.LEDGER_CFG,
+                "feedback_id": feedback_id,
+                "profiles": profiles,
+                "credentials": "auto",
+                "wait_agent": True,
+                "agent_network": body.get("agent_network") is not False,
+                "agent_sandbox": str(body.get("agent_sandbox") or "container"),
+                "group_id": group_id,
+            },
+            name=f"curiator-replay-{group_id}",
+            daemon=True,
+        )
+        thread.start()
+        return jsonify({"group_id": group_id, "status": "starting"}), 202
+
+    @app.route("/api/replays/<group_id>")
+    def _replay_detail(group_id):
+        if not _workspace_admin():
+            return jsonify({"error": "admin access required"}), 403
+        from curiator.replay import ReplayError
+        from curiator.replay_lab import refresh_group
+
+        try:
+            return jsonify({"replay": refresh_group(core.LEDGER_CFG, group_id)})
+        except ReplayError as exc:
+            return jsonify({"error": str(exc)}), 404
+
+    @app.route("/api/replays/<group_id>/<action>", methods=["POST"])
+    def _replay_action(group_id, action):
+        if not _workspace_admin():
+            return jsonify({"error": "admin access required"}), 403
+        from curiator.replay import ReplayError
+        from curiator.replay_lab import delete_group, keep_variant
+        from curiator.workspaces import WorkspaceError
+
+        body = request.get_json(silent=True) or {}
+        try:
+            if action == "keep":
+                group = keep_variant(core.LEDGER_CFG, group_id, str(body.get("variant_id") or ""))
+            elif action == "delete":
+                group = delete_group(core.LEDGER_CFG, group_id, force=bool(body.get("force")))
+            else:
+                return jsonify({"error": "unknown replay action"}), 404
+        except (ReplayError, WorkspaceError) as exc:
+            return jsonify({"error": str(exc)}), 409
+        return jsonify({"replay": group})
+
+    @app.route("/api/replays/<group_id>/<variant_id>/screenshot")
+    def _replay_screenshot(group_id, variant_id):
+        if not _workspace_admin():
+            return jsonify({"error": "admin access required"}), 403
+        from curiator.replay import ReplayError
+        from curiator.replay_lab import load_group
+        from curiator.workspaces import WorkspaceError, WorkspaceManager
+
+        try:
+            group = load_group(core.LEDGER_CFG, group_id)
+            variant = next(
+                item for item in group.get("variants") or [] if item.get("id") == variant_id
+            )
+            results = (((variant.get("result") or {}).get("browser") or {}).get("results") or [])
+            smoke = next(
+                (item.get("browser_smoke") or {} for item in results if item.get("browser_smoke")), {}
+            )
+            path = str(smoke.get("screenshot") or "")
+            prefix = "/workspace/state/"
+            if not path.startswith(prefix):
+                raise ReplayError("variant screenshot is unavailable")
+            data = WorkspaceManager(core.LEDGER_CFG).state_file(
+                str(variant.get("workspace_id") or ""), path[len(prefix):],
+            )
+            if not data:
+                raise ReplayError("variant screenshot is unavailable")
+        except (StopIteration, ReplayError, WorkspaceError) as exc:
+            return jsonify({"error": str(exc)}), 404
+        return Response(data, mimetype="image/png")
 
     @app.route("/profile")
     def _profile():
@@ -555,7 +831,7 @@ def build_flask_app() -> Flask:
         u = auth.current_user(core.REG.AUTH_CFG)
         if not auth.is_admin(core.REG.AUTH_CFG, u):
             return core._page("Held feedback queue", "<p style='color:#a33;font-size:13px'>Admins only.</p>"), 403
-        if action not in {"approve", "reject"}:
+        if action not in {"approve", "reject", "resume", "preserve", "restore", "discard-checkpoint"}:
             return core._page("Held feedback queue", "<p style='color:#a33;font-size:13px'>Unknown queue action.</p>"), 400
         found = _queue_find(feedback_id)
         if not found:
@@ -565,7 +841,24 @@ def build_flask_app() -> Flask:
             return core._page("Held feedback queue", "<p style='color:#a33;font-size:13px'>Only held user feedback can be reviewed here.</p>"), 400
 
         actor = _queue_actor(u)
+        from curiator import run_recovery
+
+        if action in {"resume", "preserve", "restore", "discard-checkpoint"}:
+            try:
+                if action == "resume":
+                    run_recovery.resume_partial(core.LEDGER_CFG, feedback_id)
+                elif action == "preserve":
+                    run_recovery.preserve_partial(core.LEDGER_CFG, feedback_id)
+                elif action == "restore":
+                    run_recovery.restore_baseline(core.LEDGER_CFG, feedback_id)
+                else:
+                    run_recovery.discard_checkpoint(core.LEDGER_CFG, feedback_id)
+            except run_recovery.CheckpointError as exc:
+                return redirect(f"/queue?msg={quote('Recovery failed: ' + str(exc))}")
+            return redirect(f"/queue?msg={quote('Recovery ' + action + ' completed')}")
         if action == "approve":
+            if run_recovery.checkpoint_path(core.LEDGER_CFG, feedback_id).exists():
+                return redirect("/queue?msg=Use+the+explicit+recovery+actions+for+this+run")
             ledger.add_system_note(
                 core.LEDGER_CFG,
                 key,
@@ -573,7 +866,11 @@ def build_flask_app() -> Flask:
                 reply_to=[entry["id"]],
                 agent="curiator queue",
             )
-            ledger.set_status(core.LEDGER_CFG, key, [entry["id"]], "new")
+            ledger.update_entry(core.LEDGER_CFG, key, entry["id"], {
+                "status": "new",
+                "moderation_approved_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+                "moderation_approved_by": actor,
+            })
             return redirect("/queue?msg=Approved")
 
         reason = (request.form.get("reason") or "").strip()
@@ -582,6 +879,10 @@ def build_flask_app() -> Flask:
             text += f" Reason: {reason}"
         ledger.add_system_note(core.LEDGER_CFG, key, text, reply_to=[entry["id"]], agent="curiator queue")
         ledger.set_status(core.LEDGER_CFG, key, [entry["id"]], "rejected")
+        if run_recovery.checkpoint_path(core.LEDGER_CFG, feedback_id).exists():
+            run_recovery.retire_checkpoint(core.LEDGER_CFG, feedback_id, "closed", note=text)
+            run_recovery.append_trace(core.LEDGER_CFG, feedback_id,
+                                      "Recovery checkpoint retired; source left untouched.")
         return redirect("/queue?msg=Rejected")
 
     @app.route("/api/feedback/<key>", methods=["GET", "POST"])
@@ -599,19 +900,23 @@ def build_flask_app() -> Flask:
             reply_to = body.get("reply_to") or []
             if isinstance(reply_to, str):
                 reply_to = [reply_to]
-            entry = core.save_entry(
-                key,
-                body.get("stars"),
-                body.get("comment", ""),
-                screenshot,
-                user=u,
-                reply_to=reply_to,
-                status=status,
-                annotations=body.get("annotations"),
-                annotation_targets=body.get("screenshot_source") == "capture",
-                transcript_segments=body.get("transcript_segments"),
-                audio_ref=body.get("audio_ref"),
-            )
+            try:
+                entry = core.save_entry(
+                    key,
+                    body.get("stars"),
+                    body.get("comment", ""),
+                    screenshot,
+                    user=u,
+                    reply_to=reply_to,
+                    status=status,
+                    annotations=body.get("annotations"),
+                    annotation_targets=body.get("screenshot_source") == "capture",
+                    transcript_segments=body.get("transcript_segments"),
+                    audio_ref=body.get("audio_ref"),
+                    design_refs=body.get("design_refs"),
+                )
+            except DesignReferenceError as exc:
+                return jsonify({"error": f"invalid design reference: {exc}"}), 400
             return jsonify({"entry": _safe_entry(entry), **_feedback_payload(key)})
         return jsonify(_feedback_payload(key))
 
@@ -709,6 +1014,25 @@ def build_flask_app() -> Flask:
         value = body.get("value")
         if not key or value is None:
             return jsonify({"error": "missing key/value"}), 400
+        proposal_match = re.fullmatch(r"curiator-proposal:(approve|reject):([0-9A-Za-z._-]+)", str(value))
+        if proposal_match:
+            user = core._current_user()
+            if not auth.is_admin(core.REG.AUTH_CFG, user):
+                return jsonify({"error": "proposal approval and rejection require an admin account"}), 403
+            from curiator import proposals
+
+            action, feedback_id = proposal_match.groups()
+            actor = _queue_actor(user)
+            try:
+                result = (
+                    proposals.approve(core.LEDGER_CFG, key, feedback_id, actor=actor)
+                    if action == "approve"
+                    else proposals.reject(core.LEDGER_CFG, key, feedback_id, actor=actor)
+                )
+            except proposals.ProposalError as exc:
+                return jsonify({"error": str(exc)}), 409
+            core.reload_app(key)
+            return jsonify({"proposal_result": result, **_feedback_payload(key)})
         u, status, auth_error, code = _feedback_user_and_status()
         if auth_error:
             return jsonify({"error": auth_error}), code or 401
@@ -741,7 +1065,7 @@ def build_flask_app() -> Flask:
     def _trace_stop(feedback_id):
         """The trace-view Stop button: drop a cancel marker the watcher polls for. Only meaningful while
         the item is `working`; the watcher terminates the agent and parks the item as `held`."""
-        from ..loop import runlog as _runlog
+        from curiator.loop import runlog as _runlog
         found = _queue_find(feedback_id)
         if not found:
             return jsonify({"ok": False, "error": "feedback not found"}), 404
@@ -757,7 +1081,7 @@ def build_flask_app() -> Flask:
 
     @app.route("/general")
     def _general():
-        return core.render_history(request.args.get("range"))
+        return core.render_history(request.args.get("range"), request.args.get("filter"))
 
     @app.route("/reload/<key>", methods=["POST", "GET"])
     def _reload(key):

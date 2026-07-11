@@ -9,11 +9,16 @@ from pathlib import Path
 from . import ledger
 from .app_cli import _app_names
 from .config import agent_label, app_spec, app_specs, load_config
+from .design_refs import DesignReferenceError, clean_design_refs
 
 
 OPEN_FEEDBACK_STATUSES = {"new", "working", "awaiting_approval", "held"}
 _BROWSER_SMOKE_SECTION = "## Browser-smoke capability"
-_BROWSER_SMOKE_PATH_RE = re.compile(r"^- (?P<label>result JSON|screenshot|console log): `(?P<path>[^`]+)`", re.M)
+_FIGMA_DESIGN_SECTION = "## Figma design-reference capability"
+_BROWSER_SMOKE_PATH_RE = re.compile(
+    r"^- (?P<label>(?:mobile )?(?:result JSON|screenshot|console log)): `(?P<path>[^`]+)`",
+    re.M,
+)
 
 
 def _cli_shared():
@@ -63,7 +68,7 @@ def _reload_in_shell(cfg: dict, app: str) -> str | None:
 
 
 def _feedback_dir(cfg: dict) -> Path:
-    value = str((cfg.get("feedback") or {}).get("dir") or "feedback").strip("/") or "feedback"
+    value = str((cfg.get("feedback") or {}).get("dir") or "feedback")
     p = Path(value)
     return p if p.is_absolute() else Path(cfg["repo_root"]) / p
 
@@ -115,13 +120,20 @@ def _enforce_browser_smoke_contract(cfg: dict, feedback_id: str) -> None:
     result_path = paths.get("result JSON")
     screenshot_path = paths.get("screenshot")
     console_path = paths.get("console log")
+    expected = [
+        ("result JSON", result_path),
+        ("screenshot", screenshot_path),
+        ("console log", console_path),
+    ]
+    if _FIGMA_DESIGN_SECTION in task_text:
+        expected.extend([
+            ("mobile result JSON", paths.get("mobile result JSON")),
+            ("mobile screenshot", paths.get("mobile screenshot")),
+            ("mobile console log", paths.get("mobile console log")),
+        ])
     missing_labels = [
         label
-        for label, raw in (
-            ("result JSON", result_path),
-            ("screenshot", screenshot_path),
-            ("console log", console_path),
-        )
+        for label, raw in expected
         if not raw or not _repo_path(cfg, raw).exists()
     ]
     if missing_labels:
@@ -137,6 +149,14 @@ def _enforce_browser_smoke_contract(cfg: dict, feedback_id: str) -> None:
             "curIAtor: refusing --status done because the browser-smoke result is not passing "
             f"({reason}). Fix the rendered app or rerun the browser smoke before replying."
         )
+    mobile_result = paths.get("mobile result JSON")
+    if _FIGMA_DESIGN_SECTION in task_text and mobile_result:
+        ok, reason = _browser_smoke_result_ok(_repo_path(cfg, mobile_result))
+        if not ok:
+            raise SystemExit(
+                "curIAtor: refusing --status done because the mobile browser-smoke result is not passing "
+                f"({reason}). Fix the responsive app or rerun the mobile smoke before replying."
+            )
 
 
 def _parse_actions_arg(s):
@@ -152,7 +172,73 @@ def _parse_actions_arg(s):
 
 
 def _post_reply(cfg: dict, app: str, feedback_id: str, text: str, status: str | None, actions: str | None = None) -> int:
+    from . import proposals
+
+    proposal_mode = proposals.enabled(cfg, app)
+    if proposal_mode and status == "done":
+        try:
+            result = proposals.finish(cfg, app, feedback_id, text)
+        except proposals.ProposalError as exc:
+            raise SystemExit(f"curIAtor: refusing proposal completion: {exc}") from exc
+        note = f"{text}\n\n{proposals.proposal_note(result)}"
+        ledger.add_system_note(
+            cfg,
+            app,
+            note,
+            reply_to=[feedback_id],
+            status="update",
+            ts=datetime.now(timezone.utc).isoformat(),
+            actions=proposals.action_items(feedback_id),
+            agent=agent_label(cfg),
+        )
+        ledger.set_status(cfg, app, [feedback_id], "awaiting_approval")
+        from . import run_recovery
+
+        run_recovery.append_trace(
+            cfg,
+            feedback_id,
+            f"Proposal {result['branch']} committed at {result['sha']}; live preview activated and awaiting approval.",
+        )
+        print(
+            f"curiator: proposal {result['branch']}@{result['sha']} ready "
+            f"for {app}/{feedback_id} (status=awaiting_approval)"
+        )
+        message = _reload_in_shell(cfg, app)
+        print(f"curiator: {message}" if message else "curiator: shell not reachable - proposal preview will load on restart")
+        return 0
+    if proposal_mode and status == "awaiting_approval":
+        try:
+            proposals.abandon_empty(cfg, app, feedback_id)
+        except proposals.ProposalError as exc:
+            raise SystemExit(f"curIAtor: refusing plan-only reply: {exc}") from exc
+
+    dependency_receipt = None
     if status == "done":
+        from . import dependencies, run_recovery
+
+        original = next(
+            (
+                entry for entry in ledger.load(cfg).get(app, [])
+                if entry.get("id") == feedback_id and entry.get("kind") != "system"
+            ),
+            None,
+        )
+        if original is None:
+            raise SystemExit(f"curIAtor: feedback id {feedback_id!r} not found for {app!r}.")
+        try:
+            dependency_receipt = dependencies.verify_done(cfg, app, original)
+        except dependencies.DependencyError as exc:
+            run_recovery.append_trace(cfg, feedback_id, f"Shared dependency verification blocked done: {exc}")
+            raise SystemExit(f"curIAtor: refusing --status done: {exc}") from exc
+        if dependency_receipt.get("changed_components"):
+            component_names = ", ".join(dependency_receipt["changed_components"])
+            app_names = ", ".join(row["key"] for row in dependency_receipt.get("apps") or [])
+            run_recovery.append_trace(
+                cfg,
+                feedback_id,
+                "Shared dependency verification passed for component(s) "
+                f"{component_names}; dependent app smoke(s): {app_names or 'none'}.",
+            )
         _enforce_browser_smoke_contract(cfg, feedback_id)
     ts = datetime.now(timezone.utc).isoformat()
     ledger.add_system_note(cfg, app, text, reply_to=[feedback_id],
@@ -175,6 +261,13 @@ def _post_reply(cfg: dict, app: str, feedback_id: str, text: str, status: str | 
             for app_commit in res.get("app_commits") or []:
                 repo = Path(app_commit.get("repo", "")).name or "app repo"
                 print(f"curiator: committed nested app {repo}@{app_commit['sha']} on {app_commit.get('branch','')}")
+            for component_commit in res.get("component_commits") or []:
+                repo = Path(component_commit.get("repo", "")).name or "component repo"
+                keys = ",".join(component_commit.get("components") or [])
+                print(
+                    f"curiator: committed shared component {keys} in "
+                    f"{repo}@{component_commit['sha']} on {component_commit.get('branch', '')}"
+                )
             for memory_commit in res.get("memory_commits") or []:
                 memory = memory_commit.get("memory") or Path(memory_commit.get("repo", "")).name or "memory"
                 print(f"curiator: committed memory {memory}@{memory_commit['sha']} on {memory_commit.get('branch','')}")
@@ -184,10 +277,20 @@ def _post_reply(cfg: dict, app: str, feedback_id: str, text: str, status: str | 
             print(f"curiator: not committed ({res.get('reason')})")
     # On `done`, the agent has just edited the app — make the fix live in a running shell.
     if status == "done":
-        msg = _reload_in_shell(cfg, app)
-        print(f"curiator: {msg}" if msg else "curiator: shell not reachable — direct reload skipped "
-              "(a running React shell also picks up changed app sources on its poll; otherwise the fix "
-              "shows once `curiator up` reloads the app).")
+        reload_apps = (dependency_receipt or {}).get("reload_apps") or [app]
+        messages = []
+        for app_key in dict.fromkeys(reload_apps):
+            message = _reload_in_shell(cfg, app_key)
+            messages.append(f"{app_key}: {message}" if message else f"{app_key}: shell not reachable")
+        if any("shell not reachable" not in message for message in messages):
+            for message in messages:
+                print(f"curiator: {message}")
+        else:
+            print(
+                "curiator: shell not reachable — direct reload skipped "
+                "(a running React shell also picks up changed app sources on its poll; otherwise the fix "
+                "shows once `curiator up` reloads the app)."
+            )
     return 0
 
 
@@ -214,6 +317,12 @@ def cmd_context(args) -> int:
     print(f"- app root: `{spec.get('root') or ''}`")
     print(f"- source scope: `{spec.get('source') or ''}`")
     print(f"- smoke: `{spec.get('smoke') or 'none configured'}`")
+    from .dependencies import app_closure, normalize
+
+    dependency_graph = normalize(cfg, strict=False)
+    closure = app_closure(dependency_graph, app) if not dependency_graph["errors"] else []
+    if closure:
+        print(f"- shared dependencies: {', '.join(f'`{key}`' for key in closure)} (read-only by default)")
     commands = spec.get("commands") if isinstance(spec.get("commands"), dict) else {}
     if commands.get("preview"):
         print(f"- preview: `{commands['preview']}`")
@@ -294,11 +403,18 @@ def cmd_work(args) -> int:
         entry = _choose_feedback(cfg, app)
         if not entry:
             raise SystemExit(f"curIAtor: no open feedback for {app}.")
+    from .loop import adapters, runlog
+    try:
+        task = adapters.build_task(cfg, app, entry)
+    except Exception as exc:
+        from .proposals import ProposalError
+
+        if isinstance(exc, ProposalError):
+            raise SystemExit(f"curIAtor: cannot open proposal workspace: {exc}") from exc
+        raise
     if not args.no_claim:
         ledger.set_status(cfg, app, [entry["id"]], "working")
         entry = {**entry, "status": "working"}
-    from .loop import adapters, runlog
-    task = adapters.build_task(cfg, app, entry)
     reply_file = Path(task.reply_file)
     if reply_file.exists() and reply_file.stat().st_size:
         runlog.note(task, "opened for interactive CLI work")
@@ -386,6 +502,24 @@ def cmd_seed(args) -> int:
         annotations = clean_annotations(it.get("annotations"))
         if annotations:
             extra["annotations"] = annotations
+        try:
+            design_refs = clean_design_refs(it.get("design_refs"))
+        except DesignReferenceError as exc:
+            raise SystemExit(f"curIAtor: invalid seeded design reference: {exc}") from exc
+        if design_refs:
+            extra["design_refs"] = design_refs
+        raw_writable = it.get("writable_components") or []
+        if isinstance(raw_writable, str):
+            raw_writable = [raw_writable]
+        writable = list(dict.fromkeys(str(key) for key in raw_writable if str(key)))
+        if writable:
+            from .dependencies import DependencyError, normalize, writable_components
+
+            try:
+                writable_components(normalize(cfg), it["app"], {"writable_components": writable})
+            except DependencyError as exc:
+                raise SystemExit(f"curIAtor: invalid seeded shared-component scope: {exc}") from exc
+            extra["writable_components"] = writable
         ledger.save_entry(cfg, it["app"], stars=it.get("stars"), comment=it.get("comment", ""),
                           ts=ts, user=it.get("user", default_user), extra=extra or None)
         n += 1
@@ -409,6 +543,10 @@ def _print_feedback_items(cfg: dict, app: str, limit: int = 20) -> None:
             flags.append("reply_to=" + ",".join(e.get("reply_to") or []))
         if e.get("screenshot"):
             flags.append("screenshot=" + e.get("screenshot"))
+        if e.get("design_refs"):
+            flags.append(f"design_refs={len(e.get('design_refs') or [])}")
+        if e.get("writable_components"):
+            flags.append("writable_components=" + ",".join(e.get("writable_components") or []))
         trace = runlog.reply_path(cfg, e.get("id"))
         if trace.exists():
             flags.append("trace=" + str(trace.relative_to(Path(cfg["repo_root"]))))
@@ -439,11 +577,21 @@ def cmd_feedback(args) -> int:
     inspect history without treating the SQLite file format as a private API."""
     import json
     cfg = load_config()
+    if args.action == "compact":
+        result = ledger.compact(cfg)
+        if getattr(args, "json", False):
+            print(json.dumps(result, indent=2))
+        else:
+            print(
+                f"curiator: compacted {result['path']} "
+                f"({result['before_bytes']} -> {result['after_bytes']} bytes)"
+            )
+        return 0
     if args.action == "add":
         app = _resolve_app(cfg, args.app)
         comment = (args.comment_text or " ".join(args.comment or [])).strip()
-        if not comment and not args.stars:
-            raise SystemExit("curIAtor: feedback add needs a comment and/or --stars.")
+        if not comment and not args.stars and not args.design_ref:
+            raise SystemExit("curIAtor: feedback add needs a comment, rating, and/or --design-ref.")
         extra = {}
         if args.reply_to:
             extra["reply_to"] = [args.reply_to]
@@ -452,9 +600,37 @@ def cmd_feedback(args) -> int:
         annotations = _cli_annotations(args)
         if annotations:
             extra["annotations"] = annotations
+        labels = args.design_label or []
+        try:
+            design_refs = clean_design_refs([
+                {"url": url, "label": labels[idx] if idx < len(labels) else None}
+                for idx, url in enumerate(args.design_ref or [])
+            ])
+        except DesignReferenceError as exc:
+            raise SystemExit(f"curIAtor: invalid design reference: {exc}") from exc
+        if design_refs:
+            extra["design_refs"] = design_refs
+        writable = list(
+            dict.fromkeys(str(key) for key in (getattr(args, "writable_component", []) or []) if str(key))
+        )
+        if writable:
+            from .dependencies import DependencyError, normalize, writable_components
+
+            try:
+                writable_components(normalize(cfg), app, {"writable_components": writable})
+            except DependencyError as exc:
+                raise SystemExit(f"curIAtor: invalid shared-component scope: {exc}") from exc
+            extra["writable_components"] = writable
         eid = ledger.save_entry(cfg, app, stars=args.stars, comment=comment, user=_cli_user(cfg),
                                 extra=extra or None)
-        suffix = f" with {len(annotations)} annotation(s)" if annotations else ""
+        details = []
+        if annotations:
+            details.append(f"{len(annotations)} annotation(s)")
+        if design_refs:
+            details.append(f"{len(design_refs)} design reference(s)")
+        if writable:
+            details.append("writable component(s): " + ", ".join(writable))
+        suffix = " with " + " and ".join(details) if details else ""
         print(f"curiator: added feedback {app}/{eid}{suffix}")
         return 0
     data = ledger.load(cfg)
@@ -550,6 +726,11 @@ def _queue_reject(cfg: dict, app: str, entry: dict, *, actor: str, reason: str =
         text += f" Reason: {reason}"
     ledger.add_system_note(cfg, app, text, reply_to=[entry["id"]], agent="curiator queue")
     ledger.set_status(cfg, app, [entry["id"]], "rejected")
+    from . import run_recovery
+
+    if run_recovery.checkpoint_path(cfg, entry["id"]).exists():
+        run_recovery.retire_checkpoint(cfg, entry["id"], "closed", note=text)
+        run_recovery.append_trace(cfg, entry["id"], "Recovery checkpoint retired; source left untouched.")
 
 
 def cmd_queue(args) -> int:
@@ -618,6 +799,14 @@ def cmd_queue(args) -> int:
 
     actor = _queue_actor(cfg)
     if args.action == "approve":
+        from . import run_recovery
+
+        if run_recovery.checkpoint_path(cfg, entry["id"]).exists():
+            raise SystemExit(
+                f"curIAtor: {entry['id']} has partial or ambiguous run state. Inspect it with "
+                f"`curiator run recovery {entry['id']}`, then use run resume, preserve, restore, "
+                "or queue reject; generic approval is disabled."
+            )
         ledger.add_system_note(
             cfg,
             app,
@@ -625,7 +814,11 @@ def cmd_queue(args) -> int:
             reply_to=[entry["id"]],
             agent="curiator queue",
         )
-        ledger.set_status(cfg, app, [entry["id"]], "new")
+        ledger.update_entry(cfg, app, entry["id"], {
+            "status": "new",
+            "moderation_approved_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+            "moderation_approved_by": actor,
+        })
         result = {"app": app, "id": entry["id"], "status": "new", "action": "approved"}
         if args.json:
             print(json.dumps(result, indent=2))
@@ -641,5 +834,3 @@ def cmd_queue(args) -> int:
     else:
         print(f"curiator: rejected {app}/{entry['id']} → rejected")
     return 0
-
-

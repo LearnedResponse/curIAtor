@@ -67,7 +67,7 @@ def test_app_templates_lists_supported_template_contract(capsys):
 
     assert cli.main(["app", "templates"]) == 0
     out = capsys.readouterr().out
-    assert "curiator: 13 app templates" in out
+    assert "curiator: 14 app templates" in out
     assert "dash" in out and "dash-inproc" in out
     assert "react" in out and "vite+react" in out
     assert "next" in out and "proxy preserve-prefix" in out
@@ -81,6 +81,7 @@ def test_app_templates_lists_supported_template_contract(capsys):
         "static",
         "python",
         "node",
+        "nodered",
         "flask",
         "fastapi",
         "rust",
@@ -93,6 +94,7 @@ def test_app_templates_lists_supported_template_contract(capsys):
     }
     assert next(row for row in rows if row["name"] == "dash")["mount"] == "dash-inproc"
     assert next(row for row in rows if row["name"] == "gradio")["mount"] == "proxy preserve-prefix"
+    assert next(row for row in rows if row["name"] == "nodered")["toolchain"] == "node-red"
 
 
 def test_app_create_dash_directory_updates_gallery(collection):
@@ -192,6 +194,58 @@ def test_app_create_node_proxy_template(collection, capsys):
     out = capsys.readouterr().out
     assert "- smoke: `node --check server.js`" in out
     assert "- preview: `node server.js --port 8700`" in out
+
+
+def test_app_create_nodered_proxy_template(collection, capsys):
+    from curiator import cli
+
+    assert cli.main([
+        "app", "create", "flow_lab", "--template", "nodered", "--title", "Flow Lab",
+    ]) == 0
+    root = collection / "apps" / "flow_lab"
+    assert (root / "settings.js").exists()
+    assert (root / "smoke.mjs").exists()
+    assert (root / "ws_smoke.mjs").exists()
+    assert (root / "userdir" / "flows.json").exists()
+    package = json.loads((root / "package.json").read_text())
+    assert package["dependencies"]["node-red"] == "^5.0.1"
+    settings = (root / "settings.js").read_text()
+    assert "process.env.CURIATOR_APP" in settings
+    assert "httpAdminRoot" in settings and "httpNodeRoot" in settings
+    assert "processUptime" in settings and "telemetry" in settings and "runtimeState" in settings
+
+    result = subprocess.run(
+        ["node", "smoke.mjs"],
+        cwd=root,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stderr
+    ws_check = subprocess.run(
+        ["node", "--check", "ws_smoke.mjs"],
+        cwd=root,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert ws_check.returncode == 0, ws_check.stderr
+    app = next(a for a in _gallery(collection)["apps"] if a["name"] == "flow_lab")
+    assert app["smoke"] == "node smoke.mjs"
+    assert app["smoke_http"] == {"path": "/app/flow_lab/settings", "timeout": 15}
+    assert app["mount"] == {
+        "kind": "proxy",
+        "cmd": "npm start -- --port {port}",
+        "port": 8700,
+        "preserve_prefix": True,
+    }
+    assert app["commands"]["preview"] == "npm start -- --port 8700"
+    assert app["commands"]["bootstrap"] == "npm ci --no-audit --no-fund"
+    capsys.readouterr()
+    assert cli.main(["doctor", "--json"]) == 0
+    doctor = json.loads(capsys.readouterr().out)
+    assert doctor["errors"] == 0
+    assert not [issue for issue in doctor["issues"] if "Node-RED" in issue["message"]]
 
 
 def test_app_create_flask_proxy_template(collection, capsys):

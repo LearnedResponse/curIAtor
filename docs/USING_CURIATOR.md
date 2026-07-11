@@ -113,9 +113,42 @@ the updated app gitlink. The app keeps its own history, while the collection kee
 and provenance receipt. `curiator status --app <name>` shows the nested app repo branch/dirty state
 when that two-repo workflow applies.
 
+For a versioned app that should not change accepted state until a human reviews the rendered result,
+enable per-run proposals:
+
+```yaml
+git:
+  commit: true
+  branch: per-run
+  accepted_branch: main
+  include_ledger: false
+```
+
+Each app feedback item then starts from `main` in an ignored
+`curiator/run/<feedback_id>` worktree. The task bundle points the agent only at that worktree and pins
+the canonical gallery path for ledger replies. `curiator done` commits the branch and leaves the item
+`awaiting_approval`; the shell mounts the branch and shows a Proposal preview banner plus admin-only
+Approve/Reject actions. Approve performs a no-clobber merge and accepted-state smoke test. A conflict or
+failed smoke aborts the merge and keeps the proposal open; Reject removes the worktree but retains the
+branch. A newer same-app run supersedes an older open proposal, while different app repositories can
+preview independently.
+
+```bash
+curiator proposal list
+curiator proposal approve <feedback_id> --app revenue
+curiator proposal reject <feedback_id> --app revenue "use the newer variant"
+```
+
+Use this mode only when the accepted branch is a real boundary. The normal rapid-prototyping flow stays
+`git.branch: null`. `curiator doctor` verifies that commits are enabled, the accepted branch exists, and
+each configured app source has a Git owner. Per-run mode requires `include_ledger: false`: proposal refs
+and the live SQLite queue advance independently until approval. `galleries/curiator-proposals` is the
+executable example.
+
 `curiator app templates` prints the current scaffold/import menu, including mount kind, toolchain, and
 the intended use for each template. Templates today: `dash` (in-process Dash), `static` (same-origin proxy using `http.server`), `python`
-(tiny proxy-served Python HTTP app), `node` (dependency-light Node HTTP server), `flask`
+(tiny proxy-served Python HTTP app), `node` (dependency-light Node HTTP server), `nodered`
+(prefix-mounted Node-RED flow editor), `flask`
 (server-rendered Flask app), `fastapi` (API-backed ASGI app), `rust` (dependency-light Rust HTTP
 server), `react` (Vite + React), `svelte` (Vite + Svelte), `vue` (Vite + Vue), `next` (Next.js App
 Router), `streamlit`, and `gradio`.
@@ -124,7 +157,7 @@ from `CURIATOR_APP`, and the Next template sets `basePath`, so assets resolve un
 `--package-manager pnpm|yarn|bun|npm` to override auto-detection from lockfiles. Every generated proxy
 template also adds a concrete standalone `commands.preview` command to `gallery.yaml`, and
 `curiator status` / `curiator context` surface it alongside the smoke command. The Next, Streamlit, and
-Gradio templates use framework root-path/base-path settings with prefix-preserving proxy mounts and
+Gradio and Node-RED templates use framework root-path/base-path settings with prefix-preserving proxy mounts and
 include generated README notes about the lightweight proxy's production reverse-proxy limits.
 
 When a proxied app cannot start or the backend port never responds, the app iframe shows a proxy
@@ -177,6 +210,43 @@ path to the local app process. For heavier deployments you can still put nginx/K
 the curIAtor contract stays the same.
 `mount.cmd` and `mount.cwd` may use `{port}`, `{app}`, `{root}`, and `{source}` placeholders; the shell
 renders them before launching the proxy process and still exports `PORT` and `CURIATOR_APP`.
+
+**Shared source components:** declare a library once and attach explicit dependency edges to every
+consumer. curIAtor models ownership, task scope, verification, reloads, and Git receipts; it does not
+replace pip, npm, Cargo, or infer imports.
+
+```yaml
+components:
+  - key: research_kernels
+    root: packages
+    source: research_kernels
+    smoke: python -m research_kernels.smoke
+
+apps:
+  - name: explorer_a
+    root: apps/explorer_a
+    source: .
+    smoke: python -m compileall -q .
+    depends_on: [research_kernels]
+    mount: {kind: dash-inproc, module: app}
+```
+
+Dependencies enter every consumer task as read-only context. Grant write authority only on the
+feedback item that needs the library edit:
+
+```bash
+curiator feedback add explorer_a "adjust the shared kernel" \
+  --writable-component research_kernels
+curiator work <feedback-id>
+```
+
+On `done`, curIAtor rejects undeclared component edits, runs changed component smokes in dependency
+order, runs every affected app smoke with bounded parallelism, and blocks completion on the first
+failure with the app/component named in the trace. A passing run commits nested component repos before
+the collection gitlink/ledger receipt and reloads only affected mounts. `curiator doctor` prints the
+normalized graph, ownership, missing roots/edges, and cycle paths. Docker workspace descriptors pin the
+component closure and every owning-repo SHA; shared dependencies remain read-only unless a future
+multi-repo workspace explicitly grants another owner.
 
 ## 2. Run it
 
@@ -307,11 +377,23 @@ app source signatures on its normal poll; if the direct reload poke misses the s
 invalidates changed app mounts and remounts the iframe without a process restart.
 
 If `curiator serve` or `curiator watch` is restarted while a headless agent is mid-fix, the watcher
-now treats any watcher-owned `working` item it finds at startup as interrupted: it writes a thread note,
-appends the recovery to `feedback/replies/<id>.md`, and moves the item back to `new` so the loop can
-retry. It skips `curiator work` / interactive claims because those belong to the human CLI session.
-Automatic recovery does **not** reset source files; review the working tree or use `curiator revert`
-for completed git-as-memory runs when you want to undo code.
+uses a source checkpoint written before dispatch. It safely requeues only when the exact writable
+source scope, Git index, and pre-existing dirty state are unchanged. Partial edits, missing checkpoints,
+and ambiguous state are parked as `held`; `curiator work` / interactive claims are still left alone.
+
+Inspect and resolve a held interrupted run explicitly:
+
+```bash
+curiator run recovery <feedback_id>          # pre-existing, run, and later source deltas
+curiator run resume <feedback_id>            # use the partial state as the next run baseline
+curiator run preserve <feedback_id>          # save partial state on curiator/recovery/<id>
+curiator run restore <feedback_id>            # exact scoped baseline restore, then requeue
+curiator run discard-checkpoint <feedback_id> # keep current files and retire recovery data
+```
+
+Restore is disabled if source changed after the agent process ended. It never resets a repository or
+wipes unrelated untracked files. The admin Queue and agent trace expose the same recovery choices.
+Completed git-as-memory runs remain the responsibility of `curiator revert`.
 
 You can also add feedback from the terminal:
 
@@ -337,6 +419,9 @@ curiator queue sweep --older-than 30         # dry-run stale held-item cleanup
 curiator queue sweep --older-than 30 --apply --reason stale
 ```
 
+`queue approve` is intentionally disabled for an interrupted run with an active checkpoint; choose a
+`curiator run` recovery action first so a retry cannot silently inherit ambiguous partial edits.
+
 Admins can also open **Queue** from the account menu in the React shell; it shows the same held pool
 and uses the same ledger transitions.
 
@@ -360,21 +445,25 @@ Before moving or publishing a collection, run the portability preflight:
 
 ```bash
 curiator doctor                # errors on absolute/missing paths; warns on weak smoke/proxy/HMR/deps
-curiator doctor --agent        # also report browser/Docker/git/gh/sqlite availability for agent tasks
+curiator doctor --agent        # also report browser/Docker/Figma/git/gh/sqlite availability for agent tasks
 curiator doctor --json
+curiator feedback compact      # VACUUM a tracked ledger after sanitizing old machine-local payloads
 curiator smoke                 # runs each app's configured smoke command or cheap inferred fallback
 curiator smoke --http          # also starts proxy apps briefly and verifies an HTTP response
 curiator smoke --app revenue --json
 curiator smoke --app revenue --browser --artifact-dir feedback/replies/<id>-browser-smoke \
   --output feedback/replies/<id>-browser-smoke/result.json --json
+curiator smoke --app revenue --browser --viewport 390x844 \
+  --artifact-dir feedback/replies/<id>-browser-smoke/mobile \
+  --output feedback/replies/<id>-browser-smoke/mobile/result.json --json
 curiator smoke --jobs 4 --json # run independent app checks concurrently, preserving report order
 curiator release-preflight     # nested public galleries + publish-unsafe artifacts/local deps
 curiator release-preflight --fresh-clone
 curiator release-preflight --fresh-clone --strict  # fail on doctor warnings for publication gates
 curiator release-preflight --fresh-clone --json --output release-evidence/release-preflight.json
-curiator release-preflight --http-smoke  # also start proxy apps and poll HTTP when deps are installed
+curiator release-preflight --prepare-dependencies --http-smoke  # run commands.bootstrap, then poll HTTP
 curiator release-preflight --browser-smoke  # also open apps through the shell in headless Brave
-curiator release-preflight --include-optional --fresh-clone --strict  # add finance + phylogenetics
+curiator release-preflight --include-optional --fresh-clone --strict  # add finance + phylogenetics + ML + Node-RED
 curiator playground-preflight  # hosted pilot posture: auth, quotas, queue, doctor, smoke
 curiator playground-preflight --http-smoke  # also start proxy apps when deps are installed
 curiator playground-preflight --browser-smoke  # also prove shell iframe render with headless Brave
@@ -410,10 +499,49 @@ opens each app through headless Brave, and fails if the iframe shows a mount/pro
 visible content. It is opt-in because it requires a local browser binary.
 For agent proof artifacts, add `--artifact-dir` and `--output`; the browser pass writes a screenshot,
 console log, and JSON result under the requested directory so the feedback thread has a visible receipt.
+Use `--viewport WIDTHxHEIGHT` for explicit responsive evidence. Figma-linked tasks require the normal
+desktop artifact and a `390x844` mobile artifact before `curiator reply --status done` is accepted.
 The same browser pass is available in release and hosted-pilot gates as `--browser-smoke`; pass
 `--browser-bin <path>` when Brave is not on `PATH`.
-For publication gates, `curiator release-preflight --http-smoke` applies the same HTTP pass across the
+For publication gates, `curiator release-preflight --prepare-dependencies --http-smoke` first runs each
+app's explicit `commands.bootstrap` once per root, then applies the same HTTP pass across the
 selected nested galleries, or across fresh clones after app dependencies are installed there.
+
+### Figma design references
+
+Feedback can carry up to five node-specific Figma URLs. In the shell, use **Design** beside the capture
+controls; in the CLI, repeat `--design-ref` and optionally pair labels by position:
+
+```bash
+curiator feedback add revenue "match the supplied frames" \
+  --design-ref 'https://www.figma.com/design/<file>/<name>?node-id=12-34' \
+  --design-label 'Revenue overview'
+```
+
+curIAtor stores only the validated URL, provider, file/node identifiers, label/note, and requested access.
+Provider credentials and fetched design payloads never enter the ledger, task Markdown, trace, or Git.
+Anonymous feedback is held before any provider fetch. Moderation approval is recorded on the entry, but
+dispatch still waits unless `curiator doctor --agent` reports Figma read context as available.
+
+Provider authentication is external to curIAtor. After a Figma `whoami`/read probe succeeds in the same
+agent environment, record a short-lived, gitignored local receipt:
+
+```bash
+curiator capability verify figma --provider codex
+curiator doctor --agent
+```
+
+Writes remain `not-authorized` unless the operator explicitly adds `--write-design`; read verification never
+grants write access. If the provider is rate-limited or down, make doctor honest until the retry window:
+
+```bash
+curiator capability unavailable figma --provider codex \
+  --reason 'provider quota exhausted' --retry-hours 24
+curiator capability clear figma
+```
+
+Capability receipts live under `.curiator/cache/capabilities/`; they contain states and timestamps only,
+expire automatically, and are excluded from collection Git.
 
 For an `engine-backed` mount, add an optional engine health endpoint when the sidecar exposes HTTP:
 
@@ -580,7 +708,92 @@ For a hosted invite-only playground, use the phase-0 deployment runbook in
 collection, TLS at the edge, `curiator playground-backup-smoke` restore checks for the mounted
 collection, and weekly `curiator stats` review.
 
-## 7. Adapters & autonomy (recap)
+## 7. Fork an app into a Docker workspace
+
+For trusted local experimentation, a host-native curIAtor process can create an isolated branch or
+historical preview without checking out or resetting the canonical repository. Check the host first:
+
+```bash
+curiator --gallery /path/to/gallery.yaml workspace doctor
+curiator --gallery /path/to/gallery.yaml workspace create app_key --name experiment
+curiator --gallery /path/to/gallery.yaml workspace create app_key --from HEAD~3 --preview
+curiator --gallery /path/to/gallery.yaml workspace list
+```
+
+Each workspace has a source volume, a separate feedback/task/artifact state volume, a child overlay on
+a stable loopback port, and immutable collection/owning-repository base SHAs. A nested app repo is
+branched independently while the surrounding collection stays fixed; endpoints sharing one owning repo
+travel together. Uncommitted canonical files are deliberately excluded, and the descriptor reports the
+dirty canonical state so that omission is visible.
+
+Use the normal feedback loop inside a fork. Provider credentials are opt-in and copied narrowly into the
+private state volume; the running container never mounts the host's provider directory or Docker socket.
+The local default uses the hardened Docker container as the Codex execution boundary so browser and app
+testing work normally. Use `--agent-sandbox workspace-write` for an additional nested Codex sandbox and
+`--agent-network off` when the task does not require browser or dependency access.
+
+```bash
+curiator --gallery /path/to/gallery.yaml workspace create app_key \
+  --credentials codex --agent-sandbox container --agent-network on
+curiator --gallery /path/to/gallery.yaml workspace logs <id>
+curiator --gallery /path/to/gallery.yaml workspace smoke <id> --app app_key --json
+curiator --gallery /path/to/gallery.yaml workspace diff <id>
+curiator --gallery /path/to/gallery.yaml workspace keep <id>
+curiator --gallery /path/to/gallery.yaml workspace apply <id>
+curiator --gallery /path/to/gallery.yaml workspace delete <id>
+curiator --gallery /path/to/gallery.yaml workspace compact
+```
+
+Workspace mode forces source Git commits even if the canonical gallery normally has `git.commit: false`,
+while keeping the workspace SQLite ledger outside Git. `keep` imports the branch as a normal local ref
+without merging it or copying feedback databases. `apply` is a later explicit acceptance step: it
+fast-forwards the current canonical branch only when canonical HEAD and every workspace-changed path
+still match the recorded base, and it preserves unrelated staged/unstaged files. Deletion refuses dirty
+files or unexported commits; after reviewing the diff, `delete --force` is the explicit discard path.
+Deletion now converts terminal workspace receipts to repo-relative provenance and VACUUMs the shared
+ledger. `workspace compact` applies the same migration to older deleted rows while retaining replay
+profiles, timings, SHAs, and outcome metrics.
+
+The control plane must remain host-native. curIAtor refuses the unsafe pattern where a collection
+container receives the host Docker socket.
+
+## 8. Replay historical feedback in workspaces
+
+Completed app feedback can be reconstructed at its verified pre-fix Git SHA and dispatched through the
+normal task, watcher, smoke, browser, reply, and git-as-memory path in a disposable workspace. Audit
+first; old tickets are classified as `exact`, `source-exact`, `context-partial`, or `unreplayable` with
+the missing evidence stated explicitly:
+
+```bash
+curiator --gallery /path/to/gallery.yaml replay inspect <feedback-id>
+curiator --gallery /path/to/gallery.yaml replay run <feedback-id> \
+  --profile codex --credentials auto
+curiator --gallery /path/to/gallery.yaml replay show <group-id>
+curiator --gallery /path/to/gallery.yaml replay keep <group-id> <variant-id>
+curiator --gallery /path/to/gallery.yaml replay delete <group-id>
+```
+
+Repeat `--profile` and add `--yes` for an explicit multi-variant research run. Each variant receives an
+independent writable source/state volume; the report verifies whether generated task evidence was
+byte-identical and records the effective adapter/model/autonomy, runner/image digests, source diff,
+smoke output, parsed JSON metric artifact, browser screenshot/console result, timing, and reviewer
+decision. Process-scoped `--agent-model` and `--agent-autonomy` overrides make declared profile axes
+effective without editing `gallery.yaml`.
+
+Admins can launch the same flow from **Replay** on completed feedback. The comparison modal shows live
+previews, side-by-side screenshots, metric artifacts, and source diffs. Exactly one variant can be kept;
+discard removes containers and volumes without touching the original feedback or canonical source.
+
+`feedback/app_feedback.sqlite` remains the feedback source of truth. Replay manifests under
+`feedback/replays/` are derived experiment reports and are gitignored; deleting a replay retains only
+its compact manifest while removing large runtime resources. `replay list --groups --redacted --json`
+omits local paths, URLs, source patches, credentials, and private provider payloads for export.
+
+Historical runs without a retained task bundle may still be `source-exact`: curIAtor labels their input
+`reconstructed-thread` and regenerates the executable task with the current runner rather than claiming
+an exact prompt replay.
+
+## 9. Adapters & autonomy (recap)
 
 ```yaml
 agent:
@@ -590,7 +803,7 @@ agent:
 
 See the [README](../README.md#the-agent-and-where-it-runs) for the full adapter / autonomy matrix.
 
-## 8. Providers & local models
+## 10. Providers & local models
 
 curIAtor doesn't manage models or API keys — **your agent CLI does**. The provider lives in that CLI's
 own config, so any setup it supports works here unchanged. (Env-var names below are illustrative — they

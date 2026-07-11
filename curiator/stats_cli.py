@@ -109,6 +109,10 @@ def cmd_stats(args) -> int:
         f"median={_fmt_seconds(latency['median_seconds'])}, "
         f"avg={_fmt_seconds(latency['avg_seconds'])}, n={latency['count']}",
         f"  status:  {_fmt_counts(summary['status_counts'])}",
+        "  replays: "
+        f"{summary['replays']['groups']} groups, {summary['replays']['variants']} variants, "
+        f"{summary['replays']['browser_passes']} browser passes, "
+        f"{summary['replays']['accepted_variants']} accepted",
     ]
     if "git" in summary:
         git = summary["git"]

@@ -70,15 +70,27 @@ def _resolve_path(base: Path, value: str | None) -> Path | None:
 
 
 def _build_all_apps() -> list[dict]:
+    try:
+        from ..proposals import preview_for_app
+    except ImportError:  # pragma: no cover - top-level legacy import
+        from curiator.proposals import preview_for_app
+
     apps = []
     ordinal = 0
     for a in CONFIG.get("apps", []) or []:
         base_name = a["name"]
-        root = _resolve_path(COLLECTION_ROOT, a.get("root")) or COLLECTION_ROOT
+        base_root = _resolve_path(COLLECTION_ROOT, a.get("root")) or COLLECTION_ROOT
         for name, mount in _mount_entries(a):
+            root = base_root
             source = mount.get("source", a.get("source", "." if a.get("root") else None))
             source_base = root if a.get("root") else COLLECTION_ROOT
             src_path = _resolve_path(source_base, source)
+            canonical_root = root
+            canonical_source = src_path
+            proposal = preview_for_app(CONFIG, name)
+            if proposal:
+                root = Path(proposal["root"])
+                src_path = Path(proposal["source"])
             if src_path:
                 syspath = src_path if src_path.is_dir() else src_path.parent
                 if syspath not in APP_SOURCE_DIRS:
@@ -129,6 +141,9 @@ def _build_all_apps() -> list[dict]:
                 "root": str(root),
                 "source": str(src_path) if src_path else None,
                 "smoke": smoke,
+                "canonical_root": str(canonical_root),
+                "canonical_source": str(canonical_source) if canonical_source else None,
+                "proposal": proposal,
             })
     # make demo apps importable for the in-process Dash mount
     for d in APP_SOURCE_DIRS:

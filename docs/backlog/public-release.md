@@ -12,6 +12,16 @@
 > `galleries/curiator-geometry`) — plus a Zenodo-archived, DOI-citable release and a companion paper
 > ([zenodo-paper](zenodo-paper.md)).
 
+> **2026-07-10 local refresh:** required and optional `--fresh-clone --strict` preflights pass `7/7`
+> at `curiator-aviato@a420957`, `curiator-ot@43325fb`, `curiator-geometry@bfae833`,
+> `curiator-finance@9bf25ce`, `curiator-phylogenetics@78fcd16`, `curiator-ml@3b96748`, and
+> `curiator-nodered@7e964fb`. Runtime-ignore drift was committed through each collection's curIAtor
+> ledger, and deleted replay receipts were migrated to repo-relative provenance before SQLite
+> compaction. The new `curiator-proposals@8515e44` source/browser preflight also passes, while its
+> fresh-clone gate now fails explicitly until the nested app repo is published/materialized. Root
+> implementation changes remain intentionally uncommitted under `git.commit: false`; no remotes or tags
+> were changed in this refresh.
+
 ## The bar
 
 "Released" ≠ "the repo is public." Released = **a stranger reaches a working loop in under ten

@@ -29,14 +29,16 @@ local implementation before release.
 
 ## Direction (post-release experiments)
 
-- [**nodered-overlay**](nodered-overlay.md) — Node-RED under the same-origin overlay: **verified working
-  end-to-end** (editor + live `/comms` WebSocket) now that the proxy streams (1a) and bridges WebSockets
-  (1b). Remaining: a `nodered` scaffold template + an example collection so it's one command.
-- [**per-run-branches**](per-run-branches.md) — an example collection for the "grown-up app" tier: each
-  agent run on a feature branch off `main`, an **Approve** button *in the app* that merges it, and live
-  per-branch preview (git worktrees). Not the default (that's `git.branch: null` → commit to `main`);
-  this is for apps with a real accepted-state boundary. Key open decision: the same-app conflict policy
-  (supersede vs. rebase-and-reconcile).
+- [**nodered-overlay**](nodered-overlay.md) — **implemented and dogfooded; awaiting the root
+  implementation commit/retirement.** The one-command scaffold, doctor rules, example collection,
+  feedback history, real health/WebSocket checks, and strict dependency-prepared fresh-clone browser
+  preflight are complete at `curiator-nodered@7e964fb`.
+- [**per-run-branches**](per-run-branches.md) — **implemented and dogfooded; awaiting the root
+  implementation commit/retirement.** Worktree-isolated runs, Git-ref proposal registry, live branch
+  preview, admin Approve/Reject, conflict aborts, CLI inspection, same-app superseding, and independent
+  app coexistence are covered. `curiator-proposals@8515e44` and nested app `b41c57dd` record the real
+  feedback -> preview -> in-shell approval cycle. Publishing/materializing the nested app repo in a
+  stranger's fresh clone remains an external release operation.
 
 ## Shipped
 

@@ -147,6 +147,28 @@ def test_sqlite_is_primary_and_json_snapshot_is_not_exported(cfg):
     assert ledger.load(cfg)["sample"][0]["id"] == fid
 
 
+def test_feedback_compact_purges_removed_payload_bytes(cfg, capsys):
+    import json
+
+    from curiator import cli
+
+    needle = "/home/private-user/machine-local-source"
+    feedback_ids = [
+        ledger.save_entry(cfg, "sample", comment=f"{needle}/{index} " + ("x" * 600), ts=f"t{index}")
+        for index in range(20)
+    ]
+    for feedback_id in feedback_ids:
+        ledger.update_entry(cfg, "sample", feedback_id, {"comment": "portable replacement"})
+
+    assert all(needle not in row.get("comment", "") for row in ledger.load(cfg)["sample"])
+    assert cli.main(["feedback", "compact", "--json"]) == 0
+    result = json.loads(capsys.readouterr().out)
+
+    assert result["after_bytes"] <= result["before_bytes"]
+    assert needle.encode() not in ledger.db_path(cfg).read_bytes()
+    assert len(ledger.load(cfg)["sample"]) == 20
+
+
 def test_load_does_not_dirty_committed_sqlite_ledger(cfg, collection):
     import subprocess
 

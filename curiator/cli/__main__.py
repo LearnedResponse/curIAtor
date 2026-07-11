@@ -39,7 +39,16 @@ import subprocess
 from pathlib import Path
 
 from .. import ledger
-from ..config import set_gallery_override
+from ..config import (
+    set_agent_adapter_override,
+    set_agent_autonomy_override,
+    set_agent_model_override,
+    set_agent_network_override,
+    set_agent_sandbox_override,
+    set_gallery_override,
+    set_state_dir_override,
+    set_workspace_mode,
+)
 from ..app_cli import (
     _APP_TEMPLATE_CHOICES,
     _JS_PACKAGE_MANAGERS,
@@ -50,6 +59,7 @@ from ..app_cli import (
     cmd_app_templates,
 )
 from ..auth_cli import cmd_auth, cmd_user
+from ..capability_cli import cmd_capability
 from ..collection_cli import (
     _doctor_issues,  # noqa: F401 - compatibility export used by release/preflight callers
     _doctor_warn_missing_manifests,  # noqa: F401 - compatibility export used by app_cli
@@ -88,8 +98,12 @@ from ..release_cli import (
     cmd_playground_preflight,
     cmd_release_preflight,
 )
+from ..proposal_cli import add_proposal_parser
+from ..replay_cli import add_replay_parser
+from ..run_cli import cmd_run
 from ..stats_cli import cmd_stats
 from ..voice.cli import cmd_voice
+from ..workspace_cli import add_workspace_parser
 from ..workflow_cli import (
     _parse_actions_arg,  # noqa: F401 - compatibility export for workflow tooling
     _post_reply,  # noqa: F401 - compatibility export for workflow tooling
@@ -196,8 +210,10 @@ def _shell_url(cfg: dict, app: str | None = None) -> str:
 
 def _curiator_env_cmd(cfg: dict, *parts: str) -> str:
     gallery = shlex.quote(str(Path(cfg["gallery_path"]).resolve()))
+    state = f" --state-dir {shlex.quote(str(Path(cfg['state_dir']).resolve()))}" if cfg.get("state_dir") else ""
+    workspace = " --workspace-mode" if cfg.get("workspace_mode") else ""
     args = " ".join(shlex.quote(str(part)) for part in parts)
-    return f"curiator --gallery {gallery} {args}"
+    return f"curiator --gallery {gallery}{state}{workspace} {args}"
 
 
 def _cli_user(cfg: dict) -> dict | None:
@@ -217,11 +233,25 @@ def main(argv=None) -> int:
     p = argparse.ArgumentParser(prog="curiator", description="curIAtor — an AI-maintained app gallery.")
     p.add_argument("--gallery", dest="gallery_override",
                    help="path to gallery.yaml or a collection directory; scoped to this command")
+    p.add_argument("--state-dir", dest="state_dir_override",
+                   help="runtime feedback/task/artifact directory; scoped to this command")
+    p.add_argument("--agent-adapter", choices=["headless-cc", "codex", "api", "command"],
+                   help="agent adapter override for this command; does not edit gallery.yaml")
+    p.add_argument("--agent-model", help="agent model override for this command; does not edit gallery.yaml")
+    p.add_argument("--agent-autonomy", choices=["propose-only", "auto-small", "auto"],
+                   help="agent autonomy override for this command; does not edit gallery.yaml")
+    p.add_argument("--agent-network", choices=["on", "off"],
+                   help="agent network override for this command; does not edit gallery.yaml")
+    p.add_argument("--agent-sandbox", choices=["read-only", "workspace-write", "danger-full-access"],
+                   help="Codex sandbox override for this command; does not edit gallery.yaml")
+    p.add_argument("--workspace-mode", action="store_true", help=argparse.SUPPRESS)
     sub = p.add_subparsers(dest="cmd", required=True)
     up = sub.add_parser("up", help="serve the gallery")
     up.add_argument("--legacy-dash-shell", action="store_true", help="serve the old Dash overlay shell")
     up.set_defaults(func=cmd_up)
     sub.add_parser("watch", help="arm the feedback→fix loop").set_defaults(func=cmd_watch)
+    add_workspace_parser(sub)
+    add_replay_parser(sub)
     serve = sub.add_parser("serve", help="gallery + fix loop together (one process; the container entrypoint)")
     serve.add_argument("--legacy-dash-shell", action="store_true", help="serve the old Dash overlay shell")
     serve.set_defaults(func=cmd_serve)
@@ -248,12 +278,27 @@ def main(argv=None) -> int:
     dr.add_argument("--agent", action="store_true", help="also report local tools that gate agent capabilities")
     dr.add_argument("--json", action="store_true", help="emit machine-readable diagnostics")
     dr.set_defaults(func=cmd_doctor)
+    cap = sub.add_parser("capability", help="record or clear a local provider capability receipt")
+    cap.add_argument("action", choices=["verify", "unavailable", "clear"])
+    cap.add_argument("name", choices=["figma"])
+    cap.add_argument("--provider", choices=["codex", "headless-cc"],
+                     help="agent adapter whose connector was verified (default: gallery adapter)")
+    cap.add_argument("--write-design", action="store_true",
+                     help="also attest explicit write authorization for this machine")
+    cap.add_argument("--code-connect", action="store_true",
+                     help="also attest working Code Connect access")
+    cap.add_argument("--reason", default="provider unavailable",
+                     help="provider-side reason for `capability unavailable`")
+    cap.add_argument("--retry-hours", type=int, default=24,
+                     help="hours before an unavailable receipt expires (default: 24; max: 168)")
+    cap.set_defaults(func=cmd_capability)
     sm = sub.add_parser("smoke", help="run configured app smoke commands for this collection")
     sm.add_argument("--app", help="limit smoke checks to one app")
     sm.add_argument("--jobs", type=int, default=1, help="run up to N smoke checks concurrently (default: 1)")
     sm.add_argument("--http", action="store_true", help="also start proxy apps briefly and verify HTTP response")
     sm.add_argument("--browser", action="store_true", help="also open each app through the shell in headless Brave")
     sm.add_argument("--browser-bin", help="Brave/Chromium executable for --browser (default: brave-browser on PATH)")
+    sm.add_argument("--viewport", help="browser viewport as WIDTHxHEIGHT, for example 390x844")
     sm.add_argument("--artifact-dir", help="write browser-smoke screenshots and console logs under this directory")
     sm.add_argument("--output", help="write the JSON smoke payload to a file")
     sm.add_argument("--json", action="store_true", help="emit machine-readable results")
@@ -294,6 +339,8 @@ def main(argv=None) -> int:
     rp.add_argument("--fresh-clone", action="store_true", help="clone each gallery first and preflight the clone")
     rp.add_argument("--clone-root", help="directory for fresh-clone runs; a unique run-* directory is created inside")
     rp.add_argument("--keep-clones", action="store_true", help="do not delete fresh-clone run directories")
+    rp.add_argument("--prepare-dependencies", action="store_true",
+                    help="run each app's explicit commands.bootstrap before smoke checks")
     rp.add_argument("--no-smoke", action="store_true", help="skip per-app smoke checks")
     rp.add_argument("--http-smoke", "--http", action="store_true", dest="http_smoke",
                     help="also start proxy apps briefly and verify configured HTTP smoke paths")
@@ -351,6 +398,27 @@ def main(argv=None) -> int:
     wk.add_argument("--no-print", dest="print", action="store_false", default=True,
                     help="write the task file but do not print it")
     wk.set_defaults(func=cmd_work)
+    run = sub.add_parser("run", help="inspect or recover an interrupted agent run")
+    run_sub = run.add_subparsers(dest="run_action", required=True)
+    recovery = run_sub.add_parser("recovery", help="show source deltas and available recovery actions")
+    recovery.add_argument("feedback_id")
+    recovery.add_argument("--json", action="store_true", help="emit the recovery report as JSON")
+    recovery.set_defaults(func=cmd_run)
+    resume = run_sub.add_parser("resume", help="accept partial source as the next run baseline and requeue")
+    resume.add_argument("feedback_id")
+    resume.set_defaults(func=cmd_run)
+    preserve = run_sub.add_parser("preserve", help="preserve partial source on recovery branches")
+    preserve.add_argument("feedback_id")
+    preserve.add_argument("--branch", help="branch name (default: curiator/recovery/<feedback-id>)")
+    preserve.set_defaults(func=cmd_run)
+    restore = run_sub.add_parser("restore", help="restore the exact checkpointed source baseline and requeue")
+    restore.add_argument("feedback_id")
+    restore.set_defaults(func=cmd_run)
+    discard = run_sub.add_parser(
+        "discard-checkpoint", help="retire recovery data while leaving current source untouched"
+    )
+    discard.add_argument("feedback_id")
+    discard.set_defaults(func=cmd_run)
     dn = sub.add_parser("done", help="reply done for interactive work (reload + git-as-memory)")
     dn.add_argument("feedback_id", nargs="?",
                     help="feedback id (defaults to the latest working item); a non-id word here is "
@@ -358,6 +426,7 @@ def main(argv=None) -> int:
     dn.add_argument("text", nargs="*", help="summary text")
     dn.add_argument("--app", help="override linked/current app")
     dn.set_defaults(func=cmd_done)
+    add_proposal_parser(sub)
     qu = sub.add_parser("queue", help="review held feedback before it reaches the agent")
     qu_sub = qu.add_subparsers(dest="action", required=True)
     ql = qu_sub.add_parser("list", help="list held feedback items")
@@ -450,8 +519,8 @@ def main(argv=None) -> int:
     stt.add_argument("--output", help="write the selected stats report to a file instead of stdout")
     stt.add_argument("--no-git", action="store_true", help="skip git log metrics")
     stt.set_defaults(func=cmd_stats)
-    fb = sub.add_parser("feedback", help="inspect or add SQLite feedback")
-    fb.add_argument("action", choices=["show", "dump", "add"], nargs="?", default="show")
+    fb = sub.add_parser("feedback", help="inspect, add, or compact SQLite feedback")
+    fb.add_argument("action", choices=["show", "dump", "add", "compact"], nargs="?", default="show")
     fb.add_argument("app", nargs="?")
     fb.add_argument("comment", nargs="*")
     fb.add_argument("--comment", dest="comment_text")
@@ -462,7 +531,14 @@ def main(argv=None) -> int:
     annotation_src = fb.add_mutually_exclusive_group()
     annotation_src.add_argument("--annotations-json", help="JSON list of screenshot annotation marks to store")
     annotation_src.add_argument("--annotations-file", help="path to a JSON file containing annotation marks")
+    fb.add_argument("--design-ref", action="append", default=[],
+                    help="attach a node-specific Figma URL (repeat up to five times)")
+    fb.add_argument("--design-label", action="append", default=[],
+                    help="optional label paired by position with --design-ref")
+    fb.add_argument("--writable-component", action="append", default=[],
+                    help="grant this feedback write access to a declared shared component (repeatable)")
     fb.add_argument("--limit", type=int, default=20)
+    fb.add_argument("--json", action="store_true", help="emit machine-readable compact evidence")
     fb.set_defaults(func=cmd_feedback)
     us = sub.add_parser("user", help="manage local-login users (auth.mode: local)")
     us.add_argument("action", choices=["add", "passwd", "list", "disable", "enable", "remove"],
@@ -500,10 +576,25 @@ def main(argv=None) -> int:
                    ).set_defaults(func=cmd_reflect)
     args = p.parse_args(argv)
     set_gallery_override(getattr(args, "gallery_override", None))
+    set_state_dir_override(getattr(args, "state_dir_override", None))
+    set_agent_adapter_override(getattr(args, "agent_adapter", None))
+    set_agent_model_override(getattr(args, "agent_model", None))
+    set_agent_autonomy_override(getattr(args, "agent_autonomy", None))
+    network_override = getattr(args, "agent_network", None)
+    set_agent_network_override(None if network_override is None else network_override == "on")
+    set_agent_sandbox_override(getattr(args, "agent_sandbox", None))
+    set_workspace_mode(bool(getattr(args, "workspace_mode", False)))
     try:
         return args.func(args)
     finally:
         set_gallery_override(None)
+        set_state_dir_override(None)
+        set_agent_adapter_override(None)
+        set_agent_model_override(None)
+        set_agent_autonomy_override(None)
+        set_agent_network_override(None)
+        set_agent_sandbox_override(None)
+        set_workspace_mode(False)
 
 
 if __name__ == "__main__":

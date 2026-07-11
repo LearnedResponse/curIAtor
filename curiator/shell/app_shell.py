@@ -30,6 +30,7 @@ from __future__ import annotations
 
 import base64
 import atexit
+import hashlib
 import importlib
 import json
 import os
@@ -60,6 +61,7 @@ PORT = 8200  # default; overridden by gallery.yaml shell.port just below (after 
 
 from curiator.config import set_gallery_override_from_argv  # noqa: E402
 from curiator.annotations import clean_annotations  # noqa: E402
+from curiator.design_refs import clean_design_refs  # noqa: E402
 from curiator.narrative import build_narrative, display_narrative_rows  # noqa: E402
 from curiator.transcripts import clean_transcript_segments  # noqa: E402
 set_gallery_override_from_argv()
@@ -104,6 +106,7 @@ REPLIES.mkdir(parents=True, exist_ok=True)
 BLUE, GREEN, AMBER, GREY, PURPLE = "#2980b9", "#1f9d55", "#cc7a00", "#777", "#8e44ad"
 HELD, REJECTED = "#6f42c1", "#555"
 OPEN_STATUSES = {"new", "working", "awaiting_approval", "held"}
+ACTIVE_STATUSES = OPEN_STATUSES - {"held"}
 
 
 def _sync_shell_config() -> None:
@@ -272,6 +275,26 @@ def _reply_context(key: str | None, target: dict | None):
 
 def _trace_page(feedback_id: str, text: str) -> str:
     fid = _esc(feedback_id)
+    recovery_html = ""
+    try:
+        from curiator import run_recovery
+
+        if run_recovery.checkpoint_path(LEDGER_CFG, feedback_id).exists():
+            report = run_recovery.recovery_report(LEDGER_CFG, feedback_id)
+            changed = len(report.get("agent_run_paths") or [])
+            conflicts = len(report.get("post_interruption_paths") or [])
+            disabled = "" if report.get("restore_safe") else " disabled"
+            recovery_html = (
+                "<section class='recovery'><b>Interrupted run</b>"
+                f"<span>{changed} changed path(s) · {conflicts} later conflict(s)</span>"
+                f"<form method='post' action='/queue/{fid}/resume'><button>Resume</button></form>"
+                f"<form method='post' action='/queue/{fid}/preserve'><button>Preserve branch</button></form>"
+                f"<form method='post' action='/queue/{fid}/restore'><button{disabled}>Restore baseline</button></form>"
+                f"<form method='post' action='/queue/{fid}/discard-checkpoint'><button>Keep files</button></form>"
+                "</section>"
+            )
+    except Exception:
+        recovery_html = "<section class='recovery'><b>Interrupted run</b><span>Recovery checkpoint unreadable</span></section>"
     return f"""<!doctype html>
 <html>
   <head>
@@ -279,12 +302,19 @@ def _trace_page(feedback_id: str, text: str) -> str:
     <meta name="viewport" content="width=device-width,initial-scale=1">
     <title>curIAtor trace {fid}</title>
     <style>
-      body {{ margin: 0; font-family: system-ui, sans-serif; color: #222; background: #f6f7f9; }}
+      body {{ margin: 0; height: 100vh; display: flex; flex-direction: column;
+        font-family: system-ui, sans-serif; color: #222; background: #f6f7f9; }}
       header {{ position: sticky; top: 0; z-index: 2; background: white; border-bottom: 1px solid #ddd;
         padding: 10px 14px; display: flex; align-items: baseline; gap: 10px; }}
       h1 {{ font-size: 14px; margin: 0; color: {PURPLE}; }}
       .meta {{ color: #777; font-size: 11px; }}
-      pre {{ box-sizing: border-box; height: calc(100vh - 43px); margin: 0; overflow: auto; padding: 14px;
+      .recovery {{ display: flex; align-items: center; gap: 8px; padding: 7px 14px; background: #faf7fd;
+        border-bottom: 1px solid #ddcfea; color: #6f42c1; font-size: 12px; }}
+      .recovery span {{ color: #666; margin-right: auto; }}
+      .recovery form {{ margin: 0; }}
+      .recovery button {{ font: 11px system-ui, sans-serif; padding: 3px 7px; cursor: pointer; }}
+      .recovery button:disabled {{ cursor: default; color: #999; }}
+      pre {{ box-sizing: border-box; flex: 1; min-height: 0; margin: 0; overflow: auto; padding: 14px;
         background: #111820; color: #dce7ef; font: 12px/1.45 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
         white-space: pre-wrap; word-break: break-word; }}
       button.stop {{ margin-left: auto; font: 12px system-ui, sans-serif; color: #a33; background: #fff;
@@ -298,6 +328,7 @@ def _trace_page(feedback_id: str, text: str) -> str:
     <header>{_wordmark_html(17)}<h1>agent trace</h1><span class="meta">feedback {fid}</span>
       <button class="stop" id="stopbtn" title="Stop this agent run">⏹ Stop</button>
       <span class="stopmsg" id="stopmsg"></span></header>
+    {recovery_html}
     <pre id="trace">{_esc(text)}</pre>
     <script>
       const pre = document.getElementById('trace');
@@ -429,6 +460,8 @@ def load_registry():
             "tags": list(a.get("tags") or []), "color": a.get("color", "#888"),
             "file": f, "kind": kind, "mount": a.get("mount") or {},
             "root": a.get("root"), "source": a.get("source"), "smoke": a.get("smoke"),
+            "canonical_root": a.get("canonical_root"), "canonical_source": a.get("canonical_source"),
+            "proposal": a.get("proposal"),
         })
     return recs
 
@@ -447,7 +480,20 @@ def refresh_registry(*, reload_module: bool = True) -> int:
     global REG, REGISTRY, BY_KEY, TAG_META, TAG_COLOR
     importlib.invalidate_caches()
     if reload_module:
+        previous_source_dirs = [str(path) for path in getattr(REG, "APP_SOURCE_DIRS", [])]
         REG = importlib.reload(REG)
+        current_source_dirs = [str(path) for path in getattr(REG, "APP_SOURCE_DIRS", [])]
+        for path in previous_source_dirs:
+            if path not in current_source_dirs:
+                while path in sys.path:
+                    sys.path.remove(path)
+        # A proposal and its accepted checkout can expose the same module name. Keep the currently
+        # selected source directories ahead of stale/canonical entries so a cache invalidation imports
+        # from the worktree the registry selected.
+        for path in reversed(current_source_dirs):
+            while path in sys.path:
+                sys.path.remove(path)
+            sys.path.insert(0, path)
     _sync_shell_config()
     REGISTRY = load_registry()
     BY_KEY = {r["key"]: r for r in REGISTRY}
@@ -459,8 +505,15 @@ def refresh_registry(*, reload_module: bool = True) -> int:
 
 refresh_registry(reload_module=False)
 HISTORY_RANGES = {
-    "1m": ("1 minute", timedelta(minutes=1)),
-    "5m": ("5 minutes", timedelta(minutes=5)),
+    "15m": ("Past 15 minutes", timedelta(minutes=15)),
+    "1h": ("Past hour", timedelta(hours=1)),
+    "24h": ("Past 24 hours", timedelta(days=1)),
+    "7d": ("Past 7 days", timedelta(days=7)),
+    "30d": ("Past 30 days", timedelta(days=30)),
+}
+HISTORY_FILTERS = {
+    "active": ACTIVE_STATUSES,
+    "open": OPEN_STATUSES,
 }
 
 
@@ -723,6 +776,7 @@ def save_entry(
     annotation_targets: bool = True,
     transcript_segments=None,
     audio_ref=None,
+    design_refs=None,
 ):
     eid = uuid.uuid4().hex[:8]
     screenshot = None
@@ -742,6 +796,9 @@ def save_entry(
     narrative = build_narrative(cleaned_annotations, cleaned_segments)
     if narrative:
         extra["narrative"] = narrative
+    cleaned_design_refs = clean_design_refs(design_refs)
+    if cleaned_design_refs:
+        extra["design_refs"] = cleaned_design_refs
     audio = _claim_audio_ref(key, eid, audio_ref)
     if audio:
         extra["audio"] = audio
@@ -883,25 +940,122 @@ def _parse_history_ts(iso):
     return dt.astimezone(timezone.utc)
 
 
-def _history_range_nav(active):
-    def link(label, href, selected=False):
-        bg = PURPLE if selected else "#fff"
-        fg = "#fff" if selected else "#555"
-        border = PURPLE if selected else "#ddd"
-        return (f"<a href='{href}' style='display:inline-block;text-decoration:none;font-size:11px;"
-                f"font-weight:700;color:{fg};background:{bg};border:1px solid {border};"
-                f"border-radius:999px;padding:3px 9px;margin-left:5px'>{label}</a>")
-
-    return ("<div style='margin:2px 0 12px;color:#777;font-size:11px'>range "
-            f"{link('All', '/general', active is None)}"
-            f"{link(HISTORY_RANGES['1m'][0], '/general?range=1m', active == '1m')}"
-            f"{link(HISTORY_RANGES['5m'][0], '/general?range=5m', active == '5m')}</div>")
+def _history_href(range_key=None, filter_key=None):
+    params = []
+    if range_key:
+        params.append(f"range={range_key}")
+    if filter_key:
+        params.append(f"filter={filter_key}")
+    return "/general" + ("?" + "&".join(params) if params else "")
 
 
-def render_history(range_key=None):
+def _history_range_nav(active, filter_key):
+    choices = [(None, "All time"), *HISTORY_RANGES.items()]
+    options = []
+    for key, value in choices:
+        label = value if key is None else value[0]
+        href = _history_href(key, filter_key)
+        selected = " selected" if key == active else ""
+        options.append(f"<option value='{_esc(href)}'{selected}>{_esc(label)}</option>")
+    return (
+        "<label style='display:flex;align-items:center;gap:7px;margin:2px 0 14px;color:#777;"
+        "font-size:11px;width:max-content'>Time range "
+        "<select aria-label='Activity time range' onchange='location.href=this.value' "
+        "style='font:inherit;font-weight:650;color:#444;background:#fff;border:1px solid #d8d8d8;"
+        "border-radius:4px;padding:4px 26px 4px 7px'>"
+        + "".join(options)
+        + "</select></label>"
+    )
+
+
+def _history_thread_matches(entry, children, statuses):
+    if entry.get("kind") != "system" and entry.get("status") in statuses:
+        return True
+    return any(_history_thread_matches(child, children, statuses)
+               for child in children.get(entry.get("id"), []))
+
+
+def _history_filter_threads(items, statuses):
+    """Keep complete conversation threads that contain a ticket in one of `statuses`."""
+    roots, children, _ = _thread_tree(items)
+    included = set()
+
+    def collect(entry):
+        included.add(id(entry))
+        for child in children.get(entry.get("id"), []):
+            collect(child)
+
+    for root in roots:
+        if _history_thread_matches(root, children, statuses):
+            collect(root)
+    return [entry for entry in items if id(entry) in included]
+
+
+def _history_count_threads(items, statuses):
+    roots, children, _ = _thread_tree(items)
+    return sum(1 for root in roots if _history_thread_matches(root, children, statuses))
+
+
+def _history_filter_link(count, label, key, active, range_key, *, color, background, border):
+    selected = active == key
+    href = _history_href(range_key, None if selected else key)
+    fg = "#fff" if selected else color
+    bg = color if selected else background
+    border_color = color if selected else border
+    title = "Show all threads" if selected else f"Show {label}"
+    return (
+        f"<a href='{_esc(href)}' aria-pressed='{'true' if selected else 'false'}' "
+        f"title='{_esc(title)}' "
+        f"style='font-size:11px;color:{fg};background:{bg};border:1px solid {border_color};"
+        f"border-radius:999px;padding:3px 9px;text-decoration:none;font-weight:{'700' if selected else '400'}'>"
+        f"{count} {label}</a>"
+    )
+
+
+def _history_live_refresh_script():
+    if POLL_MS <= 0:
+        return ""
+    interval = max(POLL_MS, 1000)
+    return f"""<script>
+    (function() {{
+      const rootId = "general-history";
+      let refreshing = false;
+      async function refresh() {{
+        if (refreshing || document.hidden) return;
+        refreshing = true;
+        try {{
+          const response = await fetch(location.pathname + location.search, {{cache: "no-store"}});
+          if (!response.ok) return;
+          const nextDocument = new DOMParser().parseFromString(await response.text(), "text/html");
+          const current = document.getElementById(rootId);
+          const next = nextDocument.getElementById(rootId);
+          if (current && next && current.dataset.version !== next.dataset.version) {{
+            const x = window.scrollX;
+            const y = window.scrollY;
+            current.replaceWith(document.importNode(next, true));
+            window.scrollTo(x, y);
+          }}
+        }} catch (_error) {{
+          // A transient shell restart should not disturb the current activity view.
+        }} finally {{
+          refreshing = false;
+        }}
+      }}
+      const timer = window.setInterval(refresh, {interval});
+      window.addEventListener("focus", refresh);
+      document.addEventListener("visibilitychange", function() {{
+        if (!document.hidden) refresh();
+      }});
+      window.addEventListener("pagehide", function() {{ window.clearInterval(timer); }}, {{once: true}});
+    }})();
+    </script>"""
+
+
+def render_history(range_key=None, filter_key=None):
     """Server-rendered HTML: every feedback thread across the library, newest app
     first (General pinned), entries chronological with user/⚙Claude styling."""
     range_key = range_key if range_key in HISTORY_RANGES else None
+    filter_key = filter_key if filter_key in HISTORY_FILTERS else None
     cutoff = None
     if range_key:
         cutoff = datetime.now(timezone.utc) - HISTORY_RANGES[range_key][1]
@@ -913,7 +1067,12 @@ def render_history(range_key=None):
         return bool(dt and dt >= cutoff)
 
     data = load_feedback()
-    visible = {k: [e for e in items if in_range(e)] for k, items in data.items()}
+    ranged = {k: [e for e in items if in_range(e)] for k, items in data.items()}
+    n_active = sum(_history_count_threads(items, ACTIVE_STATUSES) for items in ranged.values())
+    n_open = sum(_history_count_threads(items, OPEN_STATUSES) for items in ranged.values())
+    statuses = HISTORY_FILTERS.get(filter_key)
+    visible = ({k: _history_filter_threads(items, statuses) for k, items in ranged.items()}
+               if statuses else ranged)
     visible.setdefault(GENERAL_KEY, [])
     activity_keys = [k for k in visible if k != GENERAL_KEY and visible.get(k)]
     activity_keys.sort(key=lambda k: max((_parse_history_ts(e.get("ts")) or datetime.min.replace(tzinfo=timezone.utc)
@@ -921,11 +1080,11 @@ def render_history(range_key=None):
                                          default=datetime.min.replace(tzinfo=timezone.utc)),
                        reverse=True)
     keys = [GENERAL_KEY] + activity_keys
-    n_threads = sum(1 for k in keys if visible.get(k))
-    n_open = sum(1 for k in keys for e in visible.get(k, [])
-                 if e.get("kind") != "system" and e.get("status") in OPEN_STATUSES)
+    active_label = "active thread" if n_active == 1 else "active threads"
+    open_label = "open thread" if n_open == 1 else "open threads"
     out = [
-        "<div style='font-family:system-ui,sans-serif;padding:1.6em 2em;color:#333;max-width:920px'>",
+        "<div id='general-history' data-version='' "
+        "style='font-family:system-ui,sans-serif;padding:1.6em 2em;color:#333;max-width:920px'>",
         # curIAtor logo + this collection's name (the custom repo name)
         f"<div style='display:flex;align-items:baseline;gap:11px;margin:0 0 10px'>{_wordmark_html(22)}"
         f"<span style='color:#ccc;font-size:16px'>/</span>"
@@ -937,11 +1096,10 @@ def render_history(range_key=None):
         "<div style='display:flex;gap:8px;flex-wrap:wrap;margin:0 0 16px'>"
         f"<span style='font-size:11px;color:#555;background:#f6f1fb;border:1px solid #e3d8ef;"
         f"border-radius:999px;padding:3px 9px'>{len(REGISTRY)} apps</span>"
-        f"<span style='font-size:11px;color:#555;background:#f7f7f7;border:1px solid #e5e5e5;"
-        f"border-radius:999px;padding:3px 9px'>{n_threads} active threads</span>"
-        f"<span style='font-size:11px;color:#555;background:#fff5f5;border:1px solid #f0d4d4;"
-        f"border-radius:999px;padding:3px 9px'>{n_open} open</span></div>",
-        _history_range_nav(range_key),
+        f"{_history_filter_link(n_active, active_label, 'active', filter_key, range_key, color=PURPLE, background='#f7f7f7', border='#e5e5e5')}"
+        f"{_history_filter_link(n_open, open_label, 'open', filter_key, range_key, color='#b53b35', background='#fff5f5', border='#f0d4d4')}"
+        "</div>",
+        _history_range_nav(range_key, filter_key),
     ]
     for idx, key in enumerate(keys):
         if idx == 1:
@@ -975,9 +1133,15 @@ def render_history(range_key=None):
                        f"<span style='font-weight:700;font-size:13px'>{label}</span>{ob} "
                        f"<span style='color:#2980b9;font-size:10.5px'>↗ open</span></div>")
         if key == GENERAL_KEY and not items:
+            if filter_key:
+                empty = f"No General threads match the {filter_key} filter."
+            elif range_key:
+                empty = "No General feedback in this time range."
+            else:
+                empty = ("No General feedback yet. Use the feedback panel on the right for "
+                         "collection-wide notes.")
             out.append("<div style='background:#fafafa;border-left:2px solid #ddd;padding:7px 10px;"
-                       "font-size:12.5px;color:#777;margin:4px 0 8px'>No General feedback yet. "
-                       "Use the feedback panel on the right for collection-wide notes.</div>")
+                       f"font-size:12.5px;color:#777;margin:4px 0 8px'>{_esc(empty)}</div>")
         tb = thread_buttons(data.get(key, []))
         roots, children, order = _thread_tree(items)
 
@@ -1034,8 +1198,12 @@ def render_history(range_key=None):
         for root in roots:
             render_entry(root, 0)
     out.append("</div>")
-    out.append("<script src='/assets/localtime.js'></script>")   # render .ts in the viewer's local tz
-    return "".join(out)
+    body = "".join(out)
+    version = hashlib.sha256(body.encode("utf-8")).hexdigest()[:16]
+    body = body.replace("data-version=''", f"data-version='{version}'", 1)
+    return (body
+            + "<script src='/assets/localtime.js'></script>"  # render .ts in the viewer's local tz
+            + _history_live_refresh_script())
 
 
 def feedback_list(key):
@@ -2037,7 +2205,7 @@ def build_shell() -> Dash:
     @shell.server.route("/general")
     def _general():
         from flask import request
-        return render_history(request.args.get("range"))
+        return render_history(request.args.get("range"), request.args.get("filter"))
 
     @shell.server.route("/reload/<key>", methods=["POST", "GET"])
     def _reload(key):

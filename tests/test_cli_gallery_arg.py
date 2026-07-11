@@ -73,3 +73,61 @@ def test_up_passes_gallery_to_child_as_cli_arg_not_env(tmp_path, monkeypatch):
         str((cli_gallery / "gallery.yaml").resolve()),
     ]
     assert "CURIATOR_GALLERY" not in kwargs["env"]
+
+
+def test_up_propagates_process_scoped_state_dir_to_child(tmp_path, monkeypatch):
+    from curiator import cli, serve_cli
+
+    gallery = tmp_path / "gallery"
+    state = tmp_path / "state"
+    _write_gallery(gallery, "sample", 8103)
+    monkeypatch.setattr(serve_cli, "_shell_path", lambda _kind=None: tmp_path / "web_shell.py")
+    calls = []
+
+    def fake_run(cmd, **kwargs):
+        calls.append((cmd, kwargs))
+        return SimpleNamespace(returncode=0)
+
+    monkeypatch.setattr(serve_cli.subprocess, "run", fake_run)
+    assert cli.main([
+        "--gallery", str(gallery / "gallery.yaml"),
+        "--state-dir", str(state),
+        "up",
+    ]) == 0
+    assert calls[0][0][-4:] == [
+        "--gallery", str((gallery / "gallery.yaml").resolve()),
+        "--state-dir", str(state.resolve()),
+    ]
+
+
+def test_workspace_watcher_uses_installed_runner_in_isolated_mode(tmp_path):
+    from curiator import serve_cli
+
+    cfg = {
+        "gallery_path": str(tmp_path / "source" / "gallery.yaml"),
+        "state_dir": str(tmp_path / "state"),
+    }
+    assert serve_cli._watcher_command(cfg) == [
+        sys.executable, "-I", "-u", "-m", "curiator.cli",
+        "--gallery", str((tmp_path / "source" / "gallery.yaml").resolve()),
+        "--state-dir", str((tmp_path / "state").resolve()),
+        "watch",
+    ]
+
+
+def test_process_scoped_agent_override_propagates_to_watcher(tmp_path):
+    from curiator import serve_cli
+
+    cfg = {
+        "gallery_path": str(tmp_path / "gallery.yaml"),
+        "agent_adapter_override": "codex",
+        "agent_model_override": "gpt-test",
+        "agent_autonomy_override": "auto",
+        "agent_network_override": "on",
+        "agent_sandbox_override": "danger-full-access",
+    }
+    assert serve_cli._watcher_command(cfg)[-11:] == [
+        "--agent-adapter", "codex", "--agent-model", "gpt-test",
+        "--agent-autonomy", "auto", "--agent-network", "on",
+        "--agent-sandbox", "danger-full-access", "watch",
+    ]

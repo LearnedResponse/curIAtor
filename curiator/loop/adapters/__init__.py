@@ -17,9 +17,10 @@ import shlex
 from dataclasses import dataclass
 from pathlib import Path
 
-from ...agent_capabilities import browser_smoke_contract
+from ...agent_capabilities import browser_smoke_contract, figma_design_contract
 from ... import ledger
 from ...config import app_spec as _app_spec   # the gallery.yaml schema logic lives in config.py
+from ...design_refs import thread_design_refs
 from ...narrative import display_narrative_rows
 from .. import runlog
 from . import headless_cc, codex, api as api_adapter, command as command_adapter
@@ -51,6 +52,8 @@ class Task:
     reply_file: str
     cfg: dict
     agent: dict | None = None        # the EFFECTIVE agent profile for this item (base, or elevated)
+    writable_sources: list[str] | None = None
+    proposal: dict | None = None     # per-run branch/worktree metadata when git.branch == per-run
 
 
 def effective_agent(cfg: dict, entry: dict) -> dict:
@@ -151,6 +154,11 @@ def _audio_block(cfg: dict, entry: dict) -> str:
             f"- audio clip (local runtime media): `{audio}`\n"
             "- Use the transcript and narrated-feedback blocks as the primary task instructions; "
             "listen to the clip only when the transcript is ambiguous.")
+
+
+def _figma_block(cfg: dict, key: str, entry: dict, *, proof_app: str | None) -> str:
+    refs = thread_design_refs(ledger.load(cfg), key, entry)
+    return figma_design_contract(cfg, refs, str(entry.get("id") or "feedback"), proof_app)
 
 
 def _annotation_block(entry: dict) -> str:
@@ -281,6 +289,7 @@ def _related_thread_entries(cfg: dict, key: str, entry: dict, limit: int = 10) -
     if not items:
         return []
     current = entry.get("id")
+    current_index = next((idx for idx, item in enumerate(items) if item.get("id") == current), len(items))
     related = {current} if current else set()
     related.update(entry.get("reply_to") or [])
     changed = True
@@ -295,7 +304,10 @@ def _related_thread_entries(cfg: dict, key: str, entry: dict, limit: int = 10) -
                     related.add(iid)
                 related.update(links)
                 changed = changed or len(related) != before
-    selected = [e for e in items if e.get("id") in related and e.get("id") != current]
+    selected = [
+        item for idx, item in enumerate(items)
+        if idx < current_index and item.get("id") in related and item.get("id") != current
+    ]
     short_unlinked = not entry.get("reply_to") and len((entry.get("comment") or "").strip()) <= 12
     if len(selected) <= 1 or short_unlinked:
         idx = next((i for i, e in enumerate(items) if e.get("id") == current), len(items))
@@ -348,7 +360,15 @@ def _feedback_tooling(cfg: dict, key: str) -> str:
 
 
 def _curiator_cmd(cfg: dict, *parts: str) -> str:
-    args = " ".join(shlex.quote(str(part)) for part in parts)
+    global_args = []
+    if cfg.get("state_dir") or (cfg.get("git") or {}).get("branch") == "per-run":
+        gallery = str(Path(cfg["gallery_path"]).resolve())
+        global_args = ["--gallery", gallery]
+    if cfg.get("state_dir"):
+        global_args += ["--state-dir", str(Path(cfg["state_dir"]).resolve())]
+    if cfg.get("workspace_mode"):
+        global_args.append("--workspace-mode")
+    args = " ".join(shlex.quote(str(part)) for part in [*global_args, *parts])
     return f"curiator {args}"
 
 
@@ -471,7 +491,7 @@ def _collection_bundle(cfg: dict, entry: dict, eid: str, shot_path: str | None, 
         "- Do NOT edit the runner checkout for this item.",
         "- If this is an approval/follow-up, execute the underlying collection request from the thread",
         "  context now. Do not spend this run improving curIAtor routing/classification.",
-        "- For new apps, start with `curiator app create <app_key> --template dash|static|python|node|flask|fastapi|rust|react|svelte|vue|next|streamlit|gradio` so",
+        "- For new apps, start with `curiator app create <app_key> --template dash|static|python|node|nodered|flask|fastapi|rust|react|svelte|vue|next|streamlit|gradio` so",
         "  app directories, proxy commands, smoke hooks, and `gallery.yaml` stay consistent; then edit the generated files.",
         "- For existing repos, start with `curiator app import <repo-or-url> <app_key> --template <template>` so",
         "  the cloned source lands under `apps/` and is registered in `gallery.yaml` consistently.",
@@ -491,6 +511,8 @@ def _collection_bundle(cfg: dict, entry: dict, eid: str, shot_path: str | None, 
             browser_contract = browser_smoke_contract(cfg, str(app_key), eid)
             if browser_contract:
                 body.append(browser_contract)
+    else:
+        app_key = None
     annotations = _annotation_block(entry)
     if annotations:
         body.append(annotations)
@@ -503,6 +525,9 @@ def _collection_bundle(cfg: dict, entry: dict, eid: str, shot_path: str | None, 
     audio = _audio_block(cfg, entry)
     if audio:
         body.append(audio)
+    figma = _figma_block(cfg, GENERAL_KEY, entry, proof_app=app_key)
+    if figma:
+        body.append(figma)
     if approval_followup:
         body.append(
             "\n**APPROVAL/FOLLOW-UP RUN** — the user has replied to a prior collection/app request. "
@@ -556,6 +581,9 @@ def _runner_bundle(cfg: dict, entry: dict, eid: str, shot_path: str | None) -> t
     audio = _audio_block(cfg, entry)
     if audio:
         head.append(audio)
+    figma = _figma_block(cfg, GENERAL_KEY, entry, proof_app=None)
+    if figma:
+        head.append(figma)
     if mode == "checkout":
         root = _runner_root(cfg)
         root_display = _repo_display(cfg, root)
@@ -594,7 +622,15 @@ def _runner_bundle(cfg: dict, entry: dict, eid: str, shot_path: str | None) -> t
     return "\n".join(body) + "\n", None
 
 
-def _app_bundle(cfg: dict, key: str, entry: dict, eid: str, shot_path: str | None, agent: dict) -> tuple[str, str | None]:
+def _app_bundle(
+    cfg: dict,
+    key: str,
+    entry: dict,
+    eid: str,
+    shot_path: str | None,
+    agent: dict,
+    proposal: dict | None = None,
+) -> tuple[str, str | None, list[str]]:
     """Bundle for app feedback — the standing protocol + this item + ready-to-run smoke-test/reply."""
     template = (Path(__file__).resolve().parents[1] / "task_template.md").read_text()
     spec = _app_spec(cfg, key) or {}
@@ -629,14 +665,43 @@ def _app_bundle(cfg: dict, key: str, entry: dict, eid: str, shot_path: str | Non
     audio = _audio_block(cfg, entry)
     if audio:
         body.append(audio)
+    figma = _figma_block(cfg, key, entry, proof_app=key)
+    if figma:
+        body.append(figma)
     lessons = _lessons_for(cfg, key)
     if lessons:
         body.append(f"\n## Prior lessons for `{key}` (curator git history — what stuck / got reverted)\n{lessons}")
     context = _thread_context(cfg, key, entry)
     if context:
         body.append("\n" + context)
+    if proposal:
+        body.append(
+            "\n## Per-run proposal workspace\n"
+            f"- branch: `{proposal['branch']}`\n"
+            f"- accepted base: `{proposal.get('base_sha') or 'unknown'}`\n"
+            f"- worktree: `{_repo_display(cfg, proposal['worktree'])}`\n"
+            "- The accepted checkout stays untouched. Edit only this worktree source.\n"
+            "- A `--status done` reply commits this branch and changes the item to awaiting approval; "
+            "it does not merge the proposal.\n"
+            "- This mode deliberately keeps the live SQLite ledger out of proposal commits; Git refs "
+            "carry proposal state until approval.\n"
+            "- The shell will mount the completed branch as the live preview. Only an explicit "
+            "Approve action merges it into the accepted branch."
+        )
+    from ...dependencies import task_context
+
+    dependency_context, writable_sources = task_context(cfg, key, entry)
+    if proposal and writable_sources:
+        from ...proposals import ProposalError
+
+        raise ProposalError(
+            "per-run app proposals cannot grant writes to shared components; split the component change "
+            "into its own accepted-state task first"
+        )
+    if dependency_context:
+        body.append("\n" + dependency_context)
     body.append("\n" + _feedback_tooling(cfg, key))
-    browser_contract = browser_smoke_contract(cfg, key, eid)
+    browser_contract = None if proposal else browser_smoke_contract(cfg, key, eid)
     if browser_contract:
         body.append("\n" + browser_contract)
     body.append("\n## Ready-to-run (fill in the message text)")
@@ -663,12 +728,15 @@ def _app_bundle(cfg: dict, key: str, entry: dict, eid: str, shot_path: str | Non
             "file: edit any source in this collection AND **add/install dependencies** (e.g. add to "
             "`requirements.txt`, then `pip install <pkg>`) to fully service the request. Install BEFORE you "
             "reply `--status done` so the gallery hot-reload doesn't crash. Smoke-test before `done`. "
-            f"Off-limits: {deny}. Still don't run git yourself — the runner commits.")
+            f"Off-limits: {deny}. Declared shared components remain read-only unless this task marks "
+            "them **WRITABLE**. Still don't run git yourself — the runner commits.")
     else:
         scope = "files under the source above" if source_is_dir else "the source above"
+        if writable_sources:
+            scope += " plus the shared components explicitly marked WRITABLE"
         body.append(
             f"\nEdit ONLY {scope}, smoke-test before `done`; the runner handles git — don't run git yourself.")
-    return "\n".join(body), source
+    return "\n".join(body), source, writable_sources
 
 
 def build_task(cfg: dict, key: str, entry: dict) -> Task:
@@ -677,17 +745,34 @@ def build_task(cfg: dict, key: str, entry: dict) -> Task:
     eid = entry.get("id")
     shot_path = _shot_path(cfg, entry)
     agent = effective_agent(cfg, entry)
+    writable_sources: list[str] = []
+    proposal = None
+    task_cfg = cfg
     if key == GENERAL_KEY:
         if general_targets_collection(entry, cfg):
             text, source = _collection_bundle(cfg, entry, eid, shot_path, agent)
         else:
             text, source = _runner_bundle(cfg, entry, eid, shot_path)
     else:
-        text, source = _app_bundle(cfg, key, entry, eid, shot_path, agent)
+        from ...proposals import prepare_task_config
+
+        task_cfg, proposal = prepare_task_config(cfg, key, entry)
+        text, source, writable_sources = _app_bundle(
+            task_cfg, key, entry, eid, shot_path, agent, proposal=proposal
+        )
     tf = runlog.task_path(cfg, eid)
     rf = runlog.reply_path(cfg, eid)
     tf.parent.mkdir(parents=True, exist_ok=True)
     tf.write_text(text)
     rf.parent.mkdir(parents=True, exist_ok=True)
-    return Task(key=key, entry=entry, source=source, task_file=str(tf), reply_file=str(rf),
-                cfg=cfg, agent=agent)
+    return Task(
+        key=key,
+        entry=entry,
+        source=source,
+        task_file=str(tf),
+        reply_file=str(rf),
+        cfg=task_cfg,
+        agent=agent,
+        writable_sources=writable_sources,
+        proposal=proposal,
+    )

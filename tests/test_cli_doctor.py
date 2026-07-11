@@ -2,7 +2,13 @@
 from __future__ import annotations
 
 import json
+import subprocess
 import textwrap
+from pathlib import Path
+
+
+def _git(repo: Path, *args: str) -> None:
+    subprocess.run(["git", *args], cwd=repo, check=True, capture_output=True)
 
 
 def test_doctor_ok_for_portable_collection(collection, capsys):
@@ -52,6 +58,40 @@ def test_doctor_flags_absolute_paths_and_missing_sources(collection, capsys):
     messages = "\n".join(issue["message"] for issue in payload["issues"])
     assert "absolute path" in messages or "machine-local path" in messages
     assert "configured path does not exist" in messages
+
+
+def test_doctor_flags_unmaterialized_nested_app_gitlink(tmp_path, monkeypatch, capsys):
+    from curiator import cli
+
+    source = tmp_path / "source"
+    app = source / "apps" / "nested"
+    app.mkdir(parents=True)
+    _git(app, "init", "-q", "-b", "main")
+    _git(app, "config", "user.name", "Doctor Test")
+    _git(app, "config", "user.email", "doctor@test.local")
+    (app / "app.py").write_text("VALUE = 1\n")
+    _git(app, "add", "app.py")
+    _git(app, "commit", "-q", "-m", "nested app")
+    (source / "gallery.yaml").write_text(textwrap.dedent("""\
+        apps:
+          - name: nested
+            root: apps/nested
+            source: .
+            smoke: python -m py_compile app.py
+            mount: {kind: dash-inproc, module: app}
+        """))
+    _git(source, "init", "-q", "-b", "main")
+    _git(source, "config", "user.name", "Doctor Test")
+    _git(source, "config", "user.email", "doctor@test.local")
+    _git(source, "add", "gallery.yaml", "apps/nested")
+    _git(source, "commit", "-q", "-m", "collection")
+    clone = tmp_path / "clone"
+    subprocess.run(["git", "clone", "-q", "--no-local", str(source), str(clone)], check=True)
+    monkeypatch.setenv("CURIATOR_GALLERY", str(clone / "gallery.yaml"))
+
+    assert cli.main(["doctor", "--json"]) == 1
+    payload = json.loads(capsys.readouterr().out)
+    assert any("gitlink is not materialized" in issue["message"] for issue in payload["issues"])
 
 
 def test_doctor_warns_without_failing_for_weak_release_smoke(collection, capsys):
@@ -162,6 +202,55 @@ def test_doctor_warns_for_framework_base_path_misconfiguration(collection, capsy
     assert "Gradio app does not appear to configure root_path for /app/<name>/" in messages
     assert "Streamlit proxy mount should set preserve_prefix: true" in messages
     assert "Streamlit command does not set --server.baseUrlPath app/{app}" in messages
+
+
+def test_doctor_validates_nodered_prefix_and_settings(collection, capsys, monkeypatch):
+    from curiator import cli
+
+    monkeypatch.setattr(cli.shutil, "which", lambda exe: f"/usr/bin/{exe}")
+    root = collection / "apps" / "flows"
+    root.mkdir()
+    (root / "package.json").write_text('{"dependencies":{"node-red":"^5.0.1"}}\n')
+    (root / "smoke.mjs").write_text("console.log('ok')\n")
+    (root / "settings.js").write_text("module.exports = { uiPort: 1880 };\n")
+    (collection / "gallery.yaml").write_text(textwrap.dedent("""\
+        apps:
+          - name: flows
+            root: apps/flows
+            source: .
+            smoke: node smoke.mjs
+            mount: { kind: proxy, cmd: "npm start", port: 1880 }
+    """))
+
+    assert cli.main(["doctor", "--json"]) == 0
+    messages = "\n".join(
+        issue["message"] for issue in json.loads(capsys.readouterr().out)["issues"]
+    )
+    assert "Node-RED mount should set preserve_prefix: true" in messages
+    assert "httpAdminRoot under /app/flows/" in messages
+    assert "httpNodeRoot under /app/flows/api/" in messages
+    assert "credentialSecret" in messages
+
+    (root / "settings.js").write_text(textwrap.dedent("""\
+        const appKey = process.env.CURIATOR_APP || "flows";
+        const mountRoot = `/app/${appKey}`;
+        module.exports = {
+          httpAdminRoot: `${mountRoot}/`,
+          httpNodeRoot: `${mountRoot}/api/`,
+          credentialSecret: "local-only",
+        };
+    """))
+    (collection / "gallery.yaml").write_text(
+        (collection / "gallery.yaml").read_text().replace(
+            "port: 1880 }", "port: 1880, preserve_prefix: true }"
+        )
+    )
+    assert cli.main(["doctor", "--json"]) == 0
+    payload = json.loads(capsys.readouterr().out)
+    nodered_messages = [
+        issue["message"] for issue in payload["issues"] if "Node-RED" in issue["message"]
+    ]
+    assert nodered_messages == []
 
 
 def test_doctor_warns_for_missing_smoke_executable_without_failing(collection, capsys, monkeypatch):

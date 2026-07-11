@@ -1,0 +1,32 @@
+# Maintained trusted/local fork-workspace runtime.
+FROM python:3.12-slim
+
+ARG CURIATOR_UID=1000
+ARG CURIATOR_GID=1000
+
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends \
+      ca-certificates cargo chromium curl git nodejs npm procps rustc tini \
+ && npm install -g @anthropic-ai/claude-code @openai/codex \
+ && npm cache clean --force \
+ && rm -rf /var/lib/apt/lists/* \
+ && groupadd --gid ${CURIATOR_GID} curiator \
+ && useradd --uid ${CURIATOR_UID} --gid ${CURIATOR_GID} --create-home --shell /bin/bash curiator
+
+WORKDIR /opt/curiator
+COPY pyproject.toml README.md LICENSE NOTICE ./
+COPY curiator ./curiator
+RUN pip install --no-cache-dir .
+
+RUN mkdir -p /workspace/source /workspace/state \
+ && chown -R ${CURIATOR_UID}:${CURIATOR_GID} /workspace /home/curiator
+
+ENV HOME=/home/curiator \
+    PYTHONUNBUFFERED=1 \
+    SHELL_HOST=0.0.0.0 \
+    CURIATOR_BROWSER=chromium
+
+WORKDIR /workspace/source
+USER curiator
+ENTRYPOINT ["/usr/bin/tini", "--"]
+CMD ["curiator", "--help"]

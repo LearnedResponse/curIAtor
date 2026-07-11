@@ -6,6 +6,61 @@ All notable changes to curIAtor are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed
+- The General collection home now refreshes activity when ledger statuses change without remounting its
+  iframe, offers clickable active/open thread filters, and replaces the minute-only range shortcuts with
+  an all-time/15-minute/hour/day/week/month range menu.
+- Headless agent runs now checkpoint their exact writable source and Git-index state before a ticket is
+  marked `working`. Clean interruptions requeue automatically; partial or ambiguous runs are held with
+  explicit Resume, Preserve branch, Restore baseline, and Keep files actions in the CLI, admin queue,
+  and trace view. Restore is source-scoped and refuses post-interruption conflicts.
+- Trusted local users can fork current or historical app revisions into host-managed Docker workspaces
+  with separate source/state volumes, stable loopback URLs, nested-repo awareness, browser smoke,
+  compare/keep/discard lifecycle controls, and shell workspace UX. A fork can opt into narrowly staged
+  Codex or Claude credentials; Codex uses the disposable container as its default execution boundary.
+  Kept branches can be explicitly applied only across an unchanged canonical HEAD and changed-path
+  baseline, without disturbing unrelated staged or unstaged work.
+- Feedback can attach sanitized, node-specific Figma design references. Doctor distinguishes missing,
+  authentication-required, verified read/render, explicitly authorized write, and temporary provider
+  unavailability through short-lived gitignored receipts; the watcher holds references before any
+  unauthorized fetch. Task bundles include exact provider instructions and enforce both desktop and
+  `390x844` browser-smoke artifacts. `curiator smoke --viewport WIDTHxHEIGHT` supplies the responsive pass.
+- Completed feedback can be audited and replayed at its pre-fix source SHA in independent Docker
+  workspaces. The CLI and admin comparison modal expose exactness, declared/effective profiles,
+  byte-identical task evidence, source diffs, parsed JSON metric artifacts, browser screenshots and
+  console results, timing, live previews, one-branch preservation, and safe resource deletion. Old
+  tickets without retained tasks are labeled as reconstructed rather than exact; export-safe group
+  reports omit private paths, URLs, patches, credentials, and provider payloads.
+- Workspace bootstrap now installs collection-root as well as app-root Python requirements and launches
+  the control plane through that persistent venv. Browser smoke reloads each target before navigation,
+  clearing cached mount/build failures after source or dependency changes without restarting the shell.
+- Collections can declare shared source `components` and per-app `depends_on` edges. Task bundles expose
+  dependency context as read-only unless feedback explicitly grants `--writable-component`; `done`
+  enforces component-first and affected-app smokes, records failures in the trace, commits nested owners
+  before collection gitlinks, reloads only affected mounts, and pins every closure SHA in Docker
+  workspace descriptors. Doctor reports the normalized ownership graph and useful cycle/missing-edge
+  diagnostics. Aviato dogfoods one shared package across its Dash suite and orange segmentation roots.
+- `curiator app create --template nodered` now scaffolds a prefix-mounted Node-RED 5 editor with
+  deterministic settings, a wired heartbeat/health flow, structural and HTTP smokes, and a real `/comms`
+  runtime-state WebSocket client. Doctor validates prefix preservation plus `httpAdminRoot` and
+  `httpNodeRoot`; `curiator-nodered` dogfoods the template and records a feedback-driven uptime/status fix.
+- `curiator release-preflight --prepare-dependencies` runs explicit per-app `commands.bootstrap` steps
+  once per app root before smoke checks, making fresh-clone HTTP/browser verification honest for
+  package-managed examples without implicitly executing installers in the default preflight path.
+- Opt-in `git.branch: per-run` now creates one `curiator/run/<feedback_id>` worktree per app task,
+  commits completed work as an `awaiting_approval` live preview, and exposes admin-only Approve/Reject
+  actions in the React shell. Approval uses a fallback Git identity, smoke-tests a conflict-safe merge
+  into `git.accepted_branch`, records failures without changing accepted state, retires the worktree,
+  and updates nested app gitlinks. Git refs are the proposal registry; same-app runs supersede older
+  open proposals while independent app repositories coexist. `curiator proposal list/approve/reject`
+  exposes the same flow in the CLI, and `curiator-proposals` records the browser-smoked dogfood cycle.
+- `curiator feedback compact` checkpoints and VACUUMs the SQLite ledger through the supported CLI,
+  purging free-page remnants after machine-local feedback text has been sanitized and reporting
+  before/after byte counts for release evidence.
+- Deleted Docker workspace receipts now retain replay metrics and Git provenance with repo-relative
+  paths, then compact the shared registry/ledger so tracked collection evidence is publishable.
+  `curiator workspace compact` migrates existing deleted receipts without touching active workspaces.
+
 ## [0.2.0] — 2026-07-02
 
 ### Added

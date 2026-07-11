@@ -5,13 +5,15 @@
 > review and release-time Zenodo/DOI deposit. Scoped 2026-07-01; stats CLI, local Zenodo metadata, a conservative `docs/paper/`
 > Markdown draft scaffold, draft related-work prose, draft acknowledgements, and command-backed
 > `curiator stats --output` / `curiator release-preflight --output` evidence snapshots have landed.
-> The public-collection publication blocker is locally cleared at the current release-candidate heads;
-> the latest paper stats snapshot reports 27 feedback cycles, 27 direct fixes, 27 replies, and 14
-> curator commits across `curiator-aviato@4743529`, `curiator-ot@2e9896c`, and
-> `curiator-geometry@60ab897`. `make paper-stats`
-> refreshes a PDF-friendly paper summary from the three published example collections, while
-> `make paper-pdf` regenerates the loop/provenance figures and exports a locally reviewed manuscript
-> PDF. Paper/DOI publication work is still blocked on the tagged release, Zenodo wiring, and final
+> The public-collection publication blocker is locally cleared at the current release-candidate heads.
+> The 2026-07-10 generated evidence reports 34 feedback cycles, 33 direct fixes, 1 proposal/human
+> intervention, 34 replies, and 21 curator commits across `curiator-aviato@a420957`,
+> `curiator-ot@43325fb`, and `curiator-geometry@bfae833`. Required plus optional fresh-clone strict
+> preflight passes `7/7`. The tracked manuscript still carries the prior 27-cycle snapshot because
+> `update_paper_stats.py` correctly refuses a dirty runner tree; rerun `make paper-stats` immediately
+> after the pending root implementation commit, then rebuild/review the PDF. `make paper-pdf` currently
+> succeeds and emits a seven-page PDF with regenerated figures. Paper/DOI publication work is still
+> blocked on the tagged release, Zenodo wiring, and final
 > human PDF review/deposit. A citable
 > software/systems paper, self-archived on **Zenodo** with a DOI. Sequences last:
 > the three public collections are its evaluation, so [public-release](public-release.md) → the

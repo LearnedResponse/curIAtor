@@ -4,7 +4,19 @@ from __future__ import annotations
 
 import textwrap
 
-from curiator.config import load_config, set_block_key, set_gallery_override, set_gallery_override_from_argv
+from curiator.config import (
+    load_config,
+    set_agent_adapter_override,
+    set_agent_autonomy_override,
+    set_agent_model_override,
+    set_agent_network_override,
+    set_agent_sandbox_override,
+    set_block_key,
+    set_gallery_override,
+    set_gallery_override_from_argv,
+    set_state_dir_override,
+    set_workspace_mode,
+)
 
 
 def test_loads_gallery_under_collection(cfg, collection):
@@ -68,6 +80,109 @@ def test_gallery_override_can_be_set_from_raw_shell_argv(tmp_path, monkeypatch):
         set_gallery_override(None)
 
 
+def test_state_dir_override_is_process_scoped_and_disables_ledger_commits(collection, tmp_path):
+    state = tmp_path / "workspace-state"
+    try:
+        set_gallery_override_from_argv([
+            "--gallery", str(collection / "gallery.yaml"), "--state-dir", str(state),
+        ])
+        cfg = load_config()
+        assert cfg["state_dir"] == str(state.resolve())
+        assert cfg["feedback"]["dir"] == str(state.resolve())
+        assert cfg["git"]["include_ledger"] is False
+    finally:
+        set_gallery_override(None)
+        set_state_dir_override(None)
+
+    cfg = load_config()
+    assert "state_dir" not in cfg
+    assert cfg["feedback"]["dir"] == "feedback"
+
+
+def test_workspace_mode_forces_source_commits_but_excludes_runtime_ledger(collection, tmp_path):
+    try:
+        set_gallery_override_from_argv([
+            "--gallery", str(collection / "gallery.yaml"),
+            "--state-dir", str(tmp_path / "state"),
+            "--workspace-mode",
+        ])
+        cfg = load_config()
+        assert cfg["workspace_mode"] is True
+        assert cfg["git"]["commit"] is True
+        assert cfg["git"]["include_ledger"] is False
+    finally:
+        set_gallery_override(None)
+        set_state_dir_override(None)
+        set_workspace_mode(False)
+
+
+def test_agent_adapter_override_is_process_scoped(collection):
+    try:
+        set_gallery_override_from_argv([
+            "--gallery", str(collection / "gallery.yaml"), "--agent-adapter", "codex",
+        ])
+        cfg = load_config()
+        assert cfg["agent"]["adapter"] == "codex"
+        assert cfg["agent_adapter_override"] == "codex"
+    finally:
+        set_gallery_override(None)
+        set_agent_adapter_override(None)
+
+    assert load_config()["agent"]["adapter"] == "headless-cc"
+
+
+def test_agent_model_and_autonomy_overrides_are_process_scoped(collection):
+    try:
+        set_gallery_override_from_argv([
+            "--gallery", str(collection / "gallery.yaml"),
+            "--agent-model", "test-model", "--agent-autonomy", "auto",
+        ])
+        cfg = load_config()
+        assert cfg["agent"]["model"] == "test-model"
+        assert cfg["agent"]["autonomy"] == "auto"
+        assert cfg["agent_model_override"] == "test-model"
+        assert cfg["agent_autonomy_override"] == "auto"
+    finally:
+        set_gallery_override(None)
+        set_agent_model_override(None)
+        set_agent_autonomy_override(None)
+
+    fresh = load_config()["agent"]
+    assert fresh.get("model") != "test-model"
+    assert fresh["autonomy"] == "auto-small"
+
+
+def test_agent_network_override_is_process_scoped(collection):
+    try:
+        set_gallery_override_from_argv([
+            "--gallery", str(collection / "gallery.yaml"), "--agent-network", "on",
+        ])
+        cfg = load_config()
+        assert cfg["agent"]["network_access"] is True
+        assert cfg["agent_network_override"] == "on"
+    finally:
+        set_gallery_override(None)
+        set_agent_network_override(None)
+
+    assert "network_access" not in load_config()["agent"]
+
+
+def test_agent_sandbox_override_is_process_scoped(collection):
+    try:
+        set_gallery_override_from_argv([
+            "--gallery", str(collection / "gallery.yaml"),
+            "--agent-sandbox", "danger-full-access",
+        ])
+        cfg = load_config()
+        assert cfg["agent"]["sandbox"] == "danger-full-access"
+        assert cfg["agent_sandbox_override"] == "danger-full-access"
+    finally:
+        set_gallery_override(None)
+        set_agent_sandbox_override(None)
+
+    assert "sandbox" not in load_config()["agent"]
+
+
 def test_explicit_runner_and_git_from_gallery(cfg):
     assert cfg["runner"] == {"mode": "checkout", "path": "."}
     assert cfg["git"]["commit"] is True
@@ -88,6 +203,7 @@ def test_defaults_when_blocks_absent(tmp_path, monkeypatch):
     assert cfg["runner"]["mode"] == "pinned"      # safe consumer default
     assert cfg["git"]["commit"] is False          # leave-uncommitted default
     assert cfg["git"]["branch"] is None            # default: commit to current HEAD (main), no separate branch
+    assert cfg["git"]["accepted_branch"] == "main"
     assert cfg["git"]["signoff"] is True
     assert cfg["git"]["include_ledger"] is False
     assert cfg["auth"]["admin_groups"] == ["admin"]   # who may change agent settings (mode != none)

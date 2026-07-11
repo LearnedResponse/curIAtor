@@ -6,6 +6,8 @@ venv/
 build/
 dist/
 .pytest_cache/
+.clj-kondo/
+.lsp/
 .DS_Store
 .claude/settings.local.json
 
@@ -16,6 +18,8 @@ feedback/audio/
 feedback/task_*.md
 feedback/tasks/
 feedback/replies/
+feedback/runs/
+feedback/replays/
 feedback/app_feedback.sqlite*
 feedback/app_feedback.json
 docs/demo.gif
@@ -23,6 +27,8 @@ docs/demo.gif
 
 # local-login user store (password hashes) — never commit
 .curiator-users.json
+.curiator/cache/
+.curiator/worktrees/
 
 # local release/paper evidence snapshots may include machine-local clone paths
 release-evidence/

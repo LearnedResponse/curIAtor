@@ -86,6 +86,7 @@ _APP_TEMPLATE_CHOICES = (
     "static",
     "python",
     "node",
+    "nodered",
     "flask",
     "fastapi",
     "rust",
@@ -119,6 +120,11 @@ _APP_TEMPLATE_INFO = {
         "mount": "proxy",
         "toolchain": "node stdlib",
         "summary": "dependency-light Node HTTP server",
+    },
+    "nodered": {
+        "mount": "proxy preserve-prefix",
+        "toolchain": "node-red",
+        "summary": "Node-RED flow editor with mounted admin/API roots",
     },
     "flask": {
         "mount": "proxy",
@@ -367,6 +373,22 @@ def _gallery_entry(
             f"    mount: {{ kind: proxy, cmd: \"node server.js --port {port}\", port: {port} }}\n"
             f"    tags: {_yaml_list(tags)}\n"
         )
+    if template == "nodered":
+        preview = f"npm start -- --port {port}"
+        return (
+            f"  - name: {name}\n"
+            f"    title: {json.dumps(title)}\n"
+            f"    root: {root}\n"
+            f"    source: .\n"
+            f"    smoke: node smoke.mjs\n"
+            f"    smoke_http: {{ path: /app/{name}/settings, timeout: 15 }}\n"
+            f"    commands:\n"
+            f"      bootstrap: \"npm ci --no-audit --no-fund\"\n"
+            f"      preview: {json.dumps(preview)}\n"
+            f"    mount: {{ kind: proxy, cmd: \"npm start -- --port {{port}}\", port: {port}, "
+            f"preserve_prefix: true }}\n"
+            f"    tags: {_yaml_list(tags)}\n"
+        )
     if template == "flask":
         return (
             f"  - name: {name}\n"
@@ -502,6 +524,9 @@ def _app_template_files(name: str, template: str, title: str, package_manager: s
     if template == "node":
         return {rel: content.format(name=name, title=title, title_json=json.dumps(title))
                 for rel, content in _APP_NODE_TEMPLATE.items()}
+    if template == "nodered":
+        return {rel: content.format(name=name, title=title, title_json=json.dumps(title))
+                for rel, content in _APP_NODERED_TEMPLATE.items()}
     if template == "flask":
         return {rel: content.format(name=name, title=title, title_json=json.dumps(title))
                 for rel, content in _APP_FLASK_TEMPLATE.items()}
@@ -1610,6 +1635,282 @@ node --check server.js
 
 Use this template for small server-side prototypes, lightweight API-backed views, or as a base before
 promoting to a heavier framework.
+""",
+}
+
+_APP_NODERED_TEMPLATE = {
+    "package.json": """\
+{{
+  "name": "{name}",
+  "private": true,
+  "version": "0.0.0",
+  "scripts": {{
+    "start": "node-red --settings ./settings.js",
+    "check": "node smoke.mjs"
+  }},
+  "dependencies": {{
+    "node-red": "^5.0.1"
+  }}
+}}
+""",
+    "settings.js": """\
+const path = require("node:path");
+
+const appKey = process.env.CURIATOR_APP || "{name}";
+const mountRoot = `/app/${{appKey}}`;
+
+module.exports = {{
+  uiHost: "127.0.0.1",
+  uiPort: Number(process.env.PORT || 1880),
+  httpAdminRoot: `${{mountRoot}}/`,
+  httpNodeRoot: `${{mountRoot}}/api/`,
+  userDir: path.join(__dirname, "userdir"),
+  flowFile: "flows.json",
+  credentialSecret: process.env.NODE_RED_CREDENTIAL_SECRET || "curiator-local-demo-only",
+  functionGlobalContext: {{
+    processUptime: () => process.uptime(),
+  }},
+  diagnostics: {{ enabled: false, ui: false }},
+  telemetry: {{ enabled: false, updateNotification: false }},
+  runtimeState: {{ enabled: true, ui: false }},
+  editorTheme: {{
+    tours: false,
+    page: {{ title: {title_json} }},
+  }},
+  logging: {{ console: {{ level: "info", metrics: false, audit: false }} }},
+}};
+""",
+    "smoke.mjs": """\
+import fs from "node:fs";
+
+const settings = fs.readFileSync(new URL("./settings.js", import.meta.url), "utf8");
+for (const required of [
+  "CURIATOR_APP",
+  "httpAdminRoot",
+  "httpNodeRoot",
+  "credentialSecret",
+  "processUptime",
+  "telemetry",
+  "diagnostics",
+  "runtimeState",
+]) {{
+  if (!settings.includes(required)) throw new Error(`settings.js is missing ${{required}}`);
+}}
+
+const flows = JSON.parse(fs.readFileSync(new URL("./userdir/flows.json", import.meta.url), "utf8"));
+const ids = new Set(flows.map((node) => node.id));
+if (ids.size !== flows.length || flows.length < 7) throw new Error("seed flow IDs must be unique and complete");
+if (!flows.some((node) => node.type === "http in" && node.url === "/health")) {{
+  throw new Error("seed flow must expose /health under httpNodeRoot");
+}}
+const health = flows.find((node) => node.name === "Health response");
+for (const required of ["processUptime", "operational", "fresh-restart", "uptime_seconds"]) {{
+  if (!health?.func?.includes(required)) throw new Error(`health response is missing ${{required}}`);
+}}
+for (const node of flows) {{
+  for (const wire of (node.wires || []).flat()) {{
+    if (!ids.has(wire)) throw new Error(`flow ${{node.id}} wires to missing node ${{wire}}`);
+  }}
+}}
+console.log("Node-RED scaffold smoke passed");
+""",
+    "userdir/flows.json": """\
+[
+  {{
+    "id": "a000000000000001",
+    "type": "tab",
+    "label": {title_json},
+    "disabled": false,
+    "info": "Starter flow generated by curIAtor"
+  }},
+  {{
+    "id": "a000000000000002",
+    "type": "inject",
+    "z": "a000000000000001",
+    "name": "Heartbeat",
+    "props": [{{"p": "payload"}}, {{"p": "topic", "vt": "str"}}],
+    "repeat": "30",
+    "crontab": "",
+    "once": true,
+    "onceDelay": "0.5",
+    "topic": "curiator/heartbeat",
+    "payload": "",
+    "payloadType": "date",
+    "x": 160,
+    "y": 100,
+    "wires": [["a000000000000003"]]
+  }},
+  {{
+    "id": "a000000000000003",
+    "type": "function",
+    "z": "a000000000000001",
+    "name": "Shape runtime event",
+    "func": "msg.payload = {{ app: '{name}', state: 'running', observed_at: new Date(msg.payload).toISOString() }};\\nreturn msg;",
+    "outputs": 1,
+    "timeout": 0,
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 400,
+    "y": 100,
+    "wires": [["a000000000000004"]]
+  }},
+  {{
+    "id": "a000000000000004",
+    "type": "debug",
+    "z": "a000000000000001",
+    "name": "Runtime event",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "payload",
+    "targetType": "msg",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 640,
+    "y": 100,
+    "wires": []
+  }},
+  {{
+    "id": "a000000000000005",
+    "type": "http in",
+    "z": "a000000000000001",
+    "name": "Health endpoint",
+    "url": "/health",
+    "method": "get",
+    "upload": false,
+    "swaggerDoc": "",
+    "x": 170,
+    "y": 200,
+    "wires": [["a000000000000006"]]
+  }},
+  {{
+    "id": "a000000000000006",
+    "type": "function",
+    "z": "a000000000000001",
+    "name": "Health response",
+    "func": "const readUptime = global.get('processUptime');\\nconst uptimeSeconds = Math.max(0, Math.floor(readUptime()));\\nmsg.headers = {{ 'content-type': 'application/json' }};\\nmsg.payload = {{\\n    ok: true,\\n    app: '{name}',\\n    source: 'node-red',\\n    status: 'operational',\\n    runtime_phase: uptimeSeconds < 60 ? 'fresh-restart' : 'steady',\\n    uptime_seconds: uptimeSeconds\\n}};\\nreturn msg;",
+    "outputs": 1,
+    "timeout": 0,
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 400,
+    "y": 200,
+    "wires": [["a000000000000007"]]
+  }},
+  {{
+    "id": "a000000000000007",
+    "type": "http response",
+    "z": "a000000000000001",
+    "name": "",
+    "statusCode": "",
+    "headers": {{}},
+    "x": 640,
+    "y": 200,
+    "wires": []
+  }}
+]
+""",
+    "ws_smoke.mjs": """\
+const baseUrl = (process.argv[2] || process.env.CURIATOR_SHELL_URL || "http://127.0.0.1:8200")
+  .replace(/\/$/, "");
+const adminRoot = `${{baseUrl}}/app/{name}`;
+const socketUrl = `${{baseUrl.replace(/^http/, "ws")}}/app/{name}/comms`;
+const socket = new WebSocket(socketUrl);
+let expectedState = null;
+
+const timer = setTimeout(() => {{
+  console.error("timed out waiting for a matching Node-RED runtime-state notification");
+  socket.close();
+  process.exitCode = 1;
+}}, 8000);
+
+socket.addEventListener("open", () => {{
+  socket.send(JSON.stringify({{ subscribe: "notification/runtime-state" }}));
+  setTimeout(async () => {{
+    try {{
+      const stateResponse = await fetch(`${{adminRoot}}/flows/state`);
+      if (!stateResponse.ok) throw new Error(`state query returned HTTP ${{stateResponse.status}}`);
+      const current = await stateResponse.json();
+      expectedState = current.state === "start" ? "stop" : "start";
+      const response = await fetch(`${{adminRoot}}/flows/state`, {{
+        method: "POST",
+        headers: {{ "content-type": "application/json" }},
+        body: JSON.stringify({{ state: expectedState }}),
+      }});
+      if (!response.ok) throw new Error(`state transition returned HTTP ${{response.status}}`);
+    }} catch (error) {{
+      clearTimeout(timer);
+      console.error(error.message);
+      socket.close();
+      process.exitCode = 1;
+    }}
+  }}, 250);
+}});
+
+socket.addEventListener("message", (event) => {{
+  const payload = JSON.parse(String(event.data));
+  const message = (Array.isArray(payload) ? payload : [payload]).find(
+    (item) => item.topic === "notification/runtime-state",
+  );
+  if (!message || !expectedState || message.data?.state !== expectedState) return;
+  clearTimeout(timer);
+  console.log(JSON.stringify({{ socket_url: socketUrl, topic: message.topic, data: message.data }}));
+  socket.close();
+}});
+
+socket.addEventListener("error", (event) => {{
+  clearTimeout(timer);
+  console.error(`WebSocket error: ${{event.message || "unknown"}}`);
+  process.exitCode = 1;
+}});
+""",
+    ".gitignore": """\
+node_modules/
+userdir/.config.*
+userdir/.sessions.json
+userdir/flows_cred.json
+userdir/lib/
+""",
+    "README.md": """\
+# {title}
+
+This Node-RED flow editor was scaffolded by curIAtor. The editor and its `/comms` WebSocket live under
+`/app/{name}/`; HTTP-In nodes live under `/app/{name}/api/`. `settings.js` derives that prefix from
+`CURIATOR_APP`, matching the generated prefix-preserving proxy mount.
+
+Install and run:
+
+```bash
+npm install
+curiator up
+```
+
+The generated flow emits a heartbeat to the debug sidebar and exposes
+`/app/{name}/api/health`. The structural smoke does not require an installed runtime:
+
+```bash
+npm run check
+```
+
+Use `curiator smoke --app {name} --http` after `npm install` to boot Node-RED and poll the real
+`/app/{name}/settings` endpoint. Set `NODE_RED_CREDENTIAL_SECRET` for any shared or hosted deployment;
+the checked-in fallback is only for a disposable single-user demo. Node-RED editor authentication is
+not configured by this local scaffold, so put the editor behind an authenticated boundary before
+exposing it publicly.
+
+With the gallery running, verify the real prefix-mounted `/comms` tunnel and a live runtime transition:
+
+```bash
+node ws_smoke.mjs http://127.0.0.1:<shell-port>
+```
+
+The client subscribes to `notification/runtime-state`, toggles the runtime through the mounted admin
+API, and succeeds only after the matching WebSocket push arrives through curIAtor.
 """,
 }
 

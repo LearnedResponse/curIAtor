@@ -6,9 +6,11 @@ from __future__ import annotations
 
 import subprocess
 import sys
+import textwrap
 from pathlib import Path
 
 from curiator import gitmem, ledger
+from curiator.config import load_config_at
 
 
 def _log(collection: Path, *fmt) -> str:
@@ -86,6 +88,58 @@ def test_branch_selection(cfg, collection):
     assert branch == "curiator/sandbox"                    # commit landed on the configured branch
 
 
+def test_commit_run_creates_first_commit_on_unborn_collection(tmp_path):
+    (tmp_path / "apps").mkdir()
+    (tmp_path / "apps" / "first.py").write_text("VALUE = 1\n")
+    (tmp_path / "README.md").write_text("# First collection\n")
+    (tmp_path / "gallery.yaml").write_text(textwrap.dedent("""\
+        apps:
+          - name: first
+            source: apps/first.py
+            mount: {kind: dash-inproc, module: first}
+        feedback: {dir: feedback}
+        git:
+          commit: true
+          include_ledger: true
+          signoff: false
+          also_commit: [README.md]
+    """))
+    subprocess.run(["git", "init", "-q"], cwd=tmp_path, check=True)
+    subprocess.run(["git", "config", "user.name", "Test Curator"], cwd=tmp_path, check=True)
+    subprocess.run(["git", "config", "user.email", "curator@test.local"], cwd=tmp_path, check=True)
+    cfg = load_config_at(tmp_path)
+    feedback_id = ledger.save_entry(
+        cfg,
+        "__general__",
+        comment="Create a new app collection",
+    )
+    ledger.add_system_note(cfg, "__general__", "Created the collection.", reply_to=[feedback_id])
+    ledger.set_status(cfg, "__general__", [feedback_id], "done")
+
+    result = gitmem.commit_run(
+        cfg,
+        "__general__",
+        feedback_id,
+        status="done",
+        note_text="Created the collection.",
+    )
+    assert result["committed"], result
+    assert gitmem.current_branch(cfg) in {"main", "master"}
+    files = subprocess.run(
+        ["git", "show", "--name-only", "--format=", "HEAD"],
+        cwd=tmp_path,
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.split()
+    assert set(files) == {
+        "README.md",
+        "apps/first.py",
+        "feedback/app_feedback.sqlite",
+        "gallery.yaml",
+    }
+
+
 def test_revert_appends_note_keeps_thread(cfg, collection):
     fid, _, _ = _do_fix(cfg, collection)
     res = gitmem.revert_feedback(cfg, fid, reason="rewind")
@@ -132,13 +186,14 @@ def test_general_collection_commit_captures_app_and_gallery(cfg, collection):
         (collection / "gallery.yaml").read_text()
         + "\n  - name: models\n    title: Models\n    mount: { kind: dash-inproc, module: models }\n    source: apps/models.py\n"
     )
+    (collection / ".gitignore").write_text("feedback/runs/\n")
     fid = ledger.save_entry(cfg, "__general__", comment="create a new curiator app as an overview", ts="t0")
     ledger.add_system_note(cfg, "__general__", "Added the model overview app.", reply_to=[fid], ts="t1")
     ledger.set_status(cfg, "__general__", [fid], "done")
     res = gitmem.commit_run(cfg, "__general__", fid, status="done", note_text="Added the model overview app.")
     assert res["committed"], res
     files = _names_at_head(collection)
-    assert "apps/models.py" in files and "gallery.yaml" in files and "feedback/app_feedback.sqlite" in files
+    assert {".gitignore", "apps/models.py", "gallery.yaml", "feedback/app_feedback.sqlite"} <= set(files)
     body = _log(collection, "-1", "--format=%B")
     assert "apps/models.py" in body and "gallery.yaml" in body
 

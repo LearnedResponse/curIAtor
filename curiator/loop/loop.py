@@ -21,7 +21,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from . import adapters, runlog
-from .. import ledger      # tiny ledger read/write (status, replies) — see curiator/ledger.py
+from .. import ledger, run_recovery
+from ..agent_capabilities import figma_dispatch_hold_reason
+from ..design_refs import DesignReferenceError, thread_design_refs
 
 POLL_SECONDS = 5
 
@@ -110,6 +112,8 @@ def _explicit_anonymous(entry: dict) -> bool:
     Older tests/imports may have no `user` stamp at all; those are not enough to prove the author was
     a logged-out public visitor, so they keep the historical dispatch behavior.
     """
+    if entry.get("moderation_approved_at"):
+        return False
     user = entry.get("user") or {}
     if not user:
         return False
@@ -147,7 +151,7 @@ def _today_dispatches(led: dict, today: str) -> list[dict]:
 def _hold_feedback(cfg: dict, key: str, entry: dict, text: str) -> None:
     eid = entry.get("id")
     ledger.set_status(cfg, key, [eid], "held")
-    ledger.add_system_note(cfg, key, text, reply_to=[eid], agent="curiator quota")
+    ledger.add_system_note(cfg, key, text, reply_to=[eid], agent="curiator dispatch")
 
 
 def _trace_mentions_interactive(cfg: dict, entry: dict) -> bool:
@@ -161,37 +165,102 @@ def _trace_mentions_interactive(cfg: dict, entry: dict) -> bool:
     return "- adapter: `interactive`" in text
 
 
-def _reset_interrupted_work(cfg: dict, key: str, entry: dict, reason: str) -> None:
+def _recovery_note(cfg: dict, key: str, entry: dict, text: str, *, status: str) -> None:
     eid = entry.get("id")
     if not eid:
         return
-    text = (
-        f"⚙ watcher recovery: {reason}. The previous agent run did not post a completion reply, "
-        "so this item was requeued for another pass. Review the working tree if partial edits are present."
-    )
     ledger.add_system_note(cfg, key, text, reply_to=[eid], agent="curiator watcher")
-    ledger.set_status(cfg, key, [eid], "new")
+    ledger.set_status(cfg, key, [eid], status)
     runlog.append(runlog.reply_path(cfg, eid), f"\n[{_now()}] {text}\n")
 
 
-def recover_interrupted_working(cfg: dict, reason: str = "watcher started with a stale working claim") -> int:
-    """Requeue watcher-owned `working` items left behind by a prior crashed/restarted watcher.
+def _classify_ended_run(
+    cfg: dict,
+    key: str,
+    entry: dict,
+    reason: str,
+    *,
+    hold_even_if_unchanged: bool = False,
+) -> tuple[str, dict | None]:
+    """Capture process-end state and choose retry vs explicit recovery.
+
+    Only a byte/index-identical source scope may be retried automatically. A missing or corrupt
+    checkpoint is ambiguous and therefore held without touching source files.
+    """
+    eid = entry.get("id")
+    if not eid:
+        return "held", None
+    try:
+        run_recovery.record_process_end(cfg, eid, reason)
+        report = run_recovery.recovery_report(cfg, eid)
+    except run_recovery.CheckpointError as exc:
+        text = (
+            f"watcher recovery held this item because its source checkpoint is unavailable or invalid ({exc}). "
+            "Source files were left untouched; inspect the working tree before closing or retrying."
+        )
+        _recovery_note(cfg, key, entry, text, status="held")
+        return "held", None
+
+    formatted = run_recovery.format_report(report)
+    runlog.append(runlog.reply_path(cfg, eid), f"\n```text\n{formatted}\n```\n")
+    if report.get("source_delta") is False:
+        status = "held" if hold_even_if_unchanged else "new"
+        action = "parked by the Stop request" if hold_even_if_unchanged else "safely requeued"
+        prefix = "Run stopped by user. " if hold_even_if_unchanged else ""
+        text = (
+            f"{prefix}watcher recovery {action}: {reason}. The checkpoint proves the writable source scope "
+            "is unchanged from its pre-run baseline."
+        )
+        _recovery_note(cfg, key, entry, text, status=status)
+        run_recovery.retire_checkpoint(cfg, eid, "held-unchanged" if hold_even_if_unchanged else "requeued-unchanged",
+                                       note=text)
+        return status, report
+
+    changed = ", ".join(report.get("agent_run_paths") or []) or "unclassified source state"
+    conflict = report.get("post_interruption_paths") or []
+    conflict_text = (
+        " Changes after process end also exist, so Restore is disabled: " + ", ".join(conflict)
+        if conflict else ""
+    )
+    text = (
+        f"watcher recovery parked this item as held: {reason}. Partial source changes were preserved "
+        f"({changed}).{conflict_text} Inspect with `curiator run recovery {eid}`; then choose "
+        f"`curiator run resume {eid}`, `curiator run preserve {eid}`, or `curiator run restore {eid}`."
+    )
+    _recovery_note(cfg, key, entry, text, status="held")
+    return "held", report
+
+
+def recover_interrupted_working(
+    cfg: dict, reason: str = "watcher started with a stale working claim",
+) -> dict[str, int]:
+    """Recover watcher-owned `working` items left behind by a prior crashed/restarted watcher.
 
     Interactive `curiator work` claims are deliberately skipped: those are human-owned and should stay
-    claimed until the human runs `curiator done` or explicitly changes the status.
+    claimed until the human runs `curiator done` or explicitly changes the status. Automatic retry is
+    allowed only when the source checkpoint proves that no source content or index state changed.
     """
-    recovered = 0
+    recovered = {"total": 0, "requeued": 0, "held": 0}
     for key, entry in _working_items(ledger.load(cfg)):
         if _trace_mentions_interactive(cfg, entry):
             continue
-        _reset_interrupted_work(cfg, key, entry, reason)
-        recovered += 1
+        status, _ = _classify_ended_run(cfg, key, entry, reason)
+        recovered["total"] += 1
+        recovered["requeued" if status == "new" else "held"] += 1
     return recovered
 
 
-def _dispatch_hold_reason(cfg: dict, led: dict, entry: dict) -> str | None:
+def _dispatch_hold_reason(cfg: dict, led: dict, key: str, entry: dict) -> str | None:
     if _explicit_anonymous(entry):
         return "Queued for review - anonymous feedback never auto-dispatches."
+
+    try:
+        design_refs = thread_design_refs(led, key, entry)
+    except DesignReferenceError as exc:
+        return f"Queued for review - the attached design reference is invalid ({exc})."
+    figma_reason = figma_dispatch_hold_reason(cfg, design_refs)
+    if figma_reason:
+        return figma_reason
 
     quotas = ((cfg.get("agent") or {}).get("quotas") or {})
     global_daily = _quota_value(quotas.get("global_daily"))
@@ -237,16 +306,38 @@ def run_once(cfg: dict) -> int:
         who = (entry.get("user") or {}).get("name") or "anonymous"
         snippet = " ".join((entry.get("comment") or "").split())[:80] or f"★{entry.get('stars')}"
         print(f"curiator: ● new feedback on {_label(key)} by {who} — {snippet!r}", flush=True)
-        reason = _dispatch_hold_reason(cfg, ledger.load(cfg), entry)
+        reason = _dispatch_hold_reason(cfg, ledger.load(cfg), key, entry)
         if reason:
             _hold_feedback(cfg, key, entry, reason)
             print(f"curiator:   • {key}/{eid} → held · {reason}", flush=True)
             continue
-        task = adapters.build_task(cfg, key, entry)     # writes a task file, returns its path + bundle
+        try:
+            task = adapters.build_task(cfg, key, entry)  # writes a task file, returns its path + bundle
+        except Exception as exc:
+            from ..proposals import ProposalError
+
+            if not isinstance(exc, ProposalError):
+                raise
+            text = f"Agent dispatch held because a per-run proposal workspace could not be prepared: {exc}"
+            _hold_feedback(cfg, key, entry, text)
+            print(f"curiator:   ! {key}/{eid} -> held (proposal setup failed: {exc})", flush=True)
+            continue
         prof = task.agent or {}
         elevated = "  ⚡ELEVATED" if prof.get("elevated") else ""
         runlog.init_trace(task, adapter_name)
-        runlog.note(task, "task bundle written; setting status to working")
+        runlog.note(task, "task bundle written; checkpointing writable source scope")
+        try:
+            checkpoint = run_recovery.create_checkpoint(task, adapter_name)
+        except Exception as exc:
+            text = (
+                f"Agent dispatch refused because a trustworthy source checkpoint could not be created: {exc}. "
+                "Source files were left untouched."
+            )
+            runlog.note(task, text)
+            _recovery_note(cfg, key, entry, text, status="held")
+            print(f"curiator:   ! {key}/{eid} -> held (checkpoint failed: {exc})", flush=True)
+            continue
+        runlog.note(task, f"source checkpoint {checkpoint['run_id']} written; setting status to working")
         ledger.update_entry(cfg, key, eid, {"status": "working", "dispatched_at": _now()})
         print(f"curiator:   ▶ launching {adapter_name} on {key}/{eid} "
               f"(autonomy={prof.get('autonomy', 'auto-small')}){elevated}", flush=True)
@@ -256,32 +347,39 @@ def run_once(cfg: dict) -> int:
         try:
             adapter.run(task)                            # the agent edits + smoke-tests + replies
             st, reply = _outcome(cfg, key, eid)
+            run_recovery.record_process_end(cfg, eid, f"adapter returned with ledger status {st}")
             tail = f' · "{reply[:72]}"' if reply else ""
             runlog.note(task, f"ledger status after run: {st}")
             if reply:
                 runlog.note(task, f"agent reply: {reply}")
+            if st == "working":
+                st, _ = _classify_ended_run(cfg, key, entry, "adapter exited without a completion reply")
+            else:
+                run_recovery.complete_checkpoint(cfg, eid, st)
             print(f"curiator:   {'✓' if st != 'working' else '⚠'} {key}/{eid} → {st}{tail}", flush=True)
         except runlog.AgentInterrupted as exc:
             print(f"curiator:   ✗ {key}/{eid} interrupted: {exc}", flush=True)
             runlog.note(task, f"agent interrupted: {exc}")
-            _reset_interrupted_work(cfg, key, entry, f"agent interrupted by service shutdown ({exc})")
+            _classify_ended_run(cfg, key, entry, f"agent interrupted by service shutdown ({exc})")
             raise
         except runlog.AgentCancelled:                     # the Stop button — park it, don't retry
             runlog.clear_cancel(cfg, eid)
             runlog.note(task, "cancelled by user; parked as held")
-            ledger.add_system_note(
-                cfg, key,
-                "⏹ Run stopped by user. Parked as **held** — the working tree may hold partial edits. "
-                "Re-run it from the queue (approve) or drop it (reject).",
-                reply_to=[eid], agent="curiator watcher")
-            ledger.set_status(cfg, key, [eid], "held")
+            _classify_ended_run(cfg, key, entry, "run stopped by user", hold_even_if_unchanged=True)
             print(f"curiator:   ⏹ {key}/{eid} → held (stopped by user)", flush=True)
         except runlog.AgentTimeout as exc:                # taking a while — cap the retries, then park
             attempts = int(entry.get("timeout_attempts") or 0) + 1
             cap = _quota_value((cfg.get("agent") or {}).get("max_timeouts"))
             cap = 2 if cap is None else cap
             runlog.note(task, f"{exc} (attempt {attempts}/{cap})")
-            if attempts >= cap:
+            _, report = _classify_ended_run(cfg, key, entry, str(exc))
+            if report is None:
+                ledger.update_entry(cfg, key, eid, {"status": "held", "timeout_attempts": attempts})
+                print(f"curiator:   ⏱ {key}/{eid} → held (checkpoint unavailable after timeout)", flush=True)
+            elif report.get("source_delta"):
+                ledger.update_entry(cfg, key, eid, {"status": "held", "timeout_attempts": attempts})
+                print(f"curiator:   ⏱ {key}/{eid} → held (partial source after timeout)", flush=True)
+            elif attempts >= cap:
                 ledger.add_system_note(
                     cfg, key,
                     f"⏱ Stopped at the {exc.timeout}s time limit again (attempt {attempts}/{cap}). Parked as "
@@ -300,8 +398,8 @@ def run_once(cfg: dict) -> int:
         except Exception as exc:                          # never leave an item stuck on 'working'
             print(f"curiator:   ✗ {key}/{eid} failed: {exc}", flush=True)
             runlog.note(task, f"loop error: {exc}")
-            ledger.add_system_note(cfg, key, f"⚙ loop error: {exc}", reply_to=[eid])
-            ledger.set_status(cfg, key, [eid], "new")
+            status, _ = _classify_ended_run(cfg, key, entry, f"loop error: {exc}")
+            ledger.add_system_note(cfg, key, f"⚙ loop error: {exc}; recovery status: {status}", reply_to=[eid])
     return dispatched
 
 
@@ -312,8 +410,12 @@ def watch(cfg: dict) -> None:
           f"(adapter={cfg.get('agent', {}).get('adapter')}, "
           f"autonomy={cfg.get('agent', {}).get('autonomy')}) — Ctrl-C to stop", flush=True)
     recovered = recover_interrupted_working(cfg)
-    if recovered:
-        print(f"curiator: recovered {recovered} interrupted working item(s); requeued for retry", flush=True)
+    if recovered["total"]:
+        print(
+            f"curiator: recovered {recovered['total']} interrupted working item(s); "
+            f"{recovered['requeued']} safely requeued, {recovered['held']} held for recovery",
+            flush=True,
+        )
     mtime = _gallery_mtime(cfg)
     while True:
         try:

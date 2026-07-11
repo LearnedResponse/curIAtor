@@ -18,6 +18,13 @@ except ImportError as e:  # pragma: no cover
 
 LINK_REL = Path(".curiator") / "app.yaml"
 _GALLERY_OVERRIDE: Path | None = None
+_STATE_DIR_OVERRIDE: Path | None = None
+_AGENT_ADAPTER_OVERRIDE: str | None = None
+_AGENT_MODEL_OVERRIDE: str | None = None
+_AGENT_AUTONOMY_OVERRIDE: str | None = None
+_AGENT_NETWORK_OVERRIDE: bool | None = None
+_AGENT_SANDBOX_OVERRIDE: str | None = None
+_WORKSPACE_MODE_OVERRIDE = False
 
 
 def set_gallery_override(path: str | Path | None) -> None:
@@ -30,8 +37,50 @@ def set_gallery_override(path: str | Path | None) -> None:
     _GALLERY_OVERRIDE = Path(path).expanduser() if path else None
 
 
+def set_state_dir_override(path: str | Path | None) -> None:
+    """Pin runtime feedback/task/artifact state for the current process only."""
+    global _STATE_DIR_OVERRIDE
+    _STATE_DIR_OVERRIDE = Path(path).expanduser().resolve() if path else None
+
+
+def set_agent_adapter_override(adapter: str | None) -> None:
+    """Select an agent provider for this process without editing gallery.yaml."""
+    global _AGENT_ADAPTER_OVERRIDE
+    _AGENT_ADAPTER_OVERRIDE = adapter or None
+
+
+def set_agent_model_override(model: str | None) -> None:
+    """Select an agent model for this process without editing gallery.yaml."""
+    global _AGENT_MODEL_OVERRIDE
+    _AGENT_MODEL_OVERRIDE = model or None
+
+
+def set_agent_autonomy_override(autonomy: str | None) -> None:
+    """Select an agent autonomy policy for this process without editing gallery.yaml."""
+    global _AGENT_AUTONOMY_OVERRIDE
+    _AGENT_AUTONOMY_OVERRIDE = autonomy or None
+
+
+def set_agent_network_override(enabled: bool | None) -> None:
+    """Set workspace agent network policy for this process without editing gallery.yaml."""
+    global _AGENT_NETWORK_OVERRIDE
+    _AGENT_NETWORK_OVERRIDE = enabled
+
+
+def set_agent_sandbox_override(sandbox: str | None) -> None:
+    """Set the Codex sandbox for this process without editing gallery.yaml."""
+    global _AGENT_SANDBOX_OVERRIDE
+    _AGENT_SANDBOX_OVERRIDE = sandbox or None
+
+
+def set_workspace_mode(enabled: bool) -> None:
+    """Enable isolated-workspace Git policy for this process."""
+    global _WORKSPACE_MODE_OVERRIDE
+    _WORKSPACE_MODE_OVERRIDE = bool(enabled)
+
+
 def set_gallery_override_from_argv(argv: Sequence[str] | None = None) -> None:
-    """Pin gallery resolution from a raw argv list before full CLI parsing exists.
+    """Pin gallery and runtime-state resolution before full CLI parsing exists.
 
     The shell entrypoints import their registry at module import time, so they need a tiny early parser
     for `python web_shell.py --gallery <path>`. The real `curiator` CLI still owns full argparse
@@ -45,10 +94,63 @@ def set_gallery_override_from_argv(argv: Sequence[str] | None = None) -> None:
             if i + 1 >= len(args):
                 raise SystemExit("curIAtor: --gallery needs a path.")
             set_gallery_override(args[i + 1])
-            return
+            continue
         if arg.startswith("--gallery="):
             set_gallery_override(arg.split("=", 1)[1])
-            return
+            continue
+        if arg == "--state-dir":
+            if i + 1 >= len(args):
+                raise SystemExit("curIAtor: --state-dir needs a path.")
+            set_state_dir_override(args[i + 1])
+            continue
+        if arg.startswith("--state-dir="):
+            set_state_dir_override(arg.split("=", 1)[1])
+            continue
+        if arg == "--agent-adapter":
+            if i + 1 >= len(args):
+                raise SystemExit("curIAtor: --agent-adapter needs a value.")
+            set_agent_adapter_override(args[i + 1])
+            continue
+        if arg.startswith("--agent-adapter="):
+            set_agent_adapter_override(arg.split("=", 1)[1])
+            continue
+        if arg == "--agent-model":
+            if i + 1 >= len(args):
+                raise SystemExit("curIAtor: --agent-model needs a value.")
+            set_agent_model_override(args[i + 1])
+            continue
+        if arg.startswith("--agent-model="):
+            set_agent_model_override(arg.split("=", 1)[1])
+            continue
+        if arg == "--agent-autonomy":
+            if i + 1 >= len(args):
+                raise SystemExit("curIAtor: --agent-autonomy needs a value.")
+            set_agent_autonomy_override(args[i + 1])
+            continue
+        if arg.startswith("--agent-autonomy="):
+            set_agent_autonomy_override(arg.split("=", 1)[1])
+            continue
+        if arg == "--agent-network":
+            if i + 1 >= len(args) or args[i + 1] not in {"on", "off"}:
+                raise SystemExit("curIAtor: --agent-network needs 'on' or 'off'.")
+            set_agent_network_override(args[i + 1] == "on")
+            continue
+        if arg.startswith("--agent-network="):
+            value = arg.split("=", 1)[1]
+            if value not in {"on", "off"}:
+                raise SystemExit("curIAtor: --agent-network needs 'on' or 'off'.")
+            set_agent_network_override(value == "on")
+            continue
+        if arg == "--agent-sandbox":
+            if i + 1 >= len(args):
+                raise SystemExit("curIAtor: --agent-sandbox needs a value.")
+            set_agent_sandbox_override(args[i + 1])
+            continue
+        if arg.startswith("--agent-sandbox="):
+            set_agent_sandbox_override(arg.split("=", 1)[1])
+            continue
+        if arg == "--workspace-mode":
+            set_workspace_mode(True)
 
 
 def find_link(start: Path | None = None) -> Path | None:
@@ -111,6 +213,23 @@ def _load_config_from_path(path: str | Path, *, link: dict | None = None) -> dic
     if link:
         cfg["link"] = {k: v for k, v in link.items() if not k.startswith("_")}
         cfg["link_path"] = link["_path"]
+    agent = cfg.get("agent") or {}
+    if _AGENT_ADAPTER_OVERRIDE is not None:
+        agent["adapter"] = _AGENT_ADAPTER_OVERRIDE
+        cfg["agent_adapter_override"] = _AGENT_ADAPTER_OVERRIDE
+    if _AGENT_MODEL_OVERRIDE is not None:
+        agent["model"] = _AGENT_MODEL_OVERRIDE
+        cfg["agent_model_override"] = _AGENT_MODEL_OVERRIDE
+    if _AGENT_AUTONOMY_OVERRIDE is not None:
+        agent["autonomy"] = _AGENT_AUTONOMY_OVERRIDE
+        cfg["agent_autonomy_override"] = _AGENT_AUTONOMY_OVERRIDE
+    if _AGENT_NETWORK_OVERRIDE is not None:
+        agent["network_access"] = _AGENT_NETWORK_OVERRIDE
+        cfg["agent_network_override"] = "on" if _AGENT_NETWORK_OVERRIDE else "off"
+    if _AGENT_SANDBOX_OVERRIDE is not None:
+        agent["sandbox"] = _AGENT_SANDBOX_OVERRIDE
+        cfg["agent_sandbox_override"] = _AGENT_SANDBOX_OVERRIDE
+    cfg["agent"] = agent
     # How General-channel feedback on the RUNNER itself is handled. Additive + backward-compatible:
     # absent `runner:` ⇒ pinned (the safe consumer default — drafts an upstream PR, never edits the package).
     runner = cfg.get("runner") or {}
@@ -120,9 +239,16 @@ def _load_config_from_path(path: str | Path, *, link: dict | None = None) -> dic
     # absent/`commit:false` ⇒ today's leave-uncommitted behavior. `commit:true` ⇒ one commit per run.
     git = cfg.get("git") or {}
     git.setdefault("commit", False)              # false = leave uncommitted | true = git-as-memory
-    git.setdefault("branch", None)               # null/empty ⇒ commit to current HEAD (main); a name isolates on a branch
+    git.setdefault("branch", None)               # null/current | named branch | per-run proposal worktrees
+    git.setdefault("accepted_branch", "main")    # canonical branch merged by per-run proposal approval
     git.setdefault("signoff", True)              # add Signed-off-by (DCO) via `git commit -s`
     git.setdefault("include_ledger", False)      # opt in to bundling the SQLite ledger in commits
+    if _WORKSPACE_MODE_OVERRIDE:
+        git["commit"] = True
+        cfg["workspace_mode"] = True
+    if _STATE_DIR_OVERRIDE is not None or _WORKSPACE_MODE_OVERRIDE:
+        # Workspace state is a separate runtime volume and must never be staged into the source repo.
+        git["include_ledger"] = False
     cfg["git"] = git
     # Identity / provenance (docs: who gave each piece of feedback). Additive: absent ⇒ mode none
     # (a fixed default_user — provenance even solo, today's anonymous single-tenant behavior).
@@ -145,6 +271,11 @@ def _load_config_from_path(path: str | Path, *, link: dict | None = None) -> dic
     voice.setdefault("web_speech_lang", None)
     voice.setdefault("retain_audio", False)
     cfg["voice"] = voice
+    feedback = cfg.get("feedback") or {}
+    if _STATE_DIR_OVERRIDE is not None:
+        feedback["dir"] = str(_STATE_DIR_OVERRIDE)
+        cfg["state_dir"] = str(_STATE_DIR_OVERRIDE)
+    cfg["feedback"] = feedback
     cfg["current_app"] = (link.get("app") if link else None) or infer_current_app(cfg)
     return cfg
 
@@ -171,6 +302,7 @@ def _resolve(base: Path, value: str | None) -> Path | None:
 MOUNT_MERGE_KEYS = (
     "source", "title", "tags", "color", "smoke", "smoke_timeout", "smoke_http", "cwd", "port", "cmd",
     "engine", "engine_cwd", "engine_port", "engine_health", "engine_health_path", "engine_health_timeout",
+    "depends_on",
 )
 
 
@@ -200,6 +332,11 @@ def app_specs(cfg: dict) -> list[dict]:
         for name, mount in mount_entries(a):
             source = mount.get("source", a.get("source", "." if a.get("root") else None))
             source_base = root if a.get("root") else repo
+            depends_on = mount.get("depends_on", a.get("depends_on") or [])
+            if isinstance(depends_on, str):
+                depends_on = [depends_on]
+            elif not isinstance(depends_on, (list, tuple, set)):
+                depends_on = []
             specs.append({
                 "name": name,
                 "app_name": a.get("name"),
@@ -209,6 +346,7 @@ def app_specs(cfg: dict) -> list[dict]:
                 "smoke_timeout": mount.get("smoke_timeout", a.get("smoke_timeout")),
                 "smoke_http": mount.get("smoke_http", a.get("smoke_http")),
                 "commands": mount.get("commands", a.get("commands") or {}),
+                "depends_on": [str(key) for key in depends_on if str(key)],
                 "module": mount.get("module"),
                 "mount": mount,
             })

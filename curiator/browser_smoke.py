@@ -55,6 +55,17 @@ def _json_get(url: str, timeout: float = 3.0):
         return json.loads(response.read().decode("utf-8"))
 
 
+def _reload_app(base_url: str, app: str, timeout: float = 3.0) -> bool:
+    """Drop any cached mount/build failure before rendered verification."""
+    url = f"{base_url}/reload/{urllib.parse.quote(app, safe='')}"
+    try:
+        request = urllib.request.Request(url, method="POST")
+        with urllib.request.urlopen(request, timeout=timeout) as response:
+            return int(getattr(response, "status", 200)) < 400
+    except (OSError, urllib.error.URLError):
+        return False
+
+
 class CdpClient:
     """Minimal Chrome DevTools Protocol websocket client for navigation/evaluation."""
 
@@ -250,8 +261,11 @@ def _start_shell_if_needed(cfg: dict, timeout: float) -> tuple[subprocess.Popen 
     base_url = f"http://127.0.0.1:{port}"
     if _wait_url(f"{base_url}/api/bootstrap", timeout=0.75):
         return None, base_url
+    shell_args = [sys.executable, str(_shell_path()), "--gallery", str(Path(cfg["gallery_path"]).resolve())]
+    if cfg.get("state_dir"):
+        shell_args += ["--state-dir", str(Path(cfg["state_dir"]).resolve())]
     proc = subprocess.Popen(
-        [sys.executable, str(_shell_path()), "--gallery", str(Path(cfg["gallery_path"]).resolve())],
+        shell_args,
         cwd=cfg["repo_root"],
         env=_child_env(cfg),
         stdout=subprocess.DEVNULL,
@@ -265,7 +279,13 @@ def _start_shell_if_needed(cfg: dict, timeout: float) -> tuple[subprocess.Popen 
     return proc, base_url
 
 
-def _start_browser(brave_bin: str, profile: Path, debug_port: int) -> subprocess.Popen:
+def _start_browser(
+    brave_bin: str,
+    profile: Path,
+    debug_port: int,
+    viewport: tuple[int, int] = (W, H),
+) -> subprocess.Popen:
+    width, height = viewport
     return subprocess.Popen(
         [
             brave_bin,
@@ -278,7 +298,7 @@ def _start_browser(brave_bin: str, profile: Path, debug_port: int) -> subprocess
             "--no-default-browser-check",
             "--hide-scrollbars",
             f"--user-data-dir={profile}",
-            f"--window-size={W},{H}",
+            f"--window-size={width},{height}",
             "about:blank",
         ],
         stdout=subprocess.DEVNULL,
@@ -286,7 +306,11 @@ def _start_browser(brave_bin: str, profile: Path, debug_port: int) -> subprocess
     )
 
 
-def _cdp_client(debug_port: int, timeout: float) -> CdpClient:
+def _cdp_client(
+    debug_port: int,
+    timeout: float,
+    viewport: tuple[int, int] = (W, H),
+) -> CdpClient:
     version_url = f"http://127.0.0.1:{debug_port}/json/version"
     if not _wait_url(version_url, timeout=timeout):
         raise RuntimeError("browser did not expose a DevTools endpoint")
@@ -301,11 +325,12 @@ def _cdp_client(debug_port: int, timeout: float) -> CdpClient:
         cdp.command("Log.enable")
     except RuntimeError:
         pass
+    width, height = viewport
     cdp.command("Emulation.setDeviceMetricsOverride", {
-        "width": W,
-        "height": H,
+        "width": width,
+        "height": height,
         "deviceScaleFactor": 1,
-        "mobile": False,
+        "mobile": width <= 600,
     })
     return cdp
 
@@ -324,7 +349,19 @@ def _repo_rel(cfg: dict, path: Path) -> str:
         return str(path.resolve())
 
 
-def _write_artifacts(cfg: dict, cdp: CdpClient, app: str, artifact_dir: str | Path | None) -> dict:
+def _console_error_count(events: list[dict]) -> int:
+    return sum(
+        1 for event in events if str(event.get("level") or "").lower() in {"error", "exception", "assert"}
+    )
+
+
+def _write_artifacts(
+    cfg: dict,
+    cdp: CdpClient,
+    app: str,
+    artifact_dir: str | Path | None,
+    console_events: list[dict],
+) -> dict:
     if not artifact_dir:
         return {}
     screenshot_path = _artifact_path(cfg, artifact_dir, app, ".png")
@@ -339,12 +376,9 @@ def _write_artifacts(cfg: dict, cdp: CdpClient, app: str, artifact_dir: str | Pa
     except Exception as exc:  # noqa: BLE001
         written["screenshot_error"] = f"{type(exc).__name__}: {exc}"
     try:
-        console_events = cdp.console_events()
         console_path.write_text(json.dumps(console_events, indent=2), encoding="utf-8")
         written["console_log"] = _repo_rel(cfg, console_path)
-        written["console_errors"] = sum(
-            1 for event in console_events if str(event.get("level") or "").lower() in {"error", "exception", "assert"}
-        )
+        written["console_errors"] = _console_error_count(console_events)
     except Exception as exc:  # noqa: BLE001
         written["console_error"] = f"{type(exc).__name__}: {exc}"
     return written
@@ -357,6 +391,7 @@ def browser_smoke_apps(
     browser_bin: str | None = None,
     timeout: float = 15.0,
     artifact_dir: str | Path | None = None,
+    viewport: tuple[int, int] = (W, H),
 ) -> dict[str, dict]:
     """Open the React shell in a headless browser and verify each app iframe renders."""
     brave_bin = browser_bin or os.environ.get("CURIATOR_BROWSER") or next(
@@ -401,19 +436,30 @@ def browser_smoke_apps(
                     if app not in missing
                 }
             debug_port = _free_port()
-            browser = _start_browser(brave_bin, Path(tmpdir) / "profile", debug_port)
-            cdp = _cdp_client(debug_port, timeout)
+            browser = _start_browser(brave_bin, Path(tmpdir) / "profile", debug_port, viewport)
+            cdp = _cdp_client(debug_port, timeout, viewport)
             results: dict[str, dict] = {}
             for app in apps:
                 url = f"{base_url}/?app={urllib.parse.quote(app)}"
+                _reload_app(base_url, app)
+                cdp.events.clear()
                 checked = cdp.navigate_and_check(url, timeout)
-                artifacts = _write_artifacts(cfg, cdp, app, artifact_dir)
+                console_events = cdp.console_events()
+                console_errors = _console_error_count(console_events)
+                artifacts = _write_artifacts(cfg, cdp, app, artifact_dir, console_events)
+                ok = bool(checked.get("ok")) and console_errors == 0
+                message = str(checked.get("message") or "")
+                if console_errors:
+                    suffix = f"{console_errors} browser console/network error(s)"
+                    message = f"{message}; {suffix}" if message else suffix
                 results[app] = {
-                    "ok": bool(checked.get("ok")),
+                    "ok": ok,
                     "url": url,
-                    "message": str(checked.get("message") or ""),
+                    "message": message,
                     "browser": str(brave_bin),
+                    "viewport": {"width": viewport[0], "height": viewport[1]},
                     "started_shell": shell is not None,
+                    "console_errors": console_errors,
                     **artifacts,
                 }
             return results

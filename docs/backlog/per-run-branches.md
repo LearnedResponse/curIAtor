@@ -1,8 +1,9 @@
 # Backlog — per-run branches + in-app approval (an example)
 
-> **Status:** scoped 2026-07-04, not started. An **example/experiment**, not a change to the default
+> **Status:** implemented and dogfooded locally 2026-07-10; awaiting the root implementation commit
+> before retirement to `completed/`. This remains an **opt-in example**, not a change to the default
 > flow. The default is now `git.branch: null` — commit straight to `main`, use the log (see
-> [DESIGN.md → "The gate (now) and branching (deferred)"](../DESIGN.md)). This item is the "grown-up
+> [DESIGN.md -> "The default gate and opt-in per-run proposals"](../DESIGN.md)). This item is the "grown-up
 > app" tier: a per-run feature-branch flow with an **Approve** button *in the app*, for the case where a
 > collection has a real accepted-state boundary worth gating. Realizes the "branching/merging UI"
 > deferred in DESIGN.md.
@@ -73,3 +74,28 @@ So "approve the old one later" is only well-defined once you pick a **same-app p
   block; don't special-case the loop.
 - Ship it as a **public example collection** demonstrating the approve-in-app loop before promoting the
   mode to a documented feature.
+
+## Landed evidence
+
+- `curiator/proposals.py` owns worktree preparation, source-scope checks, Git-ref state, smoke-gated
+  finish, superseding, approval, rejection, and conflict aborts. No proposal table was added to SQLite.
+- The task builder remaps only the selected app to its worktree and pins the canonical `--gallery`
+  reply path. Shared-component writes are refused in this mode rather than escaping branch isolation.
+- The React shell exposes a compact Proposal preview banner. Its existing action channel recognizes
+  proposal actions separately from ordinary reply macros and requires an admin identity.
+- `curiator proposal list|approve|reject` exposes the same lifecycle for CLI operators; doctor verifies
+  `git.commit`, the accepted branch, and app Git ownership.
+- The recommended **supersede** policy is implemented: a successfully prepared newer same-app run
+  rejects the older open proposal while retaining its branch. Tests also prove that proposals in two
+  independent app repositories remain live simultaneously.
+- `galleries/curiator-proposals@8515e44` and its nested counter app at `b41c57dd` contain the real
+  dogfood thread `d5a3e1e7`: accepted `898f66d`, proposal `8f71a955`, zero-console branch preview,
+  one safely aborted approval that exposed missing Git identity, then successful in-shell merge and a
+  second zero-console browser proof from canonical state.
+
+## Remaining publication gate
+
+The local collection intentionally uses a nested app repository/gitlink to exercise the grown-up app
+case. The collection repo and nested app repo must both be published, and clone/materialization wiring
+must be validated from a different machine before this work-order is retired as a public example. This
+is release operations, not missing proposal behavior; do not flatten or hide the two-repository proof.
