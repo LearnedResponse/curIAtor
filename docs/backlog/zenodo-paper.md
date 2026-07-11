@@ -9,10 +9,9 @@
 > The 2026-07-10 generated evidence reports 34 feedback cycles, 33 direct fixes, 1 proposal/human
 > intervention, 34 replies, and 21 curator commits across `curiator-aviato@a420957`,
 > `curiator-ot@43325fb`, and `curiator-geometry@bfae833`. Required plus optional fresh-clone strict
-> preflight passes `7/7`. The tracked manuscript still carries the prior 27-cycle snapshot because
-> `update_paper_stats.py` correctly refuses a dirty runner tree; rerun `make paper-stats` immediately
-> after the pending root implementation commit, then rebuild/review the PDF. `make paper-pdf` currently
-> succeeds and emits a seven-page PDF with regenerated figures. Paper/DOI publication work is still
+> preflight passes `7/7`. After root implementation commit `a3f64f4` and public-backlog retirement
+> commit `da96732`, `make paper-stats` refreshed the tracked manuscript to that 34-cycle snapshot;
+> `make paper-pdf` succeeds and emits a seven-page PDF with regenerated figures. Paper/DOI publication work is still
 > blocked on the tagged release, Zenodo wiring, and final
 > human PDF review/deposit. A citable
 > software/systems paper, self-archived on **Zenodo** with a DOI. Sequences last:
@@ -68,7 +67,7 @@ the durable record of that conversation.
    table directly, and `--output <path>` writes any selected stats report as a named paper evidence
    artifact without shell redirection.
    The release-candidate summary in `docs/paper/curiator-paper.md` now cites the exact command-backed
-   2026-07-04 snapshot from the three example collection heads while keeping the full wide table in
+   2026-07-10 snapshot from the three example collection heads while keeping the full wide table in
    `release-evidence/`. Remaining paper work: rerun this at tag cut if any release head changes, then
    archive/cite the final output.
 3. Draft in `docs/paper/` (markdown → pandoc PDF) — scaffolded with `curiator-paper.md` and
