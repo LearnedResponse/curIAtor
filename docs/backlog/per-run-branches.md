@@ -1,7 +1,8 @@
 # Backlog — per-run branches + in-app approval (an example)
 
-> **Status:** implemented and dogfooded locally 2026-07-10; awaiting the root implementation commit
-> before retirement to `completed/`. This remains an **opt-in example**, not a change to the default
+> **Status:** implemented and dogfooded locally 2026-07-10, with runner implementation committed as
+> `a3f64f4`; retirement remains gated on publishing and off-machine materialization of the example's two
+> repositories. This remains an **opt-in example**, not a change to the default
 > flow. The default is now `git.branch: null` — commit straight to `main`, use the log (see
 > [DESIGN.md -> "The default gate and opt-in per-run proposals"](../DESIGN.md)). This item is the "grown-up
 > app" tier: a per-run feature-branch flow with an **Approve** button *in the app*, for the case where a

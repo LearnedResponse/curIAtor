@@ -29,21 +29,20 @@ local implementation before release.
 
 ## Direction (post-release experiments)
 
-- [**nodered-overlay**](nodered-overlay.md) — **implemented and dogfooded; awaiting the root
-  implementation commit/retirement.** The one-command scaffold, doctor rules, example collection,
-  feedback history, real health/WebSocket checks, and strict dependency-prepared fresh-clone browser
-  preflight are complete at `curiator-nodered@7e964fb`.
-- [**per-run-branches**](per-run-branches.md) — **implemented and dogfooded; awaiting the root
-  implementation commit/retirement.** Worktree-isolated runs, Git-ref proposal registry, live branch
-  preview, admin Approve/Reject, conflict aborts, CLI inspection, same-app superseding, and independent
-  app coexistence are covered. `curiator-proposals@8515e44` and nested app `b41c57dd` record the real
-  feedback -> preview -> in-shell approval cycle. Publishing/materializing the nested app repo in a
-  stranger's fresh clone remains an external release operation.
+- [**per-run-branches**](per-run-branches.md) — **implemented and dogfooded in runner commit
+  `a3f64f4`; retained here for its external publication gate.** Worktree-isolated runs, Git-ref proposal
+  registry, live branch preview, admin Approve/Reject, conflict aborts, CLI inspection, same-app
+  superseding, and independent app coexistence are covered. `curiator-proposals@8515e44` and nested app
+  `b41c57dd` record the real feedback -> preview -> in-shell approval cycle. Both repositories still need
+  public clone/materialization wiring and off-machine validation before this public example retires.
 
 ## Shipped
 
 Fully delivered public work-orders, retired to [`completed/`](completed/) for provenance.
 
+- [**nodered-overlay**](completed/nodered-overlay.md) — one-command Node-RED scaffold, doctor rules,
+  feedback history, real health/WebSocket checks, and strict dependency-prepared fresh-clone browser
+  preflight — shipped runner `curiator@a3f64f4` and example `curiator-nodered@7e964fb`.
 - [**ot-hmi-demo**](completed/ot-hmi-demo.md) — OT/HMI v1 collection delivered: deterministic tank sim,
   local SQLite historian, Dash HMI, 10-item feedback-to-fix arc, and fresh-clone preflight — shipped
   `curiator-ot@36e21cf`.

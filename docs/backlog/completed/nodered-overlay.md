@@ -1,7 +1,7 @@
 # Backlog — Node-RED overlay
 
-> **Status:** implemented and dogfooded 2026-07-11; awaiting the root implementation commit and
-> retirement to `completed/`. `curiator app create --template nodered` now emits the settings, seed flow,
+> **Status:** completed and retired 2026-07-11 in runner commit `a3f64f4` and example collection
+> `curiator-nodered@7e964fb`. `curiator app create --template nodered` emits the settings, seed flow,
 > structural/HTTP/WebSocket smokes, and preserve-prefix mount. `curiator-nodered@7e964fb` passes strict
 > dependency-prepared fresh-clone doctor, HTTP, and browser preflight, while feedback `b9e6c6e8` records
 > the uptime/status improvement as git-as-memory commit `c4d5c67`.
