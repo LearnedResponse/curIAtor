@@ -31,6 +31,7 @@ from curiator.web_paths import PrefixMiddleware, normalize_base_path, public_pat
 
 
 BASE_PATH = normalize_base_path(core.REG.SHELL_CFG.get("base_path"))
+_PREVIEW_SUFFIXES = {".avif", ".gif", ".jpeg", ".jpg", ".png", ".webp"}
 
 
 def _url(path: str = "/") -> str:
@@ -57,9 +58,159 @@ def _safe_entry(entry: dict) -> dict:
     return out
 
 
+def _anonymous_entry(entry: dict) -> bool:
+    user = entry.get("user") or {}
+    return user.get("id") == "anonymous" or (
+        user.get("name") == "anonymous" and not user.get("email")
+    )
+
+
+def _visible_feedback_items(items: list[dict]) -> list[dict]:
+    """Hide unpromoted anonymous threads from every non-admin response surface."""
+    user = auth.current_user(core.REG.AUTH_CFG)
+    if auth.is_admin(core.REG.AUTH_CFG, user):
+        return list(items)
+    hidden_ids = set()
+    visible = []
+    for entry in items:
+        parent_hidden = any(parent in hidden_ids for parent in (entry.get("reply_to") or []))
+        unpromoted_anonymous = _anonymous_entry(entry) and not entry.get("moderation_approved_at")
+        if parent_hidden or unpromoted_anonymous:
+            if entry.get("id"):
+                hidden_ids.add(entry["id"])
+            continue
+        visible.append(entry)
+    return visible
+
+
 def _metrics(key: str) -> dict:
-    avg, n_open, n_total = core.app_metrics(key)
+    avg, n_open, n_total = core.metrics_from(
+        _visible_feedback_items(core.load_feedback().get(key, []))
+    )
     return {"avg_stars": avg, "open": n_open, "total": n_total}
+
+
+def _plain_text(value: object, limit: int) -> str:
+    text = " ".join(str(value or "").split())
+    return text[:limit]
+
+
+def _preview_path(rec: dict) -> Path | None:
+    raw = rec.get("preview")
+    if not raw:
+        return None
+    root = Path(core.REG.COLLECTION_ROOT).resolve()
+    path = Path(str(raw)).resolve()
+    try:
+        path.relative_to(root)
+    except ValueError:
+        return None
+    if path.suffix.lower() not in _PREVIEW_SUFFIXES or not path.is_file():
+        return None
+    return path
+
+
+def _home_payload() -> dict:
+    raw = core.REG.CONFIG.get("home") or {}
+    known = [rec["key"] for rec in core.REGISTRY]
+    requested = raw.get("featured") or []
+    if isinstance(requested, str):
+        requested = [requested]
+    featured = []
+    for key in requested if isinstance(requested, (list, tuple)) else []:
+        key = str(key)
+        if key in known and key not in featured:
+            featured.append(key)
+    if not featured:
+        featured = known[:4]
+    try:
+        activity_limit = int(raw.get("activity_limit", 8))
+    except (TypeError, ValueError):
+        activity_limit = 8
+    return {
+        "kicker": _plain_text(raw.get("kicker") or "Collection home", 60),
+        "description": _plain_text(
+            raw.get("description") or f"Apps, feedback, and recent work in {core.COLLECTION_NAME}.",
+            360,
+        ),
+        "featured": featured[:8],
+        "activity_limit": max(3, min(activity_limit, 24)),
+    }
+
+
+def _activity_actor(entry: dict) -> str:
+    if entry.get("kind") == "system" or entry.get("author") == "claude":
+        return _plain_text(entry.get("agent") or "Agent", 80)
+    user = entry.get("user") or {}
+    return _plain_text(user.get("name") or user.get("email") or entry.get("author") or "user", 80)
+
+
+def _activity_excerpt(entry: dict, limit: int = 210) -> str:
+    text = _plain_text(entry.get("comment"), limit)
+    if not text and entry.get("stars"):
+        text = "★" * int(entry.get("stars") or 0)
+    return text
+
+
+def _activity_payload(limit: int = 50) -> dict:
+    rows = []
+    data = core.load_feedback()
+    for key, raw_entries in data.items():
+        entries = _visible_feedback_items(raw_entries)
+        roots, children, order = core._thread_tree(entries)
+        rec = core.BY_KEY.get(key, {})
+
+        def collect(entry: dict) -> list[dict]:
+            thread = [entry]
+            for child in children.get(entry.get("id"), []):
+                thread.extend(collect(child))
+            return thread
+
+        for root in roots:
+            thread = collect(root)
+            latest = max(
+                thread,
+                key=lambda entry: (
+                    core._parse_history_ts(entry.get("ts")) or datetime.min.replace(tzinfo=timezone.utc),
+                    order.get(entry.get("id"), -1),
+                ),
+            )
+            statuses = {
+                entry.get("status") for entry in thread
+                if entry.get("kind") != "system" and entry.get("status")
+            }
+            root_excerpt = _activity_excerpt(root)
+            latest_excerpt = _activity_excerpt(latest, 150) if latest is not root else ""
+            rows.append({
+                "id": root.get("id"),
+                "app_key": key,
+                "app_title": "General feedback" if key == core.GENERAL_KEY else rec.get("title", key),
+                "app_color": rec.get("color", core.PURPLE if key == core.GENERAL_KEY else "#777"),
+                "port": rec.get("port"),
+                "status": root.get("status"),
+                "comment": root_excerpt or latest_excerpt,
+                "latest_comment": latest_excerpt if latest_excerpt != root_excerpt else "",
+                "author": _activity_actor(root),
+                "latest_author": _activity_actor(latest),
+                "updated_at": latest.get("ts") or root.get("ts"),
+                "reply_count": max(len(thread) - 1, 0),
+                "stars": root.get("stars"),
+                "is_general": key == core.GENERAL_KEY,
+                "active": bool(statuses & core.ACTIVE_STATUSES),
+                "open": bool(statuses & core.OPEN_STATUSES),
+            })
+    rows.sort(
+        key=lambda row: core._parse_history_ts(row.get("updated_at")) or datetime.min.replace(tzinfo=timezone.utc),
+        reverse=True,
+    )
+    return {
+        "items": rows[:max(1, min(limit, 50))],
+        "counts": {
+            "total": len(rows),
+            "active": sum(1 for row in rows if row["active"]),
+            "open": sum(1 for row in rows if row["open"]),
+        },
+    }
 
 
 def _apps_payload() -> list[dict]:
@@ -67,11 +218,13 @@ def _apps_payload() -> list[dict]:
     feedback = core.load_feedback()               # one ledger read for all apps' metrics + updated ts
     apps = []
     for rec in core.REGISTRY:
-        items = feedback.get(rec["key"], [])
+        items = _visible_feedback_items(feedback.get(rec["key"], []))
         avg, n_open, n_total = core.metrics_from(items)
         apps.append({
             "key": rec["key"],
             "title": rec.get("title", rec["key"]),
+            "summary": _plain_text(rec.get("summary"), 320),
+            "preview_url": _url(f"/app-preview/{quote(rec['key'], safe='')}") if _preview_path(rec) else None,
             "tags": rec.get("tags") or [],
             "color": rec.get("color", "#888"),
             "kind": rec.get("kind"),
@@ -89,7 +242,7 @@ def _apps_payload() -> list[dict]:
 def _general_payload() -> dict:
     return {
         "key": core.GENERAL_KEY,
-        "title": "General — gallery & runner",
+        "title": "Collection feedback",
         "tags": [],
         "color": "#8e44ad",
         "kind": "general",
@@ -98,7 +251,7 @@ def _general_payload() -> dict:
 
 
 def _feedback_payload(key: str) -> dict:
-    items = [_safe_entry(e) for e in core.load_feedback().get(key, [])]
+    items = [_safe_entry(e) for e in _visible_feedback_items(core.load_feedback().get(key, []))]
     tb = core.thread_buttons(items)
     actions = {"target": tb[0], "items": tb[1]} if tb else None
     return {"key": key, "items": items, "actions": actions}
@@ -571,6 +724,14 @@ def build_flask_app() -> Flask:
     def _assets(name):
         return send_from_directory(core.HERE / "assets", name, max_age=0)
 
+    @app.route("/app-preview/<key>")
+    def _app_preview(key):
+        rec = core.BY_KEY.get(key)
+        path = _preview_path(rec or {})
+        if path is None:
+            return ("not found", 404)
+        return send_from_directory(path.parent, path.name, max_age=3600)
+
     @app.route("/api/bootstrap")
     def _bootstrap():
         u = auth.current_user(core.REG.AUTH_CFG)
@@ -580,6 +741,7 @@ def build_flask_app() -> Flask:
             "base_path": BASE_PATH,
             "general_key": core.GENERAL_KEY,
             "general": _general_payload(),
+            "home": _home_payload(),
             "poll_ms": max(core.POLL_MS, 1000) if core.POLL_MS > 0 else 0,
             "apps": _apps_payload(),
             "tags": [{"name": k, "color": v} for k, v in core.TAG_META],
@@ -599,6 +761,14 @@ def build_flask_app() -> Flask:
     @app.route("/api/apps")
     def _apps():
         return jsonify({"apps": _apps_payload(), "general": _general_payload()})
+
+    @app.route("/api/activity")
+    def _activity():
+        try:
+            limit = int(request.args.get("limit", 50))
+        except (TypeError, ValueError):
+            limit = 50
+        return jsonify(_activity_payload(limit))
 
     @app.route("/api/workspaces", methods=["GET", "POST"])
     def _workspaces():
@@ -1105,7 +1275,15 @@ def build_flask_app() -> Flask:
 
     @app.route("/general")
     def _general():
-        return core.render_history(request.args.get("range"), request.args.get("filter"))
+        visible = {
+            key: _visible_feedback_items(items)
+            for key, items in core.load_feedback().items()
+        }
+        return core.render_history(
+            request.args.get("range"),
+            request.args.get("filter"),
+            data=visible,
+        )
 
     @app.route("/reload/<key>", methods=["POST", "GET"])
     def _reload(key):

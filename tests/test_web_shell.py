@@ -82,6 +82,74 @@ def test_react_shell_index_and_bootstrap(web_client):
     assert sample["revision"] == 0
 
 
+def test_collection_home_metadata_preview_and_activity(collection, monkeypatch):
+    from curiator import ledger
+
+    previews = collection / "assets" / "previews"
+    previews.mkdir(parents=True)
+    (previews / "sample.png").write_bytes(b"\x89PNG\r\n\x1a\npreview")
+    gallery = collection / "gallery.yaml"
+    configured = gallery.read_text().replace(
+        "    tags: [demo]\n",
+        "    tags: [demo]\n"
+        "    summary: A concise sample app.\n"
+        "    preview: assets/previews/sample.png\n",
+    )
+    gallery.write_text(
+        "home:\n"
+        "  kicker: Research collection\n"
+        "  description: A curated collection description.\n"
+        "  featured: [sample, missing, sample]\n"
+        "  activity_limit: 5\n"
+        + configured
+    )
+    mod = _load_web_mod(monkeypatch)
+    fid = ledger.save_entry(
+        mod.core.LEDGER_CFG,
+        "sample",
+        comment="make the sample clearer",
+        ts="2026-07-10T12:00:00+00:00",
+        user={"id": "u1", "email": "reader@example.com", "name": "Reader", "groups": []},
+    )
+    ledger.add_system_note(
+        mod.core.LEDGER_CFG,
+        "sample",
+        "Updated the explanation.",
+        reply_to=[fid],
+        ts="2026-07-10T12:01:00+00:00",
+        agent="Codex",
+    )
+    client = mod.build_flask_app().test_client()
+
+    boot = client.get("/api/bootstrap").get_json()
+    assert boot["home"] == {
+        "kicker": "Research collection",
+        "description": "A curated collection description.",
+        "featured": ["sample"],
+        "activity_limit": 5,
+    }
+    sample = next(app for app in boot["apps"] if app["key"] == "sample")
+    assert sample["summary"] == "A concise sample app."
+    assert sample["preview_url"] == "/app-preview/sample"
+    preview = client.get(sample["preview_url"])
+    assert preview.status_code == 200
+    assert preview.mimetype == "image/png"
+    assert preview.data.startswith(b"\x89PNG")
+
+    activity = client.get("/api/activity").get_json()
+    assert activity["counts"] == {"total": 1, "active": 1, "open": 1}
+    assert activity["items"][0]["app_key"] == "sample"
+    assert activity["items"][0]["comment"] == "make the sample clearer"
+    assert activity["items"][0]["latest_author"] == "Codex"
+    assert activity["items"][0]["reply_count"] == 1
+
+    js = client.get("/assets/react_shell.js").get_data(as_text=True)
+    css = client.get("/assets/react_shell.css").get_data(as_text=True)
+    assert "function CollectionHome" in js
+    assert "selected === boot.general_key" in js
+    assert ".rshell-featured" in css and ".rshell-activity-list" in css
+
+
 def test_react_shell_proposal_action_uses_admin_merge_path(web_mod, monkeypatch):
     from curiator import proposals
 
@@ -892,15 +960,49 @@ auth:
     entry = r.get_json()["entry"]
     assert entry["status"] == "held"
     assert entry["user"]["name"] == "anonymous"
+    assert r.get_json()["items"] == []
 
-    action = client.post("/api/action", json={"key": "sample", "value": "yes", "reply_to": entry["id"]})
+    action = client.post("/api/action", json={
+        "key": "sample",
+        "value": "anonymous child reply marker",
+        "reply_to": entry["id"],
+    })
     assert action.status_code == 200
     action_entry = action.get_json()["entry"]
     assert action_entry["status"] == "held"
     assert action_entry["reply_to"] == [entry["id"]]
+    assert action.get_json()["items"] == []
 
-    items = ledger.load(load_config())["sample"]
+    cfg = load_config()
+    items = ledger.load(cfg)["sample"]
     assert [e["status"] for e in items if e.get("author") == "user"] == ["held", "held"]
+    assert client.get("/api/feedback/sample").get_json()["items"] == []
+    assert client.get("/api/activity").get_json()["counts"] == {"total": 0, "active": 0, "open": 0}
+    sample = next(app for app in client.get("/api/apps").get_json()["apps"] if app["key"] == "sample")
+    assert sample["metrics"] == {"avg_stars": None, "open": 0, "total": 0}
+    assert "logged out public comment" not in client.get("/general").get_data(as_text=True)
+
+    monkeypatch.setattr(mod.auth, "current_user", lambda _cfg: {
+        "id": "admin", "email": "admin@example.com", "name": "Admin", "groups": ["admin"],
+    })
+    assert len(client.get("/api/feedback/sample").get_json()["items"]) == 2
+
+    monkeypatch.setattr(mod.auth, "current_user", lambda _cfg: None)
+    ledger.update_entry(cfg, "sample", entry["id"], {
+        "status": "new", "moderation_approved_at": "2026-07-10T12:00:00+00:00",
+        "moderation_approved_by": "admin@example.com",
+    })
+    promoted = client.get("/api/feedback/sample").get_json()["items"]
+    assert [item["id"] for item in promoted] == [entry["id"]]
+    assert "logged out public comment" in client.get("/general").get_data(as_text=True)
+    assert "anonymous child reply marker" not in client.get("/general").get_data(as_text=True)
+
+    ledger.update_entry(cfg, "sample", action_entry["id"], {
+        "status": "new", "moderation_approved_at": "2026-07-10T12:01:00+00:00",
+        "moderation_approved_by": "admin@example.com",
+    })
+    assert len(client.get("/api/feedback/sample").get_json()["items"]) == 2
+    assert "anonymous child reply marker" in client.get("/general").get_data(as_text=True)
 
 
 def test_react_shell_rejects_anonymous_upload_and_native_screenshots(collection, monkeypatch):

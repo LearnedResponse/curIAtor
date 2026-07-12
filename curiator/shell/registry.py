@@ -101,6 +101,9 @@ def _build_all_apps() -> list[dict]:
                 APP_SOURCE_DIRS.append(COLLECTION_ROOT)
             port = mount.get("port", a.get("port", _DEFAULT_PORT_BASE + ordinal))
             title = mount.get("title", a.get("title", name.replace("_", " ")))
+            summary = mount.get("summary", a.get("summary"))
+            preview = mount.get("preview", a.get("preview"))
+            preview_path = _resolve_path(COLLECTION_ROOT, preview)
             tags = list(mount.get("tags", a.get("tags") or []))
             color = mount.get("color", a.get("color", "#888"))
             key = name
@@ -132,6 +135,8 @@ def _build_all_apps() -> list[dict]:
                 "file": str(src_path) if src_path else None,  # absolute source path
                 "port": port,  # reference id for dash-inproc; real target for proxy
                 "title": title,
+                "summary": summary,
+                "preview": str(preview_path) if preview_path else None,
                 "tags": tags,
                 "color": color,
                 # extra (curIAtor-native) fields the generalized shell/loop use:

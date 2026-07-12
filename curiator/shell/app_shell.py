@@ -467,6 +467,7 @@ def load_registry():
             kind = "missing"
         recs.append({
             "key": key, "port": a.get("port"), "title": a.get("title", key),
+            "summary": a.get("summary"), "preview": a.get("preview"),
             "tags": list(a.get("tags") or []), "color": a.get("color", "#888"),
             "file": f, "kind": kind, "mount": a.get("mount") or {},
             "root": a.get("root"), "source": a.get("source"), "smoke": a.get("smoke"),
@@ -1061,7 +1062,7 @@ def _history_live_refresh_script():
     </script>"""
 
 
-def render_history(range_key=None, filter_key=None):
+def render_history(range_key=None, filter_key=None, data=None):
     """Server-rendered HTML: every feedback thread across the library, newest app
     first (General pinned), entries chronological with user/⚙Claude styling."""
     range_key = range_key if range_key in HISTORY_RANGES else None
@@ -1076,7 +1077,7 @@ def render_history(range_key=None, filter_key=None):
         dt = _parse_history_ts(e.get("ts"))
         return bool(dt and dt >= cutoff)
 
-    data = load_feedback()
+    data = load_feedback() if data is None else data
     ranged = {k: [e for e in items if in_range(e)] for k, items in data.items()}
     n_active = sum(_history_count_threads(items, ACTIVE_STATUSES) for items in ranged.values())
     n_open = sum(_history_count_threads(items, OPEN_STATUSES) for items in ranged.values())

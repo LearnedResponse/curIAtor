@@ -1302,13 +1302,13 @@
         general ? h("div", {className: "rshell-row rshell-general-row" + (general.key === selected ? " active" : ""),
           onClick: () => setSelected(general.key)},
           h("div", {className: "rshell-general-title-row"},
-            h("div", {className: "rshell-row-title"}, "◆ General"),
+            h("div", {className: "rshell-row-title"}, "◆ Home"),
             h("button", {className: "rshell-button secondary rshell-new-app-inline",
               onClick: (evt) => {
                 evt.stopPropagation();
                 onNewApp();
               }}, "+ New app")),
-          h("div", {className: "rshell-row-meta"}, "gallery & runner feedback",
+          h("div", {className: "rshell-row-meta"}, "collection feedback",
             general.metrics && general.metrics.open ? " · ●" + general.metrics.open + " open" : "")) : null,
         h("div", {className: "rshell-app-count"},
           h("span", null, rows.length + " apps"),
@@ -1332,6 +1332,85 @@
             onClick: () => ws.url ? window.open(ws.url, "_blank") : onWorkspaces()},
             h("span", {className: "dot " + ws.status}), "⑂ ", ws.name,
             h("span", null, ws.status)))))));
+  }
+
+  function CollectionHome({boot, apps, activity, setSelected}) {
+    const [filter, setFilter] = useState("all");
+    const [expanded, setExpanded] = useState(false);
+    const home = boot.home || {};
+    const featuredKeys = home.featured || [];
+    const featured = featuredKeys.map((key) => apps.find((app) => app.key === key)).filter(Boolean);
+    const items = (activity && activity.items) || [];
+    const counts = (activity && activity.counts) || {total: 0, active: 0, open: 0};
+    const filtered = items.filter((item) => filter === "all" || Boolean(item[filter]));
+    const initialLimit = Math.max(3, Number(home.activity_limit) || 8);
+    const visible = expanded ? filtered : filtered.slice(0, initialLimit);
+
+    function appMetric(app) {
+      const parts = [];
+      if (app.metrics && app.metrics.avg_stars) parts.push("★ " + app.metrics.avg_stars);
+      if (app.metrics && app.metrics.open) parts.push(app.metrics.open + " open");
+      return parts.join(" · ") || app.kind || "app";
+    }
+
+    function activityStatus(item) {
+      return String(item.status || (item.open ? "open" : "updated")).replace(/_/g, " ");
+    }
+
+    return h("main", {className: "rshell-home"},
+      h("div", {className: "rshell-home-inner"},
+        h("header", {className: "rshell-home-head"},
+          h("p", {className: "rshell-home-kicker"}, home.kicker || "Collection home"),
+          h("h1", null, boot.collection),
+          h("p", {className: "rshell-home-description"}, home.description),
+          h("div", {className: "rshell-home-stats"},
+            h("span", null, apps.length + " apps"),
+            h("button", {className: filter === "active" ? "selected" : "", onClick: () => {
+              setFilter(filter === "active" ? "all" : "active"); setExpanded(false);
+            }}, counts.active + " active"),
+            h("button", {className: filter === "open" ? "selected danger" : "danger", onClick: () => {
+              setFilter(filter === "open" ? "all" : "open"); setExpanded(false);
+            }}, counts.open + " open"))),
+        h("section", {className: "rshell-home-section", "aria-labelledby": "featured-apps-title"},
+          h("div", {className: "rshell-home-section-head"},
+            h("div", null, h("p", null, "Collection index"), h("h2", {id: "featured-apps-title"}, "Featured apps")),
+            h("span", null, "Curated from " + apps.length + " apps")),
+          featured.length ? h("div", {className: "rshell-featured"}, featured.map((app) => {
+            return h("button", {key: app.key, className: "rshell-featured-app", onClick: () => setSelected(app.key),
+                style: {"--app-color": app.color || "#777"}},
+              app.preview_url
+                ? h("img", {src: app.preview_url, alt: "", loading: "eager"})
+                : h("div", {className: "rshell-featured-fallback"}, h("span", null, app.title)),
+              h("div", {className: "rshell-featured-body"},
+                h("div", {className: "rshell-featured-title"}, h("h3", null, app.title), h("span", null, "Open")),
+                app.summary ? h("p", null, app.summary) : null,
+                h("div", {className: "rshell-featured-meta"},
+                  h("span", null, appMetric(app)),
+                  h("span", null, (app.tags || []).slice(0, 3).join(" · ")))));
+          }))
+            : h("p", {className: "rshell-home-empty"}, "No featured apps are configured.")),
+        h("section", {className: "rshell-home-section rshell-activity", "aria-labelledby": "recent-activity-title"},
+          h("div", {className: "rshell-home-section-head activity"},
+            h("div", null, h("p", null, "Feedback and fixes"), h("h2", {id: "recent-activity-title"}, "Recent activity")),
+            h("div", {className: "rshell-activity-filters", "aria-label": "Activity filter"},
+              [["all", "All", counts.total], ["active", "Active", counts.active], ["open", "Open", counts.open]]
+                .map(([key, label, count]) => h("button", {key, className: filter === key ? "selected" : "",
+                  onClick: () => { setFilter(key); setExpanded(false); }}, label + " " + count)))),
+          visible.length ? h("div", {className: "rshell-activity-list"}, visible.map((item) =>
+            h("button", {key: item.app_key + ":" + item.id, onClick: () => setSelected(item.app_key)},
+              h("span", {className: "rshell-activity-color", style: {background: item.app_color || "#777"}}),
+              h("span", {className: "rshell-activity-copy"},
+                h("span", {className: "rshell-activity-title"}, item.port ? item.port + " · " : "", item.app_title),
+                h("span", {className: "rshell-activity-comment"}, item.comment || "Activity updated"),
+                item.latest_comment ? h("span", {className: "rshell-activity-latest"},
+                  item.latest_author + ": " + item.latest_comment) : null),
+              h("span", {className: "rshell-activity-detail"},
+                h("span", {className: "rshell-activity-status " + (item.status || "")}, activityStatus(item)),
+                h("span", null, item.reply_count ? item.reply_count + " replies" : item.author),
+                ts(item.updated_at))))
+          ) : h("p", {className: "rshell-home-empty"}, "No activity matches this filter."),
+          filtered.length > initialLimit ? h("button", {className: "rshell-activity-more",
+            onClick: () => setExpanded(!expanded)}, expanded ? "Show recent" : "Show all activity") : null)));
   }
 
   function Entry({entry, depth, children, actions, onReply, onAction, onPreview, canReplay, onReplay}) {
@@ -1908,6 +1987,7 @@
     const [boot, setBoot] = useState(null);
     const [apps, setApps] = useState([]);
     const [general, setGeneral] = useState(null);
+    const [activity, setActivity] = useState({items: [], counts: {total: 0, active: 0, open: 0}});
     const [selected, setSelectedState] = useState(null);
     const [feedback, setFeedback] = useState({items: []});
     const [search, setSearch] = useState("");
@@ -1953,6 +2033,10 @@
       });
     }
 
+    function loadActivity() {
+      return api("/api/activity?limit=50").then(setActivity).catch(() => {});
+    }
+
     function newAppCreated(data) {
       const key = boot && boot.general_key;
       setNewAppOpen(false);
@@ -1996,10 +2080,16 @@
     }, [selected]);
 
     useEffect(() => {
+      if (!boot || selected !== boot.general_key) return;
+      loadActivity();
+    }, [boot, selected]);
+
+    useEffect(() => {
       if (!boot || !selected || !boot.poll_ms) return undefined;
       const id = setInterval(() => {
         loadApps();
         api("/api/feedback/" + encodeURIComponent(selected)).then(setFeedback);
+        if (selected === boot.general_key) loadActivity();
         loadWorkspaces();
       }, boot.poll_ms);
       return () => clearInterval(id);
@@ -2015,7 +2105,7 @@
     }, [boot]);
 
     if (!boot) return h("div", {style: {padding: 20, color: "#777"}}, "Loading curIAtor…");
-    const generalApp = general || {key: boot.general_key, title: "General — gallery & runner", tags: [],
+    const generalApp = general || {key: boot.general_key, title: "Collection feedback", tags: [],
       color: "#8e44ad", kind: "general", metrics: {open: 0, total: 0}};
     const allApps = [generalApp, ...apps];
     const selectedApp = allApps.find((a) => a.key === selected);
@@ -2044,7 +2134,9 @@
           onFork: (app) => setWorkspaceApp(app), onWorkspaces: () => setWorkspacePanelOpen(true)}),
         catCollapsed ? h("button", {className: "rshell-edge-tab left", title: "Expand library",
           onClick: () => setCatCollapsed(false)}, "Library") : null,
-        h("iframe", {id: "app-frame", name: "app-frame", className: "rshell-frame", src}),
+        selected === boot.general_key
+          ? h(CollectionHome, {boot, apps, activity, setSelected})
+          : h("iframe", {id: "app-frame", name: "app-frame", className: "rshell-frame", src}),
         fbCollapsed ? h("button", {className: "rshell-edge-tab right", title: "Expand feedback",
           onClick: () => setFbCollapsed(false)}, "Feedback") : null,
         h(Feedback, {boot, selected, selectedApp, feedback, setFeedback, reloadApps: loadApps,

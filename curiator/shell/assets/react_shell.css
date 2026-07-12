@@ -233,6 +233,367 @@ body {
   height: 100%;
 }
 
+.rshell-home {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  overflow: auto;
+  background: #fff;
+}
+
+.rshell-home-inner {
+  width: min(1040px, calc(100% - 56px));
+  margin: 0 auto;
+  padding: 38px 0 64px;
+}
+
+.rshell-home-head {
+  padding-bottom: 28px;
+  border-bottom: 1px solid #d9dde4;
+}
+
+.rshell-home-kicker,
+.rshell-home-section-head p {
+  margin: 0 0 7px;
+  color: #147a50;
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0;
+}
+
+.rshell-home-head h1 {
+  margin: 0;
+  color: #20242a;
+  font-size: 34px;
+  line-height: 1.15;
+  letter-spacing: 0;
+  overflow-wrap: anywhere;
+}
+
+.rshell-home-description {
+  max-width: 760px;
+  margin: 12px 0 0;
+  color: #656d78;
+  font-size: 15px;
+  line-height: 1.6;
+}
+
+.rshell-home-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin-top: 18px;
+}
+
+.rshell-home-stats > span,
+.rshell-home-stats > button {
+  min-height: 28px;
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  color: #555;
+  background: #f6f7f8;
+  border: 1px solid #d9dde4;
+  border-radius: 999px;
+  font: 12px system-ui, sans-serif;
+}
+
+.rshell-home-stats > button {
+  cursor: pointer;
+}
+
+.rshell-home-stats > button:hover,
+.rshell-home-stats > button.selected {
+  color: #fff;
+  background: #8e44ad;
+  border-color: #8e44ad;
+}
+
+.rshell-home-stats > button.danger:hover,
+.rshell-home-stats > button.danger.selected {
+  background: #b53b35;
+  border-color: #b53b35;
+}
+
+.rshell-home-section {
+  padding-top: 34px;
+}
+
+.rshell-home-section + .rshell-home-section {
+  margin-top: 38px;
+  border-top: 1px solid #d9dde4;
+}
+
+.rshell-home-section-head {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 24px;
+  margin-bottom: 18px;
+}
+
+.rshell-home-section-head h2 {
+  margin: 0;
+  color: #20242a;
+  font-size: 22px;
+  line-height: 1.2;
+  letter-spacing: 0;
+}
+
+.rshell-home-section-head > span {
+  color: #777;
+  font-size: 11px;
+}
+
+.rshell-featured {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.rshell-featured-app {
+  min-width: 0;
+  padding: 0;
+  overflow: hidden;
+  color: #20242a;
+  background: #fff;
+  border: 1px solid #d9dde4;
+  border-top: 4px solid var(--app-color, #777);
+  border-radius: 6px;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+
+.rshell-featured-app:hover,
+.rshell-featured-app:focus-visible {
+  border-color: var(--app-color, #777);
+  box-shadow: 0 7px 20px rgba(32, 36, 42, .12);
+  outline: none;
+}
+
+.rshell-featured-app > img,
+.rshell-featured-fallback {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  border-bottom: 1px solid #e3e5e8;
+}
+
+.rshell-featured-app > img {
+  object-fit: cover;
+  object-position: top center;
+  background: #f4f5f7;
+}
+
+.rshell-featured-fallback {
+  display: flex;
+  align-items: end;
+  padding: 18px;
+  box-sizing: border-box;
+  color: #555;
+  background: #f1f3f5;
+  font-size: 17px;
+  font-weight: 750;
+}
+
+.rshell-featured-body {
+  min-height: 142px;
+  display: flex;
+  flex-direction: column;
+  padding: 15px 16px 13px;
+}
+
+.rshell-featured-title {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.rshell-featured-title h3 {
+  min-width: 0;
+  margin: 0;
+  font-size: 16px;
+  line-height: 1.3;
+  letter-spacing: 0;
+  overflow-wrap: anywhere;
+}
+
+.rshell-featured-title > span {
+  flex: 0 0 auto;
+  color: #147a50;
+  font-size: 11px;
+  font-weight: 750;
+}
+
+.rshell-featured-body > p {
+  margin: 8px 0 12px;
+  color: #656d78;
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+.rshell-featured-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: auto;
+  color: #777;
+  font-size: 10.5px;
+}
+
+.rshell-featured-meta span:last-child {
+  min-width: 0;
+  overflow: hidden;
+  text-align: right;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rshell-home-section-head.activity {
+  align-items: center;
+}
+
+.rshell-activity-filters {
+  display: inline-flex;
+  border: 1px solid #cfd3d8;
+  border-radius: 5px;
+  overflow: hidden;
+}
+
+.rshell-activity-filters button {
+  min-height: 30px;
+  padding: 5px 10px;
+  color: #555;
+  background: #fff;
+  border: 0;
+  border-right: 1px solid #cfd3d8;
+  cursor: pointer;
+  font: 11px system-ui, sans-serif;
+}
+
+.rshell-activity-filters button:last-child {
+  border-right: 0;
+}
+
+.rshell-activity-filters button:hover,
+.rshell-activity-filters button.selected {
+  color: #fff;
+  background: #555;
+}
+
+.rshell-activity-list {
+  border-top: 1px solid #cfd3d8;
+}
+
+.rshell-activity-list > button {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 4px minmax(0, 1fr) 112px;
+  gap: 14px;
+  align-items: stretch;
+  min-height: 82px;
+  padding: 13px 8px 13px 0;
+  color: #333;
+  background: #fff;
+  border: 0;
+  border-bottom: 1px solid #d9dde4;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+
+.rshell-activity-list > button:hover,
+.rshell-activity-list > button:focus-visible {
+  background: #f7f8f9;
+  outline: none;
+}
+
+.rshell-activity-color {
+  width: 4px;
+  min-height: 100%;
+}
+
+.rshell-activity-copy,
+.rshell-activity-detail {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.rshell-activity-copy {
+  gap: 4px;
+}
+
+.rshell-activity-title {
+  color: #333;
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.rshell-activity-comment {
+  display: -webkit-box;
+  overflow: hidden;
+  color: #555;
+  font-size: 12px;
+  line-height: 1.4;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.rshell-activity-latest {
+  overflow: hidden;
+  color: #7a8490;
+  font-size: 10.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rshell-activity-detail {
+  align-items: flex-end;
+  justify-content: center;
+  gap: 5px;
+  color: #888;
+  font-size: 10px;
+  text-align: right;
+}
+
+.rshell-activity-status {
+  padding: 2px 6px;
+  color: #fff;
+  background: #777;
+  border-radius: 999px;
+  font-size: 9px;
+  text-transform: lowercase;
+}
+
+.rshell-activity-status.new { background: #cc7a00; }
+.rshell-activity-status.working { background: #8e44ad; }
+.rshell-activity-status.done { background: #1f9d55; }
+.rshell-activity-status.awaiting_approval { background: #2980b9; }
+.rshell-activity-status.held { background: #6f42c1; }
+.rshell-activity-status.rejected { background: #555; }
+
+.rshell-activity-more {
+  display: block;
+  margin: 16px auto 0;
+  padding: 6px 10px;
+  color: #6f2f8d;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  font: 700 11px system-ui, sans-serif;
+}
+
+.rshell-home-empty {
+  margin: 0;
+  padding: 18px 0;
+  color: #777;
+  font-size: 12px;
+}
+
 .rshell-feedback {
   width: 320px;
   flex: 0 0 320px;
@@ -1647,6 +2008,42 @@ body {
 
   .rshell-main {
     position: relative;
+  }
+
+  .rshell-home-inner {
+    width: calc(100% - 32px);
+    padding: 26px 0 48px;
+  }
+
+  .rshell-home-head h1 {
+    font-size: 29px;
+  }
+
+  .rshell-featured {
+    grid-template-columns: 1fr;
+  }
+
+  .rshell-home-section-head,
+  .rshell-home-section-head.activity {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .rshell-featured-body {
+    min-height: 0;
+  }
+
+  .rshell-activity-list > button {
+    grid-template-columns: 4px minmax(0, 1fr);
+  }
+
+  .rshell-activity-detail {
+    grid-column: 2;
+    align-items: center;
+    flex-flow: row wrap;
+    justify-content: flex-start;
+    text-align: left;
   }
 
   .rshell-catalog,
