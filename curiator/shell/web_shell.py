@@ -286,6 +286,207 @@ def _queue_find(feedback_id: str) -> tuple[str, dict] | None:
     return None
 
 
+class ModerationError(RuntimeError):
+    def __init__(self, message: str, status_code: int = 409):
+        super().__init__(message)
+        self.status_code = status_code
+
+
+def _valid_feedback_id(feedback_id: object) -> bool:
+    value = str(feedback_id or "")
+    return value not in {".", ".."} and bool(re.fullmatch(r"[0-9A-Za-z._-]+", value))
+
+
+def _held_entry(key: str, feedback_id: str) -> dict:
+    if not _valid_feedback_id(feedback_id):
+        raise ModerationError("feedback not found", 404)
+    entry = next(
+        (item for item in core.load_feedback().get(key, []) if item.get("id") == feedback_id),
+        None,
+    )
+    if entry is None:
+        raise ModerationError("feedback not found", 404)
+    if entry.get("kind") == "system" or entry.get("status") != "held":
+        raise ModerationError("only held user feedback can be moderated")
+    return entry
+
+
+def _moderation_checkpoint_guard(feedback_ids: list[str]) -> None:
+    from curiator import run_recovery
+
+    if any(not _valid_feedback_id(feedback_id) for feedback_id in feedback_ids):
+        raise ModerationError("thread contains an invalid feedback id")
+    blocked = [
+        feedback_id
+        for feedback_id in feedback_ids
+        if run_recovery.checkpoint_path(core.LEDGER_CFG, feedback_id).exists()
+    ]
+    if blocked:
+        raise ModerationError(
+            "resolve interrupted run recovery before moderating this item"
+        )
+
+
+def _approve_held(key: str, entry: dict, user: dict | None) -> dict:
+    feedback_id = entry["id"]
+    _moderation_checkpoint_guard([feedback_id])
+    actor = _queue_actor(user)
+    approved_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    ledger.add_system_note(
+        core.LEDGER_CFG,
+        key,
+        f"Moderation queue: approved by {actor}; dispatching to the agent.",
+        reply_to=[feedback_id],
+        agent="curiator queue",
+    )
+    ledger.update_entry(core.LEDGER_CFG, key, feedback_id, {
+        "status": "new",
+        "moderation_approved_at": approved_at,
+        "moderation_approved_by": actor,
+        "moderation_resolution": "approved",
+    })
+    return next(item for item in core.load_feedback()[key] if item.get("id") == feedback_id)
+
+
+def _amend_held(key: str, entry: dict, user: dict | None, comment: str) -> dict:
+    amendment = str(comment or "").strip()
+    if not amendment:
+        raise ModerationError("enter an amendment before replying", 400)
+    if len(amendment) > 10000:
+        raise ModerationError("amendment is too long", 400)
+
+    feedback_id = entry["id"]
+    _moderation_checkpoint_guard([feedback_id])
+    actor = _queue_actor(user)
+    approved_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    amendment_id = uuid.uuid4().hex[:8]
+
+    ledger.update_entry(core.LEDGER_CFG, key, feedback_id, {
+        "status": "done",
+        "moderation_approved_at": approved_at,
+        "moderation_approved_by": actor,
+        "moderation_resolution": "amended",
+        "moderation_amendment_id": amendment_id,
+    })
+    ledger.add_system_note(
+        core.LEDGER_CFG,
+        key,
+        f"Moderation queue: approved with an amendment by {actor}; dispatching the admin reply.",
+        reply_to=[feedback_id],
+        agent="curiator queue",
+    )
+    # Insert as held, then promote only after the original and moderation note are durable. This keeps
+    # the watcher from claiming the amendment before its thread context is complete.
+    ledger.save_entry(
+        core.LEDGER_CFG,
+        key,
+        entry_id=amendment_id,
+        comment=amendment,
+        user=auth.stamp(user),
+        extra={
+            "status": "held",
+            "reply_to": [feedback_id],
+            "moderation_amends": feedback_id,
+        },
+    )
+    ledger.update_entry(core.LEDGER_CFG, key, amendment_id, {
+        "status": "new",
+        "moderation_approved_at": approved_at,
+        "moderation_approved_by": actor,
+        "moderation_resolution": "amendment",
+    })
+    return next(item for item in core.load_feedback()[key] if item.get("id") == amendment_id)
+
+
+def _feedback_subtree(key: str, feedback_id: str) -> tuple[list[str], list[dict]]:
+    items = core.load_feedback().get(key, [])
+    ids = {feedback_id}
+    changed = True
+    while changed:
+        changed = False
+        for item in items:
+            item_id = item.get("id")
+            if item_id and item_id not in ids and any(
+                parent in ids for parent in (item.get("reply_to") or [])
+            ):
+                ids.add(item_id)
+                changed = True
+    selected = [item for item in items if item.get("id") in ids]
+    return [item.get("id") for item in selected if item.get("id")], selected
+
+
+def _feedback_artifact_path(ref: object) -> Path | None:
+    raw = str(ref or "").strip()
+    if not raw or "://" in raw:
+        return None
+    candidate = Path(raw)
+    if not candidate.is_absolute():
+        candidate = core.FEEDBACK_DIR / candidate
+    try:
+        resolved = candidate.resolve()
+        resolved.relative_to(core.FEEDBACK_DIR.resolve())
+    except (OSError, ValueError):
+        return None
+    return resolved
+
+
+def _delete_feedback_artifacts(entries: list[dict]) -> None:
+    from curiator import run_recovery
+    from curiator.loop import runlog
+
+    remaining_refs = {
+        str(entry.get(field))
+        for items in core.load_feedback().values()
+        for entry in items
+        for field in ("screenshot", "audio")
+        if entry.get(field)
+    }
+    for entry in entries:
+        for field in ("screenshot", "audio"):
+            ref = entry.get(field)
+            path = _feedback_artifact_path(ref)
+            if path is not None and str(ref) not in remaining_refs:
+                try:
+                    path.unlink()
+                except OSError:
+                    pass
+        feedback_id = entry.get("id")
+        if not _valid_feedback_id(feedback_id):
+            continue
+        for path in (
+            runlog.task_path(core.LEDGER_CFG, feedback_id),
+            runlog.reply_path(core.LEDGER_CFG, feedback_id),
+            runlog.cancel_path(core.LEDGER_CFG, feedback_id),
+        ):
+            try:
+                path.unlink()
+            except OSError:
+                pass
+        shutil.rmtree(run_recovery.run_dir(core.LEDGER_CFG, feedback_id), ignore_errors=True)
+
+
+def _delete_held(key: str, entry: dict) -> dict:
+    feedback_ids, entries = _feedback_subtree(key, entry["id"])
+    active = [
+        item.get("id")
+        for item in entries
+        if item.get("id") != entry["id"]
+        and item.get("kind") != "system"
+        and item.get("status") in {"new", "working", "awaiting_approval"}
+    ]
+    if active:
+        raise ModerationError(
+            "cannot delete a held thread with active descendant work"
+        )
+    _moderation_checkpoint_guard(feedback_ids)
+    deleted = ledger.delete_entries(core.LEDGER_CFG, key, feedback_ids)
+    _delete_feedback_artifacts(entries)
+    # SQLite free pages can retain deleted payload bytes. A UI delete is a privacy boundary, so purge
+    # those pages instead of waiting for a later maintenance command.
+    ledger.compact(core.LEDGER_CFG)
+    return {"deleted": deleted, "ids": feedback_ids}
+
+
 def _queue_rows() -> list[tuple[str, dict]]:
     rows = []
     for key, items in core.load_feedback().items():
@@ -347,6 +548,7 @@ def _queue_page_html(message: str = "") -> str:
                 "style='display:inline'><button>Keep files</button></form></div>"
             )
             approve = ""
+            delete = ""
         else:
             recovery_controls = ""
             approve = (
@@ -354,6 +556,13 @@ def _queue_page_html(message: str = "") -> str:
                 "style='display:inline-block;margin-top:8px;margin-right:8px'>"
                 "<button style='background:#1f9d55;color:white;border:none;border-radius:5px;"
                 "padding:6px 13px;font-weight:700;cursor:pointer'>Approve</button></form>"
+            )
+            delete = (
+                f"<form method='post' action='{_queue_action_url(feedback_id, 'delete')}' "
+                "style='display:inline-block;margin-top:8px;margin-right:8px' "
+                "onsubmit=\"return confirm('Delete this held thread permanently?')\">"
+                "<button style='background:white;color:#a33;border:1px solid #d9b3b3;border-radius:5px;"
+                "padding:5px 13px;font-weight:700;cursor:pointer'>Delete</button></form>"
             )
         cards.append(
             "<section style='border-left:4px solid #6f42c1;background:#fafafa;"
@@ -365,7 +574,7 @@ def _queue_page_html(message: str = "") -> str:
             f"<span style='color:#cc7a00'>{stars}</span></div>"
             f"<p style='font-size:14px;white-space:pre-wrap'>{core._esc(entry.get('comment') or '')}</p>"
             f"{shot}"
-            f"{recovery_controls}{approve}"
+            f"{recovery_controls}{approve}{delete}"
             f"<form method='post' action='{_queue_action_url(entry.get('id') or '', 'reject')}' "
             "style='display:inline-flex;gap:6px;align-items:center;margin-top:8px'>"
             "<input name='reason' placeholder='optional rejection reason' "
@@ -1037,7 +1246,9 @@ def build_flask_app() -> Flask:
         u = auth.current_user(core.REG.AUTH_CFG)
         if not auth.is_admin(core.REG.AUTH_CFG, u):
             return core._page("Held feedback queue", "<p style='color:#a33;font-size:13px'>Admins only.</p>"), 403
-        if action not in {"approve", "reject", "resume", "preserve", "restore", "discard-checkpoint"}:
+        if action not in {
+            "approve", "delete", "reject", "resume", "preserve", "restore", "discard-checkpoint"
+        }:
             return core._page("Held feedback queue", "<p style='color:#a33;font-size:13px'>Unknown queue action.</p>"), 400
         found = _queue_find(feedback_id)
         if not found:
@@ -1046,7 +1257,6 @@ def build_flask_app() -> Flask:
         if entry.get("kind") == "system" or entry.get("status") != "held":
             return core._page("Held feedback queue", "<p style='color:#a33;font-size:13px'>Only held user feedback can be reviewed here.</p>"), 400
 
-        actor = _queue_actor(u)
         from curiator import run_recovery
 
         if action in {"resume", "preserve", "restore", "discard-checkpoint"}:
@@ -1063,22 +1273,20 @@ def build_flask_app() -> Flask:
                 return redirect(_url(f"/queue?msg={quote('Recovery failed: ' + str(exc))}"))
             return redirect(_url(f"/queue?msg={quote('Recovery ' + action + ' completed')}"))
         if action == "approve":
-            if run_recovery.checkpoint_path(core.LEDGER_CFG, feedback_id).exists():
-                return redirect(_url("/queue?msg=Use+the+explicit+recovery+actions+for+this+run"))
-            ledger.add_system_note(
-                core.LEDGER_CFG,
-                key,
-                f"Moderation queue: approved by {actor}; dispatching to the agent.",
-                reply_to=[entry["id"]],
-                agent="curiator queue",
-            )
-            ledger.update_entry(core.LEDGER_CFG, key, entry["id"], {
-                "status": "new",
-                "moderation_approved_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
-                "moderation_approved_by": actor,
-            })
+            try:
+                _approve_held(key, entry, u)
+            except ModerationError as exc:
+                return redirect(_url(f"/queue?msg={quote(str(exc))}"))
             return redirect(_url("/queue?msg=Approved"))
+        if action == "delete":
+            try:
+                result = _delete_held(key, entry)
+            except ModerationError as exc:
+                return redirect(_url(f"/queue?msg={quote(str(exc))}"))
+            message = f"Deleted {result['deleted']} thread item(s)"
+            return redirect(_url(f"/queue?msg={quote(message)}"))
 
+        actor = _queue_actor(u)
         reason = (request.form.get("reason") or "").strip()
         text = f"Moderation queue: rejected by {actor}; closed without agent dispatch."
         if reason:
@@ -1090,6 +1298,28 @@ def build_flask_app() -> Flask:
             run_recovery.append_trace(core.LEDGER_CFG, feedback_id,
                                       "Recovery checkpoint retired; source left untouched.")
         return redirect(_url("/queue?msg=Rejected"))
+
+    @app.route("/api/feedback/<key>/<feedback_id>/moderate", methods=["POST"])
+    def _moderate_feedback(key, feedback_id):
+        user = auth.current_user(core.REG.AUTH_CFG)
+        if not auth.is_admin(core.REG.AUTH_CFG, user):
+            return jsonify({"error": "admin account required"}), 403
+        body = request.get_json(silent=True) or {}
+        action = str(body.get("action") or "")
+        if action not in {"approve", "delete", "amend"}:
+            return jsonify({"error": "unknown moderation action"}), 400
+        try:
+            entry = _held_entry(key, feedback_id)
+            if action == "approve":
+                result = {"action": "approved", "entry": _safe_entry(_approve_held(key, entry, user))}
+            elif action == "amend":
+                amendment = _amend_held(key, entry, user, body.get("comment"))
+                result = {"action": "amended", "entry": _safe_entry(amendment)}
+            else:
+                result = {"action": "deleted", **_delete_held(key, entry)}
+        except ModerationError as exc:
+            return jsonify({"error": str(exc)}), exc.status_code
+        return jsonify({"moderation": result, **_feedback_payload(key)})
 
     @app.route("/api/feedback/<key>", methods=["GET", "POST"])
     def _feedback(key):

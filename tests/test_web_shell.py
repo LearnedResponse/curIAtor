@@ -242,6 +242,19 @@ def test_react_shell_has_figma_reference_attachment_and_compact_history(web_clie
     assert "provider fetch" in js
 
 
+def test_react_shell_has_inline_held_feedback_moderation(web_client):
+    js = web_client.get("/assets/react_shell.js").get_data(as_text=True)
+    css = web_client.get("/assets/react_shell.css").get_data(as_text=True)
+    assert "function HeldModeration" in js
+    assert "Reply & approve" in js
+    assert 'action === "delete"' in js
+    assert 'st === "held"' in js
+    assert 'onSelectHeld(moderationOpen ? null : entry.id)' in js
+    assert 'encodeURIComponent(entry.id) + "/moderate"' in js
+    assert ".rshell-held-moderation" in css
+    assert ".rshell-entry.moderatable.selected" in css
+
+
 def test_react_shell_has_new_app_wizard(web_client):
     js = web_client.get("/assets/react_shell.js").get_data(as_text=True)
     css = web_client.get("/assets/react_shell.css").get_data(as_text=True)
@@ -850,6 +863,161 @@ def test_react_shell_admin_queue_page_reviews_held_feedback(web_client):
                for e in items)
 
 
+def test_admin_feedback_api_approves_held_item_for_dispatch(web_client, cfg):
+    from curiator import ledger
+
+    feedback_id = ledger.save_entry(
+        cfg,
+        "sample",
+        comment="approved public request",
+        user={"id": "anonymous", "email": "", "name": "anonymous", "groups": []},
+        extra={"status": "held"},
+    )
+
+    response = web_client.post(
+        f"/api/feedback/sample/{feedback_id}/moderate",
+        json={"action": "approve"},
+    )
+
+    assert response.status_code == 200
+    assert response.get_json()["moderation"]["action"] == "approved"
+    items = ledger.load(cfg)["sample"]
+    approved = next(item for item in items if item["id"] == feedback_id)
+    assert approved["status"] == "new"
+    assert approved["moderation_resolution"] == "approved"
+    assert approved["moderation_approved_by"] == "anonymous@local"
+
+
+def test_admin_feedback_api_amends_held_item_and_dispatches_only_reply(web_client, cfg):
+    from curiator import ledger
+    from curiator.loop import loop
+    from curiator.loop.adapters import _thread_context
+
+    feedback_id = ledger.save_entry(
+        cfg,
+        "sample",
+        comment="make every chart red",
+        user={"id": "anonymous", "email": "", "name": "anonymous", "groups": []},
+        extra={"status": "held"},
+    )
+
+    response = web_client.post(
+        f"/api/feedback/sample/{feedback_id}/moderate",
+        json={"action": "amend", "comment": "Use the existing palette; only emphasize the alert series."},
+    )
+
+    assert response.status_code == 200
+    result = response.get_json()["moderation"]
+    assert result["action"] == "amended"
+    amendment_id = result["entry"]["id"]
+    items = ledger.load(cfg)["sample"]
+    original = next(item for item in items if item["id"] == feedback_id)
+    amendment = next(item for item in items if item["id"] == amendment_id)
+    assert original["status"] == "done"
+    assert original["moderation_resolution"] == "amended"
+    assert original["moderation_amendment_id"] == amendment_id
+    assert amendment["status"] == "new"
+    assert amendment["reply_to"] == [feedback_id]
+    assert amendment["moderation_amends"] == feedback_id
+    assert [entry["id"] for _key, entry in loop._new_items(ledger.load(cfg))] == [amendment_id]
+    context = _thread_context(cfg, "sample", amendment)
+    assert "make every chart red" in context
+    assert "approved with an amendment" in context
+
+
+def test_admin_feedback_api_deletes_held_subtree_and_artifacts(web_client, cfg, collection):
+    from curiator import ledger, run_recovery
+    from curiator.loop import runlog
+
+    shot = collection / "feedback" / "shots" / "held.png"
+    shot.write_bytes(b"private image")
+    feedback_id = ledger.save_entry(
+        cfg,
+        "sample",
+        comment="remove this private thread payload",
+        screenshot="shots/held.png",
+        extra={"status": "held"},
+    )
+    note_id = ledger.add_system_note(cfg, "sample", "queued for moderation", reply_to=[feedback_id])
+    child_id = ledger.save_entry(
+        cfg,
+        "sample",
+        comment="held child",
+        extra={"status": "held", "reply_to": [feedback_id]},
+    )
+    keep_id = ledger.save_entry(cfg, "sample", comment="unrelated", extra={"status": "held"})
+    runlog.task_path(cfg, feedback_id).parent.mkdir(parents=True, exist_ok=True)
+    runlog.task_path(cfg, feedback_id).write_text("task")
+    runlog.reply_path(cfg, feedback_id).parent.mkdir(parents=True, exist_ok=True)
+    runlog.reply_path(cfg, feedback_id).write_text("trace")
+    run_recovery.run_dir(cfg, feedback_id).mkdir(parents=True)
+    (run_recovery.run_dir(cfg, feedback_id) / "retired.txt").write_text("old run")
+
+    response = web_client.post(
+        f"/api/feedback/sample/{feedback_id}/moderate",
+        json={"action": "delete"},
+    )
+
+    assert response.status_code == 200
+    result = response.get_json()["moderation"]
+    assert result["action"] == "deleted"
+    assert set(result["ids"]) == {feedback_id, note_id, child_id}
+    assert result["deleted"] == 3
+    assert [item["id"] for item in ledger.load(cfg)["sample"]] == [keep_id]
+    assert not shot.exists()
+    assert not runlog.task_path(cfg, feedback_id).exists()
+    assert not runlog.reply_path(cfg, feedback_id).exists()
+    assert not run_recovery.run_dir(cfg, feedback_id).exists()
+    assert b"remove this private thread payload" not in ledger.db_path(cfg).read_bytes()
+
+
+def test_feedback_moderation_requires_admin_and_held_status(web_mod, cfg, monkeypatch):
+    from curiator import ledger
+
+    feedback_id = ledger.save_entry(cfg, "sample", comment="held", extra={"status": "held"})
+    monkeypatch.setitem(web_mod.core.REG.AUTH_CFG, "mode", "local")
+    monkeypatch.setattr(web_mod.auth, "current_user", lambda _cfg: None)
+    client = web_mod.build_flask_app().test_client()
+
+    denied = client.post(
+        f"/api/feedback/sample/{feedback_id}/moderate",
+        json={"action": "approve"},
+    )
+    assert denied.status_code == 403
+
+    monkeypatch.setattr(web_mod.auth, "current_user", lambda _cfg: {
+        "id": "admin", "email": "admin@example.com", "name": "Admin", "groups": ["admin"],
+    })
+    ledger.set_status(cfg, "sample", [feedback_id], "done")
+    not_held = client.post(
+        f"/api/feedback/sample/{feedback_id}/moderate",
+        json={"action": "approve"},
+    )
+    assert not_held.status_code == 409
+    assert "only held" in not_held.get_json()["error"]
+
+
+def test_feedback_delete_refuses_active_descendant_work(web_client, cfg):
+    from curiator import ledger
+
+    feedback_id = ledger.save_entry(cfg, "sample", comment="held root", extra={"status": "held"})
+    child_id = ledger.save_entry(
+        cfg,
+        "sample",
+        comment="already queued child",
+        extra={"reply_to": [feedback_id]},
+    )
+
+    blocked = web_client.post(
+        f"/api/feedback/sample/{feedback_id}/moderate",
+        json={"action": "delete"},
+    )
+
+    assert blocked.status_code == 409
+    assert "active descendant work" in blocked.get_json()["error"]
+    assert {item["id"] for item in ledger.load(cfg)["sample"]} == {feedback_id, child_id}
+
+
 def test_admin_queue_uses_explicit_recovery_actions_for_partial_run(web_client, cfg, collection):
     from curiator import ledger, run_recovery
     from curiator.loop import adapters
@@ -868,6 +1036,13 @@ def test_admin_queue_uses_explicit_recovery_actions_for_partial_run(web_client, 
     assert f"/queue/{fid}/preserve" in body
     assert f"/queue/{fid}/restore" in body
     assert f"/queue/{fid}/approve" not in body
+
+    blocked = web_client.post(
+        f"/api/feedback/sample/{fid}/moderate",
+        json={"action": "delete"},
+    )
+    assert blocked.status_code == 409
+    assert "resolve interrupted run recovery" in blocked.get_json()["error"]
 
     restored = web_client.post(f"/queue/{fid}/restore")
     assert restored.status_code == 302

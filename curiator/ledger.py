@@ -220,6 +220,21 @@ def update_entry(cfg: dict, key: str, entry_id: str, fields: dict) -> None:
             _insert_payload(conn, key, payload)
 
 
+def delete_entries(cfg: dict, key: str, entry_ids: list[str]) -> int:
+    """Delete a bounded set of entries from one app thread."""
+    ids = list(dict.fromkeys(str(entry_id) for entry_id in (entry_ids or []) if entry_id))
+    if not ids:
+        return 0
+    placeholders = ",".join("?" for _ in ids)
+    with closing(_connect(cfg)) as conn:
+        with conn:
+            cursor = conn.execute(
+                f"DELETE FROM entries WHERE app_key = ? AND id IN ({placeholders})",
+                [key, *ids],
+            )
+        return cursor.rowcount
+
+
 def amend_note(cfg: dict, key: str, note_id: str, suffix: str) -> None:
     """Append text to an existing note's comment."""
     with closing(_connect(cfg)) as conn:

@@ -31,6 +31,17 @@ def test_amend_note_appends(cfg):
     assert note["comment"] == "Fixed.  committed abc1234"
 
 
+def test_delete_entries_is_bounded_to_one_app(cfg):
+    first = ledger.save_entry(cfg, "sample", comment="delete me", ts="t0")
+    second = ledger.save_entry(cfg, "sample", comment="keep me", ts="t1")
+    same_id = ledger.save_entry(cfg, "other", entry_id=first, comment="same id, other app", ts="t2")
+
+    assert ledger.delete_entries(cfg, "sample", [first, "missing", first]) == 1
+    data = ledger.load(cfg)
+    assert [entry["id"] for entry in data["sample"]] == [second]
+    assert [entry["id"] for entry in data["other"]] == [same_id]
+
+
 def test_system_note_actions_normalized(cfg):
     nid = ledger.add_system_note(cfg, "sample", "Pick one", ts="t",
                                  actions=["A", ["B", "b"]])
