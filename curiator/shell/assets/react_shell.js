@@ -1668,11 +1668,12 @@
       const captureApp = selected;
       const iframe = document.getElementById("app-frame");
       const doc = iframe && (iframe.contentDocument || (iframe.contentWindow && iframe.contentWindow.document));
-      if (!doc || typeof html2canvas === "undefined") {
+      if (!doc || typeof window.curiatorCaptureDocument !== "function") {
         setMsg("Capture failed: app is not readable.");
         return;
       }
-      html2canvas(doc.body, {logging: false, backgroundColor: "#ffffff"})
+      setMsg("Capturing view…");
+      window.curiatorCaptureDocument(doc)
         .then((canvas) => {
           if (captureApp !== selectedRef.current) return;
           setShot(canvas.toDataURL("image/png"));
@@ -1680,6 +1681,7 @@
           setShotSource("capture");
           setAnnotations([]);
           setShotEditorOpen(false);
+          setMsg("Capture ready.");
         })
         .catch((e) => setMsg("Capture failed: " + e));
     }

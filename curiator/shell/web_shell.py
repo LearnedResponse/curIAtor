@@ -875,6 +875,7 @@ def _index() -> str:
     <script src="{_url('/vendor/react@18.3.1.min.js')}"></script>
     <script src="{_url('/vendor/react-dom@18.3.1.min.js')}"></script>
     <script src="{_url('/assets/html2canvas.min.js')}"></script>
+    <script src="{_url('/assets/capture.js')}"></script>
     <script src="{_url('/assets/localtime.js')}"></script>
     <script src="{_url('/assets/react_shell.js')}"></script>
   </body>

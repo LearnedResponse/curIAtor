@@ -471,6 +471,7 @@ def test_react_shell_side_rails_are_collapsible(web_client):
 
 def test_react_shell_has_burned_screenshot_annotations(web_client):
     js = web_client.get("/assets/react_shell.js").get_data(as_text=True)
+    capture = web_client.get("/assets/capture.js").get_data(as_text=True)
     css = web_client.get("/assets/react_shell.css").get_data(as_text=True)
     assert "function AnnotationEditor" in js
     assert "function AnnotationSummary" in js
@@ -489,6 +490,12 @@ def test_react_shell_has_burned_screenshot_annotations(web_client):
     assert "function withDomTarget" in js
     assert "function annotationDoc" in js
     assert "function nativeCapture" in js
+    assert "window.curiatorCaptureDocument(doc)" in js
+    assert "function plotlySurrogate" in capture
+    assert "Plotly.toImage" in capture
+    assert 'data-curiator-capture-surrogate' in capture
+    assert "preparePlotlySurrogates(doc)" in capture
+    assert "captureJobs.delete(doc)" in capture
     assert "getDisplayMedia" in js
     assert 'setShotSource("native")' in js
     assert "Native capture unavailable in this browser." in js
@@ -579,6 +586,11 @@ def test_react_shell_has_burned_screenshot_annotations(web_client):
     assert ".rshell-annotation-replay-box.active" in css
     assert ".rshell-annotation-target" not in css
     assert "touch-action: none" in css
+
+
+def test_react_shell_loads_capture_fidelity_helper_before_app(web_client):
+    page = web_client.get("/").get_data(as_text=True)
+    assert page.index("/assets/capture.js") < page.index("/assets/react_shell.js")
 
 
 def test_react_shell_has_local_voice_transcription(web_client):

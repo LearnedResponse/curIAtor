@@ -16,11 +16,13 @@ Strengths:
 - no desktop permissions prompt
 - no server-side browser process
 - captures normal DOM/CSS dashboards well enough for contextual feedback
+- snapshots visible Plotly figures through `Plotly.toImage()` before DOM composition, including
+  Plotly WebGL/3D charts that a raw `html2canvas` pass would omit
 - keeps the screenshot in the same feedback submission flow
 
 Limits:
 
-- canvas/WebGL/Plotly internals, video, maps, and some modern CSS can render incompletely
+- non-Plotly canvas/WebGL surfaces, video, maps, and some modern CSS can render incompletely
 - cross-origin images/fonts may be missing unless the app serves them with compatible CORS headers
 - the capture is of the browser-rendered DOM, not the operating-system window
 - any sensitive state visible in the iframe can be stored in `feedback/shots/`
@@ -96,8 +98,9 @@ fidelity is more important than zero-install feedback.
 
 ## Default recommendation
 
-Keep `html2canvas` as the default because it preserves curIAtor's low-friction loop. Use native capture
-as the browser-native fallback for specific collections where screenshot fidelity is a known blocker;
+Keep the Plotly-surrogate + `html2canvas` path as the default because it preserves curIAtor's
+low-friction loop and covers common research charts, including Plotly 3D. Use native capture as the
+browser-native fallback for other GPU/canvas surfaces where screenshot fidelity is still a blocker;
 treat server-side capture or helper extensions as heavier deployment-specific options.
 
 Security rule: screenshots are data. Before publishing a collection or sharing a ledger, review
