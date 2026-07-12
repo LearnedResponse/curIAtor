@@ -234,6 +234,7 @@ def _load_config_from_path(path: str | Path, *, link: dict | None = None) -> dic
     if _AGENT_SANDBOX_OVERRIDE is not None:
         agent["sandbox"] = _AGENT_SANDBOX_OVERRIDE
         cfg["agent_sandbox_override"] = _AGENT_SANDBOX_OVERRIDE
+    agent.setdefault("max_recovery_retries", 1)
     cfg["agent"] = agent
     # How General-channel feedback on the RUNNER itself is handled. Additive + backward-compatible:
     # absent `runner:` ⇒ pinned (the safe consumer default — drafts an upstream PR, never edits the package).

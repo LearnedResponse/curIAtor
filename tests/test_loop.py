@@ -40,11 +40,37 @@ def test_run_once_dispatches_serially_in_order(cfg, monkeypatch, capsys):
     assert n == 2
     assert seen == ["first", "second"]                              # serial, in order
     # A stub that exits without replying is source-clean, so both claims are safely requeued.
-    assert all(e["status"] == "new" for e in ledger.load(cfg)["sample"] if e["author"] == "user")
+    users = [e for e in ledger.load(cfg)["sample"] if e["author"] == "user"]
+    assert all(e["status"] == "new" and e["recovery_attempts"] == 1 for e in users)
     # the run is visible on stdout: a ● new-feedback + ▶ launching line per item (what `serve` streams)
     out = capsys.readouterr().out
     assert out.count("● new feedback on sample") == 2 and out.count("▶ launching") == 2
     assert "first" in out and "second" in out
+
+
+def test_run_once_caps_clean_no_reply_retries_then_holds(cfg, monkeypatch):
+    cfg["agent"]["max_recovery_retries"] = 1
+    fid = ledger.save_entry(cfg, "sample", comment="agent forgot to reply", ts="t")
+
+    class NoReply:
+        @staticmethod
+        def run(_task):
+            return None
+
+    monkeypatch.setattr("curiator.loop.adapters.get", lambda _cfg: NoReply)
+
+    loop.run_once(cfg)
+    user = next(e for e in ledger.load(cfg)["sample"] if e["id"] == fid)
+    assert user["status"] == "new"
+    assert user["recovery_attempts"] == 1
+
+    loop.run_once(cfg)
+    data = ledger.load(cfg)["sample"]
+    user = next(e for e in data if e["id"] == fid)
+    assert user["status"] == "held"
+    assert user["recovery_attempts"] == 2
+    notes = [e for e in data if e.get("kind") == "system" and fid in (e.get("reply_to") or [])]
+    assert any("automatic retry limit (1) is exhausted" in e.get("comment", "") for e in notes)
 
 
 def test_run_once_forces_explicit_anonymous_feedback_to_held(cfg, monkeypatch):
@@ -216,6 +242,7 @@ def test_run_once_resets_item_on_adapter_error(cfg, monkeypatch):
     data = ledger.load(cfg)
     user = [e for e in data["sample"] if e["author"] == "user"][0]
     assert user["status"] == "new"                                  # reset, not stuck on 'working'
+    assert user["recovery_attempts"] == 1
     notes = [e for e in data["sample"] if e["author"] == "claude"]
     assert any("loop error" in (note.get("comment") or "") for note in notes)
     assert all(note.get("ts") for note in notes), "loop-error notes must carry a ts"
@@ -237,6 +264,7 @@ def test_run_once_resets_and_reraises_on_agent_interruption(cfg, monkeypatch):
     user = next(e for e in data if e["id"] == fid)
     note = next(e for e in data if e.get("kind") == "system" and fid in (e.get("reply_to") or []))
     assert user["status"] == "new"
+    assert user["recovery_attempts"] == 1
     assert "watcher recovery" in note["comment"]
     assert "service shutdown" in note["comment"]
 
@@ -273,11 +301,13 @@ def test_run_once_caps_repeated_timeouts_then_parks(cfg, monkeypatch):
     loop.run_once(cfg)                                              # attempt 1 → requeued to try again
     user = next(e for e in ledger.load(cfg)["sample"] if e["id"] == fid)
     assert user["status"] == "new" and user["timeout_attempts"] == 1
+    assert "recovery_attempts" not in user
 
     loop.run_once(cfg)                                              # attempt 2 → cap reached → held
     data = ledger.load(cfg)["sample"]
     user = next(e for e in data if e["id"] == fid)
     assert user["status"] == "held" and user["timeout_attempts"] == 2
+    assert "recovery_attempts" not in user
     notes = [e for e in data if e.get("kind") == "system" and fid in (e.get("reply_to") or [])]
     assert any("time limit" in n["comment"] for n in notes)
     assert any("Parked as" in n["comment"] for n in notes)
@@ -343,6 +373,7 @@ def test_recover_interrupted_working_requeues_watcher_claim(cfg):
     note = next(e for e in data if e.get("kind") == "system" and fid in (e.get("reply_to") or []))
     trace = Path(task.reply_file).read_text()
     assert user["status"] == "new"
+    assert user["recovery_attempts"] == 1
     assert "stale working claim" in note["comment"]
     assert "safely requeued" in trace
 

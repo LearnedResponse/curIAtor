@@ -165,12 +165,20 @@ def _trace_mentions_interactive(cfg: dict, entry: dict) -> bool:
     return "- adapter: `interactive`" in text
 
 
-def _recovery_note(cfg: dict, key: str, entry: dict, text: str, *, status: str) -> None:
+def _recovery_note(
+    cfg: dict,
+    key: str,
+    entry: dict,
+    text: str,
+    *,
+    status: str,
+    fields: dict | None = None,
+) -> None:
     eid = entry.get("id")
     if not eid:
         return
     ledger.add_system_note(cfg, key, text, reply_to=[eid], agent="curiator watcher")
-    ledger.set_status(cfg, key, [eid], status)
+    ledger.update_entry(cfg, key, eid, {"status": status, **(fields or {})})
     runlog.append(runlog.reply_path(cfg, eid), f"\n[{_now()}] {text}\n")
 
 
@@ -181,6 +189,7 @@ def _classify_ended_run(
     reason: str,
     *,
     hold_even_if_unchanged: bool = False,
+    count_unchanged_attempt: bool = True,
 ) -> tuple[str, dict | None]:
     """Capture process-end state and choose retry vs explicit recovery.
 
@@ -204,16 +213,44 @@ def _classify_ended_run(
     formatted = run_recovery.format_report(report)
     runlog.append(runlog.reply_path(cfg, eid), f"\n```text\n{formatted}\n```\n")
     if report.get("source_delta") is False:
-        status = "held" if hold_even_if_unchanged else "new"
-        action = "parked by the Stop request" if hold_even_if_unchanged else "safely requeued"
-        prefix = "Run stopped by user. " if hold_even_if_unchanged else ""
-        text = (
-            f"{prefix}watcher recovery {action}: {reason}. The checkpoint proves the writable source scope "
-            "is unchanged from its pre-run baseline."
-        )
-        _recovery_note(cfg, key, entry, text, status=status)
-        run_recovery.retire_checkpoint(cfg, eid, "held-unchanged" if hold_even_if_unchanged else "requeued-unchanged",
-                                       note=text)
+        fields = {}
+        if hold_even_if_unchanged:
+            status = "held"
+            retirement = "held-unchanged"
+            text = (
+                f"Run stopped by user. watcher recovery parked by the Stop request: {reason}. "
+                "The checkpoint proves the writable source scope is unchanged from its pre-run baseline."
+            )
+        elif count_unchanged_attempt:
+            attempts = int(entry.get("recovery_attempts") or 0) + 1
+            retries = _quota_value((cfg.get("agent") or {}).get("max_recovery_retries"))
+            retries = 1 if retries is None else retries
+            fields["recovery_attempts"] = attempts
+            if attempts > retries:
+                status = "held"
+                retirement = "held-retry-exhausted"
+                text = (
+                    f"watcher recovery parked this item as held after {attempts} unchanged run endings: "
+                    f"{reason}. The automatic retry limit ({retries}) is exhausted. The checkpoint proves "
+                    "the writable source scope is unchanged from its pre-run baseline. Inspect the trace "
+                    "and fix the adapter/environment before requeueing."
+                )
+            else:
+                status = "new"
+                retirement = "requeued-unchanged"
+                text = (
+                    f"watcher recovery safely requeued (unchanged retry {attempts}/{retries}): {reason}. "
+                    "The checkpoint proves the writable source scope is unchanged from its pre-run baseline."
+                )
+        else:
+            status = "new"
+            retirement = "requeued-unchanged"
+            text = (
+                f"watcher recovery safely requeued: {reason}. The checkpoint proves the writable source "
+                "scope is unchanged from its pre-run baseline."
+            )
+        _recovery_note(cfg, key, entry, text, status=status, fields=fields)
+        run_recovery.retire_checkpoint(cfg, eid, retirement, note=text)
         return status, report
 
     changed = ", ".join(report.get("agent_run_paths") or []) or "unclassified source state"
@@ -372,7 +409,13 @@ def run_once(cfg: dict) -> int:
             cap = _quota_value((cfg.get("agent") or {}).get("max_timeouts"))
             cap = 2 if cap is None else cap
             runlog.note(task, f"{exc} (attempt {attempts}/{cap})")
-            _, report = _classify_ended_run(cfg, key, entry, str(exc))
+            _, report = _classify_ended_run(
+                cfg,
+                key,
+                entry,
+                str(exc),
+                count_unchanged_attempt=False,
+            )
             if report is None:
                 ledger.update_entry(cfg, key, eid, {"status": "held", "timeout_attempts": attempts})
                 print(f"curiator:   ⏱ {key}/{eid} → held (checkpoint unavailable after timeout)", flush=True)

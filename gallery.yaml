@@ -39,6 +39,7 @@ agent:
   #   (permission_mode: bypassPermissions ⇒ codex --dangerously-bypass-approvals-and-sandbox, full trust)
   timeout: 900                  # seconds before the one-shot agent is stopped (a "taking a while" heartbeat shows meanwhile)
   max_timeouts: 2               # after this many time-limit stops the item is parked (held), not retried forever
+  max_recovery_retries: 1       # unchanged no-reply/error exits get one automatic retry, then park held
   cmd: "claude -p {task_file}"  # used only by adapter: command
   context:
     bundle: null                # required for adapter: api (cold start) — a CONTEXT.md/LESSONS.md
