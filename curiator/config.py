@@ -213,6 +213,11 @@ def _load_config_from_path(path: str | Path, *, link: dict | None = None) -> dic
     if link:
         cfg["link"] = {k: v for k, v in link.items() if not k.startswith("_")}
         cfg["link_path"] = link["_path"]
+    from .web_paths import normalize_base_path
+
+    shell = cfg.get("shell") or {}
+    shell["base_path"] = normalize_base_path(shell.get("base_path"))
+    cfg["shell"] = shell
     agent = cfg.get("agent") or {}
     if _AGENT_ADAPTER_OVERRIDE is not None:
         agent["adapter"] = _AGENT_ADAPTER_OVERRIDE

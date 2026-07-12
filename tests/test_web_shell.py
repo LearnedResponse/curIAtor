@@ -30,6 +30,32 @@ def _load_web_mod(monkeypatch):
     return mod
 
 
+def test_react_shell_mounts_at_configured_base_path(collection, monkeypatch):
+    gallery = collection / "gallery.yaml"
+    gallery.write_text(gallery.read_text().replace(
+        "shell:\n  port: 8399",
+        "shell:\n  port: 8399\n  base_path: /gallery/demo\n  secure_cookies: true\n  proxy_hops: 1",
+    ))
+    monkeypatch.chdir(collection)
+    mod = _load_web_mod(monkeypatch)
+
+    from werkzeug.test import Client
+    from werkzeug.wrappers import Response
+
+    application, _flask = mod.build_application()
+    client = Client(application, Response)
+    root = client.get("/gallery/demo/")
+    assert root.status_code == 200
+    assert 'window.CURIATOR_BASE_PATH = "/gallery/demo"' in root.get_data(as_text=True)
+    assert 'href="/gallery/demo/assets/react_shell.css"' in root.get_data(as_text=True)
+    boot = client.get("/gallery/demo/api/bootstrap").get_json()
+    assert boot["base_path"] == "/gallery/demo"
+    assert client.get("/api/bootstrap").status_code == 404
+    assert _flask.config["SESSION_COOKIE_NAME"] == "curiator_session_gallery_demo"
+    assert _flask.config["SESSION_COOKIE_PATH"] == "/gallery/demo/"
+    assert _flask.config["SESSION_COOKIE_SECURE"] is True
+
+
 @pytest.fixture
 def web_mod(collection, monkeypatch):
     return _load_web_mod(monkeypatch)
@@ -110,7 +136,7 @@ apps:
 def test_react_shell_general_iframe_src_is_stable(web_client):
     body = web_client.get("/assets/react_shell.js").get_data(as_text=True)
     assert "function appSrc(key, generalKey, revision, extraQuery)" in body
-    assert 'return "/general";' in body
+    assert 'return localPath("/general");' in body
     assert "/general?t=" not in body
     assert 'params.set("v", String(rev))' in body           # app cache-buster still applied
     assert "selectedApp && selectedApp.revision" in body
@@ -477,7 +503,7 @@ def test_react_shell_has_local_voice_transcription(web_client):
     assert "function transcribeBlob" in js
     assert "MediaRecorder" in js
     assert "getUserMedia" in js
-    assert 'fetch("/api/transcribe"' in js
+    assert 'fetch(localPath("/api/transcribe")' in js
     assert "function startBrowserSpeech" in js
     assert "function stopBrowserSpeech" in js
     assert "displayNarrativeRows(buildNarrative(entry))" in js

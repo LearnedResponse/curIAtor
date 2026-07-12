@@ -10,6 +10,7 @@
     rejected: "#555"
   };
   const DICTATION_HINT = "OS dictation can type feedback here.";
+  const BASE_PATH = String(window.CURIATOR_BASE_PATH || "").replace(/\/$/, "");
   const NEW_APP_TYPES = [
     ["dash", "Dash"],
     ["react_node", "React + Node"],
@@ -21,8 +22,14 @@
     ["other", "Other (will try to accommodate)"]
   ];
 
+  function localPath(path) {
+    if (!path || /^(?:[a-z]+:)?\/\//i.test(path) || path[0] === "#") return path;
+    if (!BASE_PATH || path === BASE_PATH || path.indexOf(BASE_PATH + "/") === 0) return path;
+    return BASE_PATH + "/" + path.replace(/^\//, "");
+  }
+
   function api(path, opts) {
-    return fetch(path, Object.assign({headers: {"content-type": "application/json"}}, opts || {}))
+    return fetch(localPath(path), Object.assign({headers: {"content-type": "application/json"}}, opts || {}))
       .then((r) => r.ok ? r.json() : r.json().catch(() => ({})).then((j) => Promise.reject(j)));
   }
 
@@ -38,8 +45,8 @@
 
   function appSrc(key, generalKey, revision, extraQuery) {
     if (!key) return "";
-    if (key === generalKey) return "/general";
-    const base = "/app/" + encodeURIComponent(key) + "/";
+    if (key === generalKey) return localPath("/general");
+    const base = localPath("/app/" + encodeURIComponent(key) + "/");
     // Forward any deep-link query args (e.g. ?node=crit) to the mounted app, plus the reload cache-buster.
     const params = new URLSearchParams(extraQuery || "");
     const rev = Number(revision) || 0;
@@ -1209,7 +1216,7 @@
                 ? effective : (variant.profile || {});
               const accepted = group.review && group.review.variant_id === variant.id;
               const screenshot = browser.ok && group.status !== "deleted"
-                ? "/api/replays/" + group.id + "/" + variant.id + "/screenshot?v=" + encodeURIComponent(group.updated_at || "")
+                ? localPath("/api/replays/" + group.id + "/" + variant.id + "/screenshot?v=" + encodeURIComponent(group.updated_at || ""))
                 : null;
               return h("section", {className: "rshell-replay-variant", key: variant.id},
                 h("div", {className: "rshell-replay-variant-head"},
@@ -1373,14 +1380,14 @@
     const items = [];
     if (auth.is_admin) {
       const workspaceHref = boot.workspace && boot.workspace.control_url
-        ? boot.workspace.control_url + "/?workspaces=1" : "/?workspaces=1";
-      items.push(["Workspaces", workspaceHref, "_top"], ["Queue", "/queue", "app-frame"],
-        ["Settings", "/settings", "app-frame"]);
+        ? boot.workspace.control_url + "/?workspaces=1" : localPath("/?workspaces=1");
+      items.push(["Workspaces", workspaceHref, "_top"], ["Queue", localPath("/queue"), "app-frame"],
+        ["Settings", localPath("/settings"), "app-frame"]);
     }
     if (verified) {
-      items.push(["Profile", "/profile", "app-frame"], ["Sign out", "/logout", "_top"]);
+      items.push(["Profile", localPath("/profile"), "app-frame"], ["Sign out", localPath("/logout"), "_top"]);
     } else {
-      items.push(["Log in", "/login", mode === "oidc" || mode === "local" ? "_top" : "app-frame"]);
+      items.push(["Log in", localPath("/login"), mode === "oidc" || mode === "local" ? "_top" : "app-frame"]);
     }
     return h("div", {className: "rshell-auth"},
       open ? h("button", {className: "rshell-auth-scrim", "aria-label": "close account menu",
@@ -1613,7 +1620,7 @@
       const form = new FormData();
       form.append("audio", blob, "feedback.webm");
       setMsg("Transcribing feedback…");
-      return fetch("/api/transcribe", {method: "POST", body: form})
+      return fetch(localPath("/api/transcribe"), {method: "POST", body: form})
         .then((r) => r.ok ? r.json() : r.json().catch(() => ({})).then((j) => Promise.reject(j)))
         .then((data) => {
           appendTranscript(data.text || "");

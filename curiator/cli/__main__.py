@@ -203,9 +203,9 @@ def _feedback_counts(cfg: dict, app: str) -> tuple[int, int]:
 
 
 def _shell_url(cfg: dict, app: str | None = None) -> str:
-    port = (cfg.get("shell", {}) or {}).get("port", 8200)
-    base = f"http://127.0.0.1:{port}"
-    return f"{base}/?app={app}" if app else base
+    from ..web_paths import local_shell_url
+
+    return local_shell_url(cfg, app=app)
 
 
 def _curiator_env_cmd(cfg: dict, *parts: str) -> str:

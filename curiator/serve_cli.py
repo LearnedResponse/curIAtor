@@ -64,8 +64,10 @@ def _reload_in_shell(cfg: dict, app: str) -> str | None:
     Non-fatal — the shell may be down or on another host. Returns a status line, or None."""
     import urllib.error
     import urllib.request
+    from .web_paths import local_shell_url
+
     port = (cfg.get("shell", {}) or {}).get("port", 8200)
-    url = f"http://127.0.0.1:{port}/reload/{app}"
+    url = local_shell_url(cfg, path=f"/reload/{app}")
     try:
         with urllib.request.urlopen(urllib.request.Request(url, method="POST"), timeout=3) as r:
             return f"reloaded {app} in shell :{port} (HTTP {r.status})"
@@ -75,8 +77,9 @@ def _reload_in_shell(cfg: dict, app: str) -> str | None:
 
 def cmd_up(args) -> int:
     cfg = load_config()
-    port = (cfg.get("shell", {}) or {}).get("port", 8200)
-    print(f"curiator: serving the gallery at http://127.0.0.1:{port}  (Ctrl-C to stop)")
+    from .web_paths import local_shell_url
+
+    print(f"curiator: serving the gallery at {local_shell_url(cfg)}  (Ctrl-C to stop)")
     kind = "legacy-dash" if getattr(args, "legacy_dash_shell", False) else None
     return subprocess.run([sys.executable, str(_shell_path(kind)), *_gallery_cli_args(cfg)], cwd=cfg["repo_root"],
                           env=_child_env(cfg)).returncode
@@ -93,8 +96,9 @@ def _serve(cfg: dict, *, reset: bool = False, shell_kind: str | None = None) -> 
     Used by `curiator serve` (the container entrypoint) and `curiator demo-up` (reset=True)."""
     if reset:
         _reset_demo(cfg)
-    port = (cfg.get("shell", {}) or {}).get("port", 8200)
-    url = f"http://127.0.0.1:{port}"
+    from .web_paths import local_shell_url
+
+    url = local_shell_url(cfg)
     # the watcher is its own process so the foreground shell owns the terminal; we reap it on exit.
     env = _child_env(cfg)
     # -u: unbuffered, so the watcher's ●/▶/✓ feedback+agent lines stream out immediately (not block-buffered

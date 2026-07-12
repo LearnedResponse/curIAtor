@@ -261,8 +261,9 @@ def _remove_worktree(repo: Path, branch: str) -> None:
 
 
 def _notify_shell(cfg: dict, app: str) -> None:
-    port = (cfg.get("shell") or {}).get("port", 8200)
-    url = f"http://127.0.0.1:{port}/reload/{urllib.parse.quote(app, safe='')}"
+    from .web_paths import local_shell_url
+
+    url = local_shell_url(cfg, path=f"/reload/{urllib.parse.quote(app, safe='')}")
     try:
         urllib.request.urlopen(urllib.request.Request(url, method="POST"), timeout=1).close()
     except (urllib.error.URLError, OSError):

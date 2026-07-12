@@ -102,6 +102,9 @@ git:
 
 shell:
   port: 8300        # 8200 is commonly taken; 8300 avoids the usual collisions
+  # base_path: /gallery/example  # public URL prefix when mounted below a reverse-proxy origin
+  # proxy_hops: 1                # trusted X-Forwarded-* proxy hops (0 for direct/local use)
+  # secure_cookies: true         # use for HTTPS-hosted galleries
 
 # tag → chip color (optional)
 tags:

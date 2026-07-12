@@ -20,12 +20,21 @@ from pathlib import Path
 from urllib.parse import quote
 
 from flask import Flask, Response, jsonify, redirect, request, send_from_directory
+from werkzeug.middleware.proxy_fix import ProxyFix
 
 from curiator.shell import app_shell as core
 from curiator import auth, ledger
 from curiator.agent_capabilities import agent_report
 from curiator.design_refs import DesignReferenceError
 from curiator.transcripts import bounded_text, clean_transcript_segments
+from curiator.web_paths import PrefixMiddleware, normalize_base_path, public_path
+
+
+BASE_PATH = normalize_base_path(core.REG.SHELL_CFG.get("base_path"))
+
+
+def _url(path: str = "/") -> str:
+    return public_path(BASE_PATH, path)
 
 
 def _dash_deps_dir() -> Path:
@@ -36,12 +45,12 @@ def _dash_deps_dir() -> Path:
 def _safe_entry(entry: dict) -> dict:
     out = dict(entry)
     if entry.get("screenshot"):
-        out["shot_url"] = f"/feedback-shot/{Path(entry['screenshot']).name}"
+        out["shot_url"] = _url(f"/feedback-shot/{Path(entry['screenshot']).name}")
     if entry.get("audio"):
-        out["audio_url"] = f"/feedback-audio/{Path(entry['audio']).name}"
+        out["audio_url"] = _url(f"/feedback-audio/{Path(entry['audio']).name}")
     trace = core._trace_path(entry.get("id"))
     if trace and trace.exists():
-        out["trace_url"] = f"/feedback-trace/{entry.get('id')}"
+        out["trace_url"] = _url(f"/feedback-trace/{entry.get('id')}")
     out["replay_eligible"] = bool(
         entry.get("id") and entry.get("kind") != "system" and entry.get("status") == "done"
     )
@@ -100,6 +109,10 @@ def _queue_actor(user: dict | None) -> str:
     return user.get("email") or user.get("name") or user.get("id") or "shell admin"
 
 
+def _queue_action_url(feedback_id: str, action: str) -> str:
+    return _url(f"/queue/{quote(str(feedback_id), safe='')}/{action}")
+
+
 def _queue_find(feedback_id: str) -> tuple[str, dict] | None:
     for key, items in core.load_feedback().items():
         for entry in items:
@@ -138,7 +151,8 @@ def _queue_page_html(message: str = "") -> str:
         stars = "★" * int(entry.get("stars") or 0)
         shot = ""
         if entry.get("screenshot"):
-            shot = (f"<img src='/feedback-shot/{core._esc(Path(entry['screenshot']).name)}' "
+            shot_url = _url(f"/feedback-shot/{quote(Path(entry['screenshot']).name)}")
+            shot = (f"<img src='{shot_url}' "
                     "style='display:block;max-width:420px;margin-top:8px;border:1px solid #ddd;"
                     "border-radius:4px'>")
         feedback_id = entry.get("id") or ""
@@ -158,20 +172,20 @@ def _queue_page_html(message: str = "") -> str:
                 f"<div style='font-size:12px;color:#666;margin:3px 0 7px'>{len(changed)} run path(s) · "
                 f"{len(conflicts)} post-interruption path(s) · restore "
                 f"{'available' if recovery.get('restore_safe') else 'disabled'}</div>"
-                f"<form method='post' action='/queue/{core._esc(feedback_id)}/resume' style='display:inline'>"
+                f"<form method='post' action='{_queue_action_url(feedback_id, 'resume')}' style='display:inline'>"
                 "<button style='margin-right:5px'>Resume</button></form>"
-                f"<form method='post' action='/queue/{core._esc(feedback_id)}/preserve' style='display:inline'>"
+                f"<form method='post' action='{_queue_action_url(feedback_id, 'preserve')}' style='display:inline'>"
                 "<button style='margin-right:5px'>Preserve branch</button></form>"
-                f"<form method='post' action='/queue/{core._esc(feedback_id)}/restore' style='display:inline'>"
+                f"<form method='post' action='{_queue_action_url(feedback_id, 'restore')}' style='display:inline'>"
                 f"<button style='margin-right:5px'{restore_disabled}>Restore baseline</button></form>"
-                f"<form method='post' action='/queue/{core._esc(feedback_id)}/discard-checkpoint' "
+                f"<form method='post' action='{_queue_action_url(feedback_id, 'discard-checkpoint')}' "
                 "style='display:inline'><button>Keep files</button></form></div>"
             )
             approve = ""
         else:
             recovery_controls = ""
             approve = (
-                f"<form method='post' action='/queue/{core._esc(feedback_id)}/approve' "
+                f"<form method='post' action='{_queue_action_url(feedback_id, 'approve')}' "
                 "style='display:inline-block;margin-top:8px;margin-right:8px'>"
                 "<button style='background:#1f9d55;color:white;border:none;border-radius:5px;"
                 "padding:6px 13px;font-weight:700;cursor:pointer'>Approve</button></form>"
@@ -187,7 +201,7 @@ def _queue_page_html(message: str = "") -> str:
             f"<p style='font-size:14px;white-space:pre-wrap'>{core._esc(entry.get('comment') or '')}</p>"
             f"{shot}"
             f"{recovery_controls}{approve}"
-            f"<form method='post' action='/queue/{core._esc(entry.get('id') or '')}/reject' "
+            f"<form method='post' action='{_queue_action_url(entry.get('id') or '', 'reject')}' "
             "style='display:inline-flex;gap:6px;align-items:center;margin-top:8px'>"
             "<input name='reason' placeholder='optional rejection reason' "
             "style='font:inherit;font-size:12px;border:1px solid #ccc;border-radius:5px;padding:6px;width:220px'>"
@@ -477,17 +491,18 @@ def _index() -> str:
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width,initial-scale=1">
     <title>{core._esc(core.TITLE)}</title>
-    <link rel="icon" href="/assets/favicon.ico">
-    <link rel="stylesheet" href="/assets/shell.css">
-    <link rel="stylesheet" href="/assets/react_shell.css">
+    <link rel="icon" href="{_url('/assets/favicon.ico')}">
+    <link rel="stylesheet" href="{_url('/assets/shell.css')}">
+    <link rel="stylesheet" href="{_url('/assets/react_shell.css')}">
   </head>
   <body>
     <div id="react-entry-point"></div>
-    <script src="/vendor/react@18.3.1.min.js"></script>
-    <script src="/vendor/react-dom@18.3.1.min.js"></script>
-    <script src="/assets/html2canvas.min.js"></script>
-    <script src="/assets/localtime.js"></script>
-    <script src="/assets/react_shell.js"></script>
+    <script>window.CURIATOR_BASE_PATH = {json.dumps(BASE_PATH)};</script>
+    <script src="{_url('/vendor/react@18.3.1.min.js')}"></script>
+    <script src="{_url('/vendor/react-dom@18.3.1.min.js')}"></script>
+    <script src="{_url('/assets/html2canvas.min.js')}"></script>
+    <script src="{_url('/assets/localtime.js')}"></script>
+    <script src="{_url('/assets/react_shell.js')}"></script>
   </body>
 </html>"""
 
@@ -495,6 +510,14 @@ def _index() -> str:
 def build_flask_app() -> Flask:
     app = Flask(__name__, static_folder=None)
     app.secret_key = os.environ.get("CURIATOR_SECRET_KEY") or os.urandom(24)
+    cookie_suffix = re.sub(r"[^a-z0-9]+", "_", BASE_PATH.lower()).strip("_")
+    app.config.update(
+        SESSION_COOKIE_NAME="curiator_session" + (f"_{cookie_suffix}" if cookie_suffix else ""),
+        SESSION_COOKIE_PATH=(BASE_PATH + "/") if BASE_PATH else "/",
+        SESSION_COOKIE_HTTPONLY=True,
+        SESSION_COOKIE_SAMESITE="Lax",
+        SESSION_COOKIE_SECURE=bool(core.REG.SHELL_CFG.get("secure_cookies", False)),
+    )
 
     mode = core.REG.AUTH_CFG.get("mode", "none")
     if mode == "oidc":
@@ -511,7 +534,7 @@ def build_flask_app() -> Flask:
                 if u:
                     auth.clear_login_failures(ip)
                     session[auth.SESSION_KEY] = u
-                    return redirect("/")
+                    return redirect(_url("/"))
                 auth.record_login_failure(core.REG.AUTH_CFG, ip)
                 blocked, retry = auth.rate_limit_status(core.REG.AUTH_CFG, ip)
                 err = "" if blocked else "<p style='color:#c0392b;font-size:13px;margin:0 0 8px'>Invalid email or password.</p>"
@@ -523,7 +546,7 @@ def build_flask_app() -> Flask:
         def _local_logout():
             from flask import session
             session.pop(auth.SESSION_KEY, None)
-            return redirect("/")
+            return redirect(_url("/"))
     else:
         @app.route("/login")
         def _login_info():
@@ -531,7 +554,7 @@ def build_flask_app() -> Flask:
 
         @app.route("/logout")
         def _logout_noop():
-            return redirect("/")
+            return redirect(_url("/"))
 
     @app.route("/")
     def _root():
@@ -554,6 +577,7 @@ def build_flask_app() -> Flask:
         return jsonify({
             "title": core.TITLE,
             "collection": core.COLLECTION_NAME,
+            "base_path": BASE_PATH,
             "general_key": core.GENERAL_KEY,
             "general": _general_payload(),
             "poll_ms": max(core.POLL_MS, 1000) if core.POLL_MS > 0 else 0,
@@ -782,11 +806,11 @@ def build_flask_app() -> Flask:
                 f"{core._esc(', '.join(u.get('groups') or []) or '—')} · auth mode: "
                 f"<code>{mode}</code></p>")
         if mode == "oidc":
-            action = (f"<a href='/logout' target='_top' style='{btn}'>Sign out</a>" if u
-                      else f"<a href='/login' target='_top' style='{btn}'>Sign in</a>")
+            action = (f"<a href='{_url('/logout')}' target='_top' style='{btn}'>Sign out</a>" if u
+                      else f"<a href='{_url('/login')}' target='_top' style='{btn}'>Sign in</a>")
         elif mode == "local":
-            action = (f"<a href='/logout' target='_top' style='{btn}'>Sign out</a>" if u
-                      else f"<a href='/login' target='_top' style='{btn}'>Sign in</a>")
+            action = (f"<a href='{_url('/logout')}' target='_top' style='{btn}'>Sign out</a>" if u
+                      else f"<a href='{_url('/login')}' target='_top' style='{btn}'>Sign in</a>")
         elif mode == "header":
             action = ("<p style='color:#777;font-size:13px'>Authenticated via your gateway — "
                       "sign out through your identity provider.</p>")
@@ -813,7 +837,7 @@ def build_flask_app() -> Flask:
                 if key in request.form:
                     text = set_block_key(text, "agent", key, request.form.get(key))
             gallery.write_text(text)
-            return redirect("/settings?saved=1")
+            return redirect(_url("/settings?saved=1"))
         return core._page("Agent settings",
                           core._settings_html(cfg.get("agent") or {}, cfg["gallery_path"],
                                               saved=request.args.get("saved") == "1"))
@@ -854,11 +878,11 @@ def build_flask_app() -> Flask:
                 else:
                     run_recovery.discard_checkpoint(core.LEDGER_CFG, feedback_id)
             except run_recovery.CheckpointError as exc:
-                return redirect(f"/queue?msg={quote('Recovery failed: ' + str(exc))}")
-            return redirect(f"/queue?msg={quote('Recovery ' + action + ' completed')}")
+                return redirect(_url(f"/queue?msg={quote('Recovery failed: ' + str(exc))}"))
+            return redirect(_url(f"/queue?msg={quote('Recovery ' + action + ' completed')}"))
         if action == "approve":
             if run_recovery.checkpoint_path(core.LEDGER_CFG, feedback_id).exists():
-                return redirect("/queue?msg=Use+the+explicit+recovery+actions+for+this+run")
+                return redirect(_url("/queue?msg=Use+the+explicit+recovery+actions+for+this+run"))
             ledger.add_system_note(
                 core.LEDGER_CFG,
                 key,
@@ -871,7 +895,7 @@ def build_flask_app() -> Flask:
                 "moderation_approved_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
                 "moderation_approved_by": actor,
             })
-            return redirect("/queue?msg=Approved")
+            return redirect(_url("/queue?msg=Approved"))
 
         reason = (request.form.get("reason") or "").strip()
         text = f"Moderation queue: rejected by {actor}; closed without agent dispatch."
@@ -883,7 +907,7 @@ def build_flask_app() -> Flask:
             run_recovery.retire_checkpoint(core.LEDGER_CFG, feedback_id, "closed", note=text)
             run_recovery.append_trace(core.LEDGER_CFG, feedback_id,
                                       "Recovery checkpoint retired; source left untouched.")
-        return redirect("/queue?msg=Rejected")
+        return redirect(_url("/queue?msg=Rejected"))
 
     @app.route("/api/feedback/<key>", methods=["GET", "POST"])
     def _feedback(key):
@@ -1110,7 +1134,11 @@ def build_flask_app() -> Flask:
 def build_application():
     flask_app = build_flask_app()
     core._DISPATCHER = core.LazyDispatcher(flask_app)
-    return core._DISPATCHER, flask_app
+    application = PrefixMiddleware(core._DISPATCHER, BASE_PATH)
+    proxy_hops = int(core.REG.SHELL_CFG.get("proxy_hops") or 0)
+    if proxy_hops > 0:
+        application = ProxyFix(application, x_for=proxy_hops, x_proto=proxy_hops, x_host=proxy_hops)
+    return application, flask_app
 
 
 if __name__ == "__main__":

@@ -53,6 +53,7 @@ from dash import ALL, Dash, Input, Output, State, ctx, dcc, html, no_update
 from dash.dependencies import ClientsideFunction
 from flask import has_request_context, request, send_from_directory
 from werkzeug.middleware.dispatcher import DispatcherMiddleware  # noqa: F401 (kept for reference)
+from werkzeug.middleware.proxy_fix import ProxyFix
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parents[1]))
@@ -64,10 +65,18 @@ from curiator.annotations import clean_annotations  # noqa: E402
 from curiator.design_refs import clean_design_refs  # noqa: E402
 from curiator.narrative import build_narrative, display_narrative_rows  # noqa: E402
 from curiator.transcripts import clean_transcript_segments  # noqa: E402
+from curiator.web_paths import PrefixMiddleware, normalize_base_path, public_path  # noqa: E402
 set_gallery_override_from_argv()
 import registry as REG  # gallery.yaml-backed registry
 from curiator import auth, ledger  # identity/provenance + shared SQLite feedback ledger
 PORT = REG.SHELL_CFG.get("port", PORT)  # honor gallery.yaml: shell.port
+BASE_PATH = normalize_base_path(REG.SHELL_CFG.get("base_path"))
+
+
+def _public_path(path: str = "/") -> str:
+    return public_path(BASE_PATH, path)
+
+
 def _norm_title(raw):
     """Browser-tab title: normalize a leading brand token to the canonical lowercase 'curIAtor'."""
     s = (raw or "curIAtor").strip()
@@ -165,7 +174,7 @@ def _trace_exists(entry: dict) -> bool:
 
 
 def _trace_href(entry: dict) -> str:
-    return f"/feedback-trace/{entry.get('id')}"
+    return _public_path(f"/feedback-trace/{entry.get('id')}")
 
 
 def _status_badge(entry: dict, status: str, color: str):
@@ -287,10 +296,10 @@ def _trace_page(feedback_id: str, text: str) -> str:
             recovery_html = (
                 "<section class='recovery'><b>Interrupted run</b>"
                 f"<span>{changed} changed path(s) · {conflicts} later conflict(s)</span>"
-                f"<form method='post' action='/queue/{fid}/resume'><button>Resume</button></form>"
-                f"<form method='post' action='/queue/{fid}/preserve'><button>Preserve branch</button></form>"
-                f"<form method='post' action='/queue/{fid}/restore'><button{disabled}>Restore baseline</button></form>"
-                f"<form method='post' action='/queue/{fid}/discard-checkpoint'><button>Keep files</button></form>"
+                f"<form method='post' action='{_public_path(f'/queue/{fid}/resume')}'><button>Resume</button></form>"
+                f"<form method='post' action='{_public_path(f'/queue/{fid}/preserve')}'><button>Preserve branch</button></form>"
+                f"<form method='post' action='{_public_path(f'/queue/{fid}/restore')}'><button{disabled}>Restore baseline</button></form>"
+                f"<form method='post' action='{_public_path(f'/queue/{fid}/discard-checkpoint')}'><button>Keep files</button></form>"
                 "</section>"
             )
     except Exception:
@@ -334,7 +343,7 @@ def _trace_page(feedback_id: str, text: str) -> str:
       const pre = document.getElementById('trace');
       async function refresh() {{
         const nearBottom = pre.scrollTop + pre.clientHeight >= pre.scrollHeight - 40;
-        const r = await fetch('/feedback-trace/{fid}.md', {{cache: 'no-store'}});
+        const r = await fetch('{_public_path(f'/feedback-trace/{fid}.md')}', {{cache: 'no-store'}});
         if (r.ok) {{
           pre.textContent = await r.text();
           if (nearBottom) pre.scrollTop = pre.scrollHeight;
@@ -348,7 +357,7 @@ def _trace_page(feedback_id: str, text: str) -> str:
         stopbtn.disabled = true;
         stopmsg.textContent = 'stopping…';
         try {{
-          const r = await fetch('/feedback-trace/{fid}/stop', {{method: 'POST'}});
+          const r = await fetch('{_public_path(f'/feedback-trace/{fid}/stop')}', {{method: 'POST'}});
           const j = await r.json().catch(() => ({{}}));
           if (r.ok) {{
             stopmsg.textContent = 'stop requested — the run halts within a few seconds, then parks as held.';
@@ -378,7 +387,8 @@ _AUTH_MENU_HIDDEN = {**_AUTH_MENU_BASE, "display": "none"}
 
 
 def _menu_item(label, href, target):
-    return html.A(label, href=href, target=target, className="auth-menu-item",
+    target_href = _public_path(href) if str(href).startswith("/") else href
+    return html.A(label, href=target_href, target=target, className="auth-menu-item",
                   style={"display": "block", "padding": "7px 14px", "color": "#333",
                          "textDecoration": "none", "fontSize": "12.5px", "whiteSpace": "nowrap"})
 
@@ -386,7 +396,7 @@ def _menu_item(label, href, target):
 _INPUT = ("display:block;width:100%;padding:8px 10px;margin:6px 0;box-sizing:border-box;"
           "border:1px solid #ccc;border-radius:6px;font-size:13px")
 _LOGIN_FORM = (
-    f"<form method='post' action='/login' style='max-width:300px'>"
+    f"<form method='post' action='{_public_path('/login')}' style='max-width:300px'>"
     f"<input name='email' type='email' placeholder='email' autofocus required style='{_INPUT}'>"
     f"<input name='password' type='password' placeholder='password' required style='{_INPUT}'>"
     f"<button type='submit' style='background:{PURPLE};color:white;border:none;padding:9px 18px;"
@@ -412,7 +422,7 @@ def _settings_html(agent: dict, gallery_path: str, saved: bool = False) -> str:
               "it on the next poll (no restart).</div>" if saved else "")
     return (
         f"{banner}"
-        f"<form method='post' action='/settings' style='max-width:430px'>"
+        f"<form method='post' action='{_public_path('/settings')}' style='max-width:430px'>"
         f"<label style='{lbl}'>Provider (adapter)</label>"
         f"{sel('adapter', agent.get('adapter', 'headless-cc'), ['headless-cc', 'codex', 'command'])}"
         f"<label style='{lbl}'>Model <span style='font-weight:400;color:#999'>(blank = provider default)</span></label>"
@@ -1154,7 +1164,7 @@ def render_history(range_key=None, filter_key=None):
                 btns = ""
                 if tb and e["id"] == tb[0]:
                     chips = "".join(
-                        f"<button onclick=\"fetch('/fb-action?key={_esc(key)}&amp;value={_esc(val)}"
+                        f"<button onclick=\"fetch('{_public_path('/fb-action')}?key={_esc(key)}&amp;value={_esc(val)}"
                         f"&amp;reply_to={_esc(tb[0])}',"
                         f"{{method:'POST'}}).then(function(){{location.reload()}})\" "
                         f"style='font-size:11px;font-weight:700;color:white;background:#2980b9;border:none;"
@@ -1387,7 +1397,7 @@ def resolve_server(key):
     rec = BY_KEY.get(key) or {}
     mount_cfg = rec.get("mount") or {}
     module = mount_cfg.get("module") or key
-    os.environ["DASH_REQUESTS_PATHNAME_PREFIX"] = f"/app/{key}/"
+    os.environ["DASH_REQUESTS_PATHNAME_PREFIX"] = _public_path(f"/app/{key}/")
     try:
         mod = importlib.import_module(module)
         if hasattr(mod, "build_app"):
@@ -1432,7 +1442,13 @@ def _proxy_log_paths(key: str, role: str) -> tuple[Path, Path]:
 def _proxy_env(key: str, rec: dict, port) -> dict[str, str]:
     mount_cfg = rec.get("mount") or {}
     engine_port = mount_cfg.get("engine_port")
-    env = {**os.environ, "PORT": str(port), "CURIATOR_APP": key}
+    env = {
+        **os.environ,
+        "PORT": str(port),
+        "CURIATOR_APP": key,
+        "CURIATOR_BASE_PATH": BASE_PATH,
+        "CURIATOR_APP_PATH": _public_path(f"/app/{key}"),
+    }
     if engine_port:
         env["CURIATOR_ENGINE_PORT"] = str(engine_port)
         env["CURIATOR_ENGINE_URL"] = f"http://127.0.0.1:{engine_port}"
@@ -1697,7 +1713,7 @@ def _proxy_forward_headers(key: str, environ) -> dict[str, str]:
     headers: dict[str, str] = {}
     host = environ.get("HTTP_HOST") or ""
     scheme = environ.get("HTTP_X_FORWARDED_PROTO") or environ.get("wsgi.url_scheme") or "http"
-    prefix = f"/app/{key}"
+    prefix = (environ.get("SCRIPT_NAME") or "").rstrip("/") + f"/app/{key}"
     remote = environ.get("REMOTE_ADDR") or ""
     existing_for = environ.get("HTTP_X_FORWARDED_FOR") or ""
     forwarded_for = ", ".join(part for part in (existing_for, remote) if part)
@@ -2065,13 +2081,13 @@ def reload_app(key: str) -> dict:
 # ============================== shell chrome =================================
 def app_src(key):
     if key == GENERAL_KEY:
-        return "/general"
+        return _public_path("/general")
     r = BY_KEY.get(key)
     if not r:
         return ""
     if r["kind"] == "static":
-        return f"/static-app/{key}.html"
-    return f"/app/{key}/"
+        return _public_path(f"/static-app/{key}.html")
+    return _public_path(f"/app/{key}/")
 
 
 def build_shell() -> Dash:
@@ -2081,6 +2097,14 @@ def build_shell() -> Dash:
 
     # Flask session (login state) + the login routes appropriate to auth.mode.
     shell.server.secret_key = os.environ.get("CURIATOR_SECRET_KEY") or os.urandom(24)
+    cookie_suffix = re.sub(r"[^a-z0-9]+", "_", BASE_PATH.lower()).strip("_")
+    shell.server.config.update(
+        SESSION_COOKIE_NAME="curiator_session" + (f"_{cookie_suffix}" if cookie_suffix else ""),
+        SESSION_COOKIE_PATH=(BASE_PATH + "/") if BASE_PATH else "/",
+        SESSION_COOKIE_HTTPONLY=True,
+        SESSION_COOKIE_SAMESITE="Lax",
+        SESSION_COOKIE_SECURE=bool(REG.SHELL_CFG.get("secure_cookies", False)),
+    )
     _mode = REG.AUTH_CFG.get("mode", "none")
     if _mode == "oidc":
         auth.register_oidc(REG.AUTH_CFG, shell.server)       # /login → IdP, /auth/callback, /logout
@@ -2096,7 +2120,7 @@ def build_shell() -> Dash:
                 if u:
                     auth.clear_login_failures(ip)
                     session[auth.SESSION_KEY] = u
-                    return redirect("/")
+                    return redirect(_public_path("/"))
                 auth.record_login_failure(REG.AUTH_CFG, ip)   # too many → lock the IP out for a while
                 blocked, retry = auth.rate_limit_status(REG.AUTH_CFG, ip)
                 err = "" if blocked else "<p style='color:#c0392b;font-size:13px;margin:0 0 8px'>Invalid email or password.</p>"
@@ -2108,7 +2132,7 @@ def build_shell() -> Dash:
         def _local_logout():
             from flask import redirect, session
             session.pop(auth.SESSION_KEY, None)
-            return redirect("/")
+            return redirect(_public_path("/"))
     else:                                                    # none / header — no curiator login
         @shell.server.route("/login")
         def _login_info():
@@ -2123,7 +2147,7 @@ def build_shell() -> Dash:
         @shell.server.route("/logout")                       # header/none: no curiator session to clear
         def _logout_noop():
             from flask import redirect
-            return redirect("/")
+            return redirect(_public_path("/"))
 
     @shell.server.route("/profile")                          # who you are + sign in/out (all modes)
     def _profile():
@@ -2136,8 +2160,8 @@ def build_shell() -> Dash:
                 f"<p style='color:#777;font-size:12.5px'>groups: {_esc(', '.join(u.get('groups') or []) or '—')} "
                 f"· auth mode: <code>{m}</code></p>")
         if m == "oidc":
-            action = (f"<a href='/logout' target='_top' style='{btn}'>Sign out</a>" if u
-                      else f"<a href='/login' target='_top' style='{btn}'>Sign in</a>")
+            action = (f"<a href='{_public_path('/logout')}' target='_top' style='{btn}'>Sign out</a>" if u
+                      else f"<a href='{_public_path('/login')}' target='_top' style='{btn}'>Sign in</a>")
         elif m == "header":
             action = ("<p style='color:#777;font-size:13px'>Authenticated via your gateway — "
                       "sign out through your identity provider.</p>")
@@ -2164,7 +2188,7 @@ def build_shell() -> Dash:
                 if key in request.form:
                     text = set_block_key(text, "agent", key, request.form.get(key))
             gallery.write_text(text)
-            return redirect("/settings?saved=1")
+            return redirect(_public_path("/settings?saved=1"))
         return _page("Agent settings",
                      _settings_html(cfg.get("agent") or {}, cfg["gallery_path"],
                                     saved=request.args.get("saved") == "1"))
@@ -2566,7 +2590,11 @@ def build_application():
     global _DISPATCHER
     shell = build_shell()
     _DISPATCHER = LazyDispatcher(shell.server)   # stash it so /reload/<key> can invalidate one app's cache
-    return _DISPATCHER, shell
+    application = PrefixMiddleware(_DISPATCHER, BASE_PATH)
+    proxy_hops = int(REG.SHELL_CFG.get("proxy_hops") or 0)
+    if proxy_hops > 0:
+        application = ProxyFix(application, x_for=proxy_hops, x_proto=proxy_hops, x_host=proxy_hops)
+    return application, shell
 
 
 if __name__ == "__main__":

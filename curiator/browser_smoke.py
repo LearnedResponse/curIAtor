@@ -257,8 +257,9 @@ _BROWSER_CHECK_EXPR = r"""(() => {
 
 
 def _start_shell_if_needed(cfg: dict, timeout: float) -> tuple[subprocess.Popen | None, str]:
-    port = int((cfg.get("shell") or {}).get("port", 8200))
-    base_url = f"http://127.0.0.1:{port}"
+    from .web_paths import local_shell_url
+
+    base_url = local_shell_url(cfg).rstrip("/")
     if _wait_url(f"{base_url}/api/bootstrap", timeout=0.75):
         return None, base_url
     shell_args = [sys.executable, str(_shell_path()), "--gallery", str(Path(cfg["gallery_path"]).resolve())]

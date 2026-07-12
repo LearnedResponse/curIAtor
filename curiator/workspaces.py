@@ -491,10 +491,12 @@ class WorkspaceManager:
         except (IndexError, KeyError, TypeError, ValueError) as exc:
             raise WorkspaceError(f"Docker did not allocate a host port for {container_name}") from exc
 
-    @staticmethod
-    def _wait_http(port: int, timeout: float = 60) -> None:
+    def _wait_http(self, port: int, timeout: float = 60) -> None:
+        from .web_paths import public_path, shell_base_path
+
         deadline = time.monotonic() + timeout
-        url = f"http://127.0.0.1:{port}/api/bootstrap"
+        path = public_path(shell_base_path(self.cfg), "/api/bootstrap")
+        url = f"http://127.0.0.1:{port}{path}"
         last = "not reachable"
         while time.monotonic() < deadline:
             try:
