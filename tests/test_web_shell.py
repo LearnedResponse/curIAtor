@@ -444,11 +444,16 @@ def test_react_shell_side_rails_are_collapsible(web_client):
     js = web_client.get("/assets/react_shell.js").get_data(as_text=True)
     css = web_client.get("/assets/react_shell.css").get_data(as_text=True)
     assert "catCollapsed" in js and "fbCollapsed" in js
+    assert "const [fbCollapsed, setFbCollapsed] = useState(true);" in js
     assert "rshell-edge-tab left" in js and "rshell-edge-tab right" in js
     assert "rshell-collapse-btn" in js
+    assert 'const CURIATOR_HOME = "https://curiator.net/";' in js
+    assert "collection: boot.collection" in js
+    assert "rshell-collection-name" in js and "rshell-brand-link" in js
     assert ".rshell-catalog.collapsed" in css
     assert ".rshell-feedback.collapsed" in css
     assert ".rshell-edge-tab" in css
+    assert ".rshell-collection-name" in css and ".rshell-brand-link" in css
 
 
 def test_react_shell_has_burned_screenshot_annotations(web_client):

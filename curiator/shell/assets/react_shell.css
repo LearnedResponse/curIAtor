@@ -46,6 +46,37 @@ body {
   color: #8e44ad;
 }
 
+.rshell-brand-identity {
+  display: flex;
+  align-items: baseline;
+  min-width: 0;
+  gap: 5px;
+}
+
+.rshell-brand-link,
+.rshell-mobile-brand {
+  color: inherit;
+  text-decoration: none;
+}
+
+.rshell-brand-link {
+  flex: 0 0 auto;
+}
+
+.rshell-brand-link:hover,
+.rshell-mobile-brand:hover {
+  color: #6f2f8d;
+}
+
+.rshell-collection-name {
+  min-width: 0;
+  overflow: hidden;
+  color: #777;
+  font-weight: 400;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .rshell-controls {
   padding: 8px 9px;
   border-bottom: 1px solid #ddd;
@@ -2004,6 +2035,11 @@ body {
     padding: 9px 12px;
     border-bottom: 1px solid #ddd;
     background: #fafafa;
+  }
+
+  .rshell-mobile-brand {
+    flex: 1;
+    text-align: center;
   }
 
   .rshell-main {

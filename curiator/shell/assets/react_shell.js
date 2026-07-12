@@ -10,6 +10,7 @@
     rejected: "#555"
   };
   const DICTATION_HINT = "OS dictation can type feedback here.";
+  const CURIATOR_HOME = "https://curiator.net/";
   const BASE_PATH = String(window.CURIATOR_BASE_PATH || "").replace(/\/$/, "");
   const NEW_APP_TYPES = [
     ["dash", "Dash"],
@@ -1258,7 +1259,7 @@
       target ? h("a", {href: target, target: "_blank"}, "Manage") : null);
   }
 
-  function Catalog({apps, selected, setSelected, search, setSearch, sort, setSort, reverse, setReverse,
+  function Catalog({apps, collection, selected, setSelected, search, setSearch, sort, setSort, reverse, setReverse,
       open, collapsed, onCollapse, onNewApp, workspaces, onFork, onWorkspaces}) {
     const rows = useMemo(() => {
       const q = (search || "").toLowerCase();
@@ -1287,7 +1288,10 @@
     const general = apps.find((a) => a.kind === "general");
     return h("aside", {className: "rshell-catalog" + (open ? " open" : "") + (collapsed ? " collapsed" : "")},
       h("div", {className: "rshell-brand"},
-        h("span", null, wordmark(16), h("span", {style: {fontWeight: 400, color: "#777"}}, " gallery")),
+        h("div", {className: "rshell-brand-identity"},
+          h("a", {className: "rshell-brand-link", href: CURIATOR_HOME, title: "curIAtor home"}, wordmark(16)),
+          h("span", {className: "rshell-collection-name", title: collection || "Collection"},
+            collection || "Collection")),
         h("button", {className: "rshell-collapse-btn", title: "Collapse library", onClick: onCollapse}, "‹")),
       h("div", {className: "rshell-controls"},
         h("input", {className: "rshell-input", placeholder: "search…", value: search,
@@ -1996,7 +2000,7 @@
     const [catOpen, setCatOpen] = useState(false);
     const [fbOpen, setFbOpen] = useState(false);
     const [catCollapsed, setCatCollapsed] = useState(false);
-    const [fbCollapsed, setFbCollapsed] = useState(false);
+    const [fbCollapsed, setFbCollapsed] = useState(true);
     const [newAppOpen, setNewAppOpen] = useState(false);
     const [workspaceApp, setWorkspaceApp] = useState(null);
     const [workspacePanelOpen, setWorkspacePanelOpen] = useState(false);
@@ -2043,6 +2047,7 @@
       if (key) setSelected(key);
       setFeedback(data || {items: []});
       setFbOpen(true);
+      setFbCollapsed(false);
       return loadApps();
     }
 
@@ -2123,12 +2128,15 @@
       }}),
       h("div", {className: "rshell-mobilebar"},
         h("button", {className: "shell-mbtn", onClick: () => { setCatOpen(!catOpen); setFbOpen(false); }}, "☰ Library"),
-        h("div", {style: {flex: 1, textAlign: "center"}}, wordmark(14)),
-        h("button", {className: "shell-mbtn", onClick: () => { setFbOpen(!fbOpen); setCatOpen(false); }}, "💬 Feedback")),
+        h("a", {className: "rshell-mobile-brand", href: CURIATOR_HOME, title: "curIAtor home"}, wordmark(14)),
+        h("button", {className: "shell-mbtn", onClick: () => {
+          setFbOpen(!fbOpen); setFbCollapsed(false); setCatOpen(false);
+        }}, "💬 Feedback")),
       h(WorkspaceBanner, {workspace: boot.workspace}),
       h("div", {className: "rshell-main"},
         h("div", {className: "rshell-scrim" + (catOpen || fbOpen ? " open" : ""), onClick: () => { setCatOpen(false); setFbOpen(false); }}),
-        h(Catalog, {apps: allApps, selected, setSelected, search, setSearch, sort, setSort, reverse, setReverse,
+        h(Catalog, {apps: allApps, collection: boot.collection, selected, setSelected,
+          search, setSearch, sort, setSort, reverse, setReverse,
           open: catOpen, collapsed: catCollapsed, onCollapse: () => setCatCollapsed(true),
           onNewApp: () => setNewAppOpen(true), workspaces,
           onFork: (app) => setWorkspaceApp(app), onWorkspaces: () => setWorkspacePanelOpen(true)}),
