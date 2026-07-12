@@ -60,8 +60,13 @@ def _safe_entry(entry: dict) -> dict:
 
 def _anonymous_entry(entry: dict) -> bool:
     user = entry.get("user") or {}
-    return user.get("id") == "anonymous" or (
-        user.get("name") == "anonymous" and not user.get("email")
+    identities = {
+        str(value or "").strip().lower()
+        for value in (user.get("id"), user.get("email"), entry.get("author"))
+    }
+    return bool(
+        identities & {"anonymous", "anonymous@local"}
+        or str(user.get("name") or "").strip().lower() == "anonymous"
     )
 
 
@@ -70,17 +75,24 @@ def _visible_feedback_items(items: list[dict]) -> list[dict]:
     user = auth.current_user(core.REG.AUTH_CFG)
     if auth.is_admin(core.REG.AUTH_CFG, user):
         return list(items)
-    hidden_ids = set()
-    visible = []
-    for entry in items:
-        parent_hidden = any(parent in hidden_ids for parent in (entry.get("reply_to") or []))
-        unpromoted_anonymous = _anonymous_entry(entry) and not entry.get("moderation_approved_at")
-        if parent_hidden or unpromoted_anonymous:
-            if entry.get("id"):
-                hidden_ids.add(entry["id"])
-            continue
-        visible.append(entry)
-    return visible
+    hidden_ids = {
+        entry["id"]
+        for entry in items
+        if entry.get("id")
+        and _anonymous_entry(entry)
+        and not entry.get("moderation_approved_at")
+    }
+    changed = True
+    while changed:
+        changed = False
+        for entry in items:
+            entry_id = entry.get("id")
+            if entry_id and entry_id not in hidden_ids and any(
+                parent in hidden_ids for parent in (entry.get("reply_to") or [])
+            ):
+                hidden_ids.add(entry_id)
+                changed = True
+    return [entry for entry in items if entry.get("id") not in hidden_ids]
 
 
 def _metrics(key: str) -> dict:

@@ -950,6 +950,24 @@ auth:
     mod = _load_web_mod(monkeypatch)
     client = mod.build_flask_app().test_client()
 
+    historical_root = {
+        "id": "historical-root",
+        "author": "user",
+        "user": {
+            "id": "anonymous@local",
+            "email": "anonymous@local",
+            "name": "anonymous",
+            "groups": [],
+        },
+    }
+    historical_child = {
+        "id": "historical-child",
+        "author": "claude",
+        "kind": "system",
+        "reply_to": ["historical-root"],
+    }
+    assert mod._visible_feedback_items([historical_child, historical_root]) == []
+
     boot = client.get("/api/bootstrap").get_json()
     assert boot["auth"]["mode"] == "local"
     assert boot["auth"]["allow_anonymous"] is True
