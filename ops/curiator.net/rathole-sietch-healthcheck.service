@@ -1,0 +1,10 @@
+[Unit]
+Description=Check curIAtor public galleries and recover a stale rathole client
+After=network-online.target rathole-sietch.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=%h/.local/bin/curiator-tunnel-healthcheck
+NoNewPrivileges=true
+PrivateTmp=true

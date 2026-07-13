@@ -1,0 +1,51 @@
+#!/bin/sh
+set -u
+
+PUBLIC_BASE=${CURIATOR_HEALTH_PUBLIC_BASE:-https://curiator.net/gallery}
+TARGETS=${CURIATOR_HEALTH_TARGETS:-"sietch:8210 aviato:8310 geometry:8420 ot:8430"}
+RATHOLE_SERVICE=${CURIATOR_RATHOLE_SERVICE:-rathole-sietch.service}
+CURL=${CURIATOR_HEALTH_CURL:-/usr/bin/curl}
+
+check_public() {
+    for target in $TARGETS; do
+        gallery=${target%%:*}
+        if ! "$CURL" --http1.1 --fail --silent --show-error --output /dev/null \
+            --connect-timeout 4 --max-time 12 "$PUBLIC_BASE/$gallery/api/bootstrap"; then
+            printf 'curIAtor tunnel health: public gallery failed: %s\n' "$gallery" >&2
+            return 1
+        fi
+    done
+}
+
+check_local() {
+    for target in $TARGETS; do
+        gallery=${target%%:*}
+        port=${target##*:}
+        if ! "$CURL" --fail --silent --show-error --output /dev/null \
+            --connect-timeout 2 --max-time 6 \
+            "http://127.0.0.1:$port/gallery/$gallery/api/bootstrap"; then
+            printf 'curIAtor tunnel health: local gallery failed; tunnel left untouched: %s:%s\n' \
+                "$gallery" "$port" >&2
+            return 1
+        fi
+    done
+}
+
+if check_public; then
+    exit 0
+fi
+
+if ! check_local; then
+    exit 1
+fi
+
+sleep 5
+if check_public; then
+    exit 0
+fi
+
+printf 'curIAtor tunnel health: restarting %s after repeated edge-only failure\n' \
+    "$RATHOLE_SERVICE" >&2
+/usr/bin/systemctl --user restart "$RATHOLE_SERVICE"
+sleep 4
+check_public
