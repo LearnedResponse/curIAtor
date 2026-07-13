@@ -24,41 +24,41 @@ COMMENT = "fix the marked legend target"
 NOTE = "marked legend needs room"
 
 
-def _write_collection(root: Path, port: int) -> Path:
-    apps = root / "apps"
+def _write_collection(root: Path, port: int, app_port: int) -> Path:
+    apps = root / "apps" / "sample"
     (root / "feedback" / "shots").mkdir(parents=True)
     apps.mkdir(parents=True)
-    (apps / "sample.py").write_text(
-        '''import dash
-from dash import html
+    (apps / "app.css").write_text(
+        "body { margin: 0; background: rgb(7, 31, 47); color: rgb(233, 242, 247); }\n"
+        ".dogfood-root { position: relative; min-height: 420px; padding: 36px; font-family: Arial, sans-serif; }\n"
+        "#chart { height: 220px; border: 1px solid #8aa; background: linear-gradient(#17415a, #0b2638); padding: 24px; }\n"
+        "#legend { position: absolute; left: 420px; top: 135px; padding: 10px 14px; border: 2px solid #b77bdd; background: #402752; }\n",
+        encoding="utf-8",
+    )
+    (apps / "index.html").write_text(
+        '''<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <link rel="stylesheet" href="./app.css">
+  </head>
+  <body>
+    <main class="dogfood-root">
+      <h1>Annotation dogfood</h1>
+      <div id="chart" data-testid="chart-target">Revenue by segment</div>
+      <div id="legend" class="legend cramped" role="note" data-testid="legend-target">Legend target</div>
+    </main>
+  </body>
+</html>
+''',
+        encoding="utf-8",
+    )
+    (apps / "server.py").write_text(
+        '''import os
+from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 
 
-def build_app():
-    app = dash.Dash(__name__)
-    app.layout = html.Div([
-        html.H1("Annotation dogfood"),
-        html.Div("Revenue by segment", id="chart", **{"data-testid": "chart-target"}, style={
-            "height": "220px",
-            "border": "1px solid #bbb",
-            "background": "linear-gradient(180deg, #eef7ff, #ffffff)",
-            "padding": "24px",
-            "fontFamily": "Arial, sans-serif",
-        }),
-        html.Div("Legend target", id="legend", className="legend cramped", role="note",
-                 **{"data-testid": "legend-target"}, style={
-                     "position": "absolute",
-                     "left": "420px",
-                     "top": "135px",
-                     "padding": "10px 14px",
-                     "border": "2px solid #8e44ad",
-                     "background": "#fff5cc",
-                     "fontFamily": "Arial, sans-serif",
-                 }),
-    ], style={"position": "relative", "minHeight": "420px", "padding": "36px"})
-    return app
-
-
-app = build_app()
+ThreadingHTTPServer(("127.0.0.1", int(os.environ["PORT"])), SimpleHTTPRequestHandler).serve_forever()
 ''',
         encoding="utf-8",
     )
@@ -67,8 +67,10 @@ app = build_app()
         f"""apps:
   - name: sample
     title: Annotation dogfood
-    mount: {{ kind: dash-inproc, module: sample }}
-    source: apps/sample.py
+    root: apps/sample
+    source: .
+    smoke: python -m py_compile server.py
+    mount: {{ kind: proxy, cmd: "python server.py", port: {app_port} }}
     tags: [dogfood, annotations]
 agent:
   adapter: command
@@ -208,6 +210,22 @@ def _draw_box_on_legend(cdp: CdpClient) -> None:
     })
 
 
+def _assert_capture_kept_external_styles(cdp: CdpClient) -> None:
+    result = _wait_value(cdp, """(() => {
+      const canvas = document.querySelector('.rshell-annotation-canvas');
+      const frame = document.getElementById('app-frame');
+      const doc = frame && frame.contentDocument;
+      if (!canvas || !doc || !doc.body) return null;
+      const expected = doc.defaultView.getComputedStyle(doc.body).backgroundColor;
+      const pixel = Array.from(canvas.getContext('2d').getImageData(2, 2, 1, 1).data);
+      return {expected, pixel};
+    })()""", timeout=10.0)
+    if result["expected"] != "rgb(7, 31, 47)":
+        raise RuntimeError(f"external dogfood stylesheet did not load in the app: {result!r}")
+    if any(abs(actual - expected) > 2 for actual, expected in zip(result["pixel"][:3], [7, 31, 47])):
+        raise RuntimeError(f"Capture view dropped the app stylesheet: {result!r}")
+
+
 def _verify_collection(collection: Path) -> str:
     from curiator import ledger
     from curiator.config import load_config_at
@@ -256,8 +274,9 @@ def dogfood(brave_bin: str) -> None:
         tmp = Path(tmpdir)
         collection = tmp / "collection"
         port = _free_port()
+        app_port = _free_port()
         debug_port = _free_port()
-        gallery = _write_collection(collection, port)
+        gallery = _write_collection(collection, port, app_port)
         shell = _start_shell(gallery)
         brave = None
         cdp = None
@@ -277,9 +296,22 @@ def dogfood(brave_bin: str) -> None:
             base = f"http://127.0.0.1:{port}/?app=sample"
             cdp.navigate(base)
             _wait_value(cdp, "!!document.querySelector('.rshell-feedback textarea')", timeout=10.0)
+            _wait_value(cdp, """(() => {
+              const frame = document.getElementById('app-frame');
+              const doc = frame && frame.contentDocument;
+              return !!(doc && doc.querySelector('#legend') &&
+                doc.defaultView.getComputedStyle(doc.body).backgroundColor === 'rgb(7, 31, 47)');
+            })()""", timeout=15.0)
             _set_value(cdp, ".rshell-feedback textarea", COMMENT)
             _click_text(cdp, "Capture view")
+            _wait_value(cdp, """(() => {
+              const msg = document.querySelector('.rshell-msg');
+              const thumb = document.querySelector('.rshell-shot-thumb');
+              return !!(msg && msg.textContent.includes('Capture ready') && thumb);
+            })()""", timeout=15.0)
+            _eval(cdp, "document.querySelector('.rshell-shot-thumb').click()")
             _wait_value(cdp, "document.querySelector('.rshell-annotation-canvas') && document.querySelector('.rshell-annotation-canvas').width > 20", timeout=15.0)
+            _assert_capture_kept_external_styles(cdp)
             _draw_box_on_legend(cdp)
             _wait_value(cdp, "document.querySelectorAll('.rshell-annotation-note input').length === 1", timeout=10.0)
             _set_value(cdp, ".rshell-annotation-note input", NOTE)

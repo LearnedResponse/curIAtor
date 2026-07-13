@@ -491,6 +491,11 @@ def test_react_shell_has_burned_screenshot_annotations(web_client):
     assert "function annotationDoc" in js
     assert "function nativeCapture" in js
     assert "window.curiatorCaptureDocument(doc)" in js
+    assert "function html2canvasFor(doc)" in capture
+    assert "function captureBaseCleanup(doc)" in capture
+    assert "data-curiator-capture-base" in capture
+    assert "data-curiator-capture-library" in capture
+    assert "return render(doc.body" in capture
     assert "function plotlySurrogate" in capture
     assert "Plotly.toImage" in capture
     assert 'data-curiator-capture-surrogate' in capture

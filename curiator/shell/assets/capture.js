@@ -2,6 +2,53 @@
   "use strict";
 
   const captureJobs = new WeakMap();
+  const captureLibraryJobs = new WeakMap();
+  const captureLibraryScript = Array.from(document.scripts || []).find(function (script) {
+    return /\/html2canvas(?:\.min)?\.js(?:[?#]|$)/.test(script.src || "");
+  });
+  const captureLibraryUrl = captureLibraryScript && captureLibraryScript.src
+    ? captureLibraryScript.src
+    : new URL("assets/html2canvas.min.js", window.location.href).href;
+
+  function html2canvasFor(doc) {
+    const view = doc && doc.defaultView;
+    if (!view) return Promise.reject(new Error("app window is not readable"));
+    if (typeof view.html2canvas === "function") return Promise.resolve(view.html2canvas);
+
+    const active = captureLibraryJobs.get(doc);
+    if (active) return active;
+
+    const job = new Promise(function (resolve, reject) {
+      const script = doc.createElement("script");
+      script.async = true;
+      script.src = captureLibraryUrl;
+      script.setAttribute("data-curiator-capture-library", "html2canvas");
+      script.addEventListener("load", function () {
+        if (typeof view.html2canvas === "function") {
+          resolve(view.html2canvas);
+        } else {
+          reject(new Error("html2canvas loaded without registering in the app window"));
+        }
+      }, {once: true});
+      script.addEventListener("error", function () {
+        reject(new Error("app blocked the screenshot capture library"));
+      }, {once: true});
+      (doc.head || doc.documentElement).appendChild(script);
+    }).finally(function () {
+      captureLibraryJobs.delete(doc);
+    });
+    captureLibraryJobs.set(doc, job);
+    return job;
+  }
+
+  function captureBaseCleanup(doc) {
+    if (!doc.head || doc.querySelector("base[href]")) return null;
+    const base = doc.createElement("base");
+    base.href = doc.baseURI;
+    base.setAttribute("data-curiator-capture-base", "");
+    doc.head.prepend(base);
+    return function cleanup() { base.remove(); };
+  }
 
   function visibleRect(element, view) {
     const rect = element.getBoundingClientRect();
@@ -79,15 +126,21 @@
 
   function captureDocument(doc, options) {
     if (!doc || !doc.body) return Promise.reject(new Error("app is not readable"));
-    if (typeof window.html2canvas !== "function") return Promise.reject(new Error("html2canvas unavailable"));
     const active = captureJobs.get(doc);
     if (active) return active;
 
     let cleanups = [];
-    const job = preparePlotlySurrogates(doc)
+    let render = null;
+    const job = html2canvasFor(doc)
+      .then(function (html2canvas) {
+        render = html2canvas;
+        const cleanupBase = captureBaseCleanup(doc);
+        if (cleanupBase) cleanups.push(cleanupBase);
+        return preparePlotlySurrogates(doc);
+      })
       .then(function (prepared) {
-        cleanups = prepared;
-        return window.html2canvas(doc.body, Object.assign({
+        cleanups = cleanups.concat(prepared);
+        return render(doc.body, Object.assign({
           logging: false,
           backgroundColor: "#ffffff"
         }, options || {}));
