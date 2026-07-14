@@ -91,6 +91,46 @@ def test_admin_approval_dispatches_structured_collection_task(collection, cfg, m
     assert "## Browser-smoke capability" not in body
 
 
+def test_general_admin_approval_inherits_app_rename_as_collection_work(collection, cfg, monkeypatch):
+    from curiator import ledger
+    from curiator.loop import adapters
+    from curiator.loop.adapters import GENERAL_KEY, build_task
+
+    mod = _load_web_mod(monkeypatch)
+    client = mod.build_flask_app().test_client()
+    feedback_id = ledger.save_entry(
+        cfg,
+        GENERAL_KEY,
+        comment='Change the name of the "Cairn" app and directory to "Sietch".',
+        extra={"status": "awaiting_approval"},
+    )
+    plan_id = ledger.add_system_note(
+        cfg,
+        GENERAL_KEY,
+        "Plan: rename the app key, directory, gallery registration, and internal references.",
+        reply_to=[feedback_id],
+        agent="Codex",
+    )
+
+    response = client.post(
+        f"/api/feedback/{GENERAL_KEY}/{feedback_id}/approval",
+        json={"action": "approve"},
+    )
+
+    assert response.status_code == 200
+    dispatch = response.get_json()["approval"]["entry"]
+    assert dispatch["reply_to"] == [plan_id]
+    assert adapters.general_targets_collection(dispatch, cfg)
+    task = build_task(cfg, GENERAL_KEY, dispatch)
+    body = Path(task.task_file).read_text(encoding="utf-8")
+    assert task.source == str(collection.resolve())
+    assert "General collection feedback" in body
+    assert "APPROVAL/FOLLOW-UP RUN" in body
+    assert "perform that app work now" in body
+    assert "Mode: pinned" not in body
+    assert not adapters.general_targets_collection({"comment": "change the app shell layout"}, cfg)
+
+
 def test_admin_can_amend_or_reject_awaiting_approval(collection, cfg, monkeypatch):
     from curiator import ledger
 
@@ -195,3 +235,63 @@ def test_approved_collection_commit_tracks_app_key_and_directory_rename(collecti
         text=True,
     ).stdout.split()
     assert {"apps/sample.py", "apps/renamed.py", "gallery.yaml", "feedback/app_feedback.sqlite"} <= set(changed)
+
+
+def test_general_approved_rename_inherits_collection_git_scope(collection, cfg):
+    from curiator import gitmem, ledger
+    from curiator.loop.adapters import GENERAL_KEY
+
+    request_id = ledger.save_entry(
+        cfg,
+        GENERAL_KEY,
+        comment='Change the name of the "Cairn" app and directory to "Sietch".',
+        extra={"status": "done"},
+    )
+    plan_id = ledger.add_system_note(
+        cfg,
+        GENERAL_KEY,
+        "Plan: rename the app key, directory, gallery registration, and internal references.",
+        reply_to=[request_id],
+        agent="Codex",
+    )
+    dispatch_id = ledger.save_entry(
+        cfg,
+        GENERAL_KEY,
+        comment="Approved by admin@example.com.",
+        extra={
+            "status": "done",
+            "reply_to": [plan_id],
+            "approval_of": request_id,
+            "approval_plan_id": plan_id,
+            "approval_scope": "collection",
+            "approval_resolution": "approved",
+            "approval_authorized_by": "admin@example.com",
+        },
+    )
+    ledger.add_system_note(cfg, GENERAL_KEY, "Renamed the app.", reply_to=[dispatch_id], agent="Codex")
+    (collection / "apps" / "sample.py").rename(collection / "apps" / "sietch.py")
+    gallery = collection / "gallery.yaml"
+    gallery.write_text(
+        gallery.read_text(encoding="utf-8")
+        .replace("- name: sample", "- name: sietch")
+        .replace("source: apps/sample.py", "source: apps/sietch.py"),
+        encoding="utf-8",
+    )
+
+    result = gitmem.commit_run(
+        cfg,
+        GENERAL_KEY,
+        dispatch_id,
+        status="done",
+        note_text="Renamed the approved collection app.",
+    )
+
+    assert result["committed"], result
+    changed = subprocess.run(
+        ["git", "show", "--no-renames", "--name-only", "--format=", "HEAD"],
+        cwd=collection,
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.split()
+    assert {"apps/sample.py", "apps/sietch.py", "gallery.yaml", "feedback/app_feedback.sqlite"} <= set(changed)

@@ -31,7 +31,7 @@ from . import headless_cc, codex, api as api_adapter, command as command_adapter
 GENERAL_KEY = "__general__"
 
 _COLLECTION_GENERAL_RE = re.compile(
-    r"\b(create|add|build|scaffold|implement|make|do)\b"
+    r"\b(create|add|build|scaffold|implement|make|do|change|rename|move|migrate|import|clone|update)\b"
     r"(?:(?!\brunner\b|\bshell\b|\bcuriator itself\b).){0,80}"
     r"\b(new\s+)?(curiator\s+)?(app|dashboard|explainer|overview)\b",
     re.I | re.S,
@@ -41,6 +41,12 @@ _GENERAL_APPROVAL_REPLY_RE = re.compile(
     r"\b(ok(?:ay)?|yes|approved?|go ahead|do it|proceed|please do|sounds good)\b",
     re.I,
 )
+
+_GENERAL_RUNNER_RE = re.compile(r"\b(app\s+shell|runner|overlay|curiator itself)\b", re.I)
+
+
+def _collection_request_text(text: str) -> bool:
+    return not _GENERAL_RUNNER_RE.search(text) and bool(_COLLECTION_GENERAL_RE.search(text))
 
 
 @dataclass
@@ -453,12 +459,13 @@ def _runner_root(cfg: dict) -> str:
 def general_targets_collection(entry: dict, cfg: dict | None = None) -> bool:
     """Whether a ◆ General item is asking to change the collection, not the runner package."""
     comment = entry.get("comment") or ""
-    if _COLLECTION_GENERAL_RE.search(comment):
+    if _collection_request_text(comment):
         return True
-    if not cfg or not _GENERAL_APPROVAL_REPLY_RE.search(comment):
+    approval_followup = bool(entry.get("approval_of") or _GENERAL_APPROVAL_REPLY_RE.search(comment))
+    if not cfg or not approval_followup:
         return False
     return any(
-        _COLLECTION_GENERAL_RE.search(item.get("comment") or "")
+        _collection_request_text(item.get("comment") or "")
         for item in _related_thread_entries(cfg, GENERAL_KEY, entry)
     )
 
@@ -469,8 +476,10 @@ def _collection_bundle(cfg: dict, entry: dict, eid: str, shot_path: str | None, 
     root_display = _repo_display(cfg, root)
     autonomy = agent.get("autonomy", "auto-small")
     elevated = agent.get("elevated")
-    approval_followup = bool(_GENERAL_APPROVAL_REPLY_RE.search(entry.get("comment") or "")
-                             and _related_thread_entries(cfg, GENERAL_KEY, entry))
+    approval_followup = bool(
+        (entry.get("approval_of") or _GENERAL_APPROVAL_REPLY_RE.search(entry.get("comment") or ""))
+        and _related_thread_entries(cfg, GENERAL_KEY, entry)
+    )
     app_request, app_request_cmd = _app_request_block(cfg, entry)
     body = [
         "# curIAtor — General collection feedback",

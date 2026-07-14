@@ -565,7 +565,7 @@ def _general_collection_paths(cfg: dict, fb: dict | None, exclude: set[str]) -> 
     if not fb:
         return []
     from .loop import adapters
-    if not adapters.general_targets_collection(fb):
+    if not adapters.general_targets_collection(fb, cfg):
         return []
     return _collection_change_paths(cfg, exclude)
 
