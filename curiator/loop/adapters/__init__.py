@@ -642,17 +642,53 @@ def _app_bundle(
     source_display = _repo_display(cfg, source)
     autonomy = agent.get("autonomy", "auto-small")
     elevated = agent.get("elevated")
+    approved_execution = bool(
+        entry.get("approval_of")
+        and entry.get("approval_resolution") in {"approved", "amended"}
+    )
+    collection_approval = bool(
+        approved_execution
+        and entry.get("approval_scope") == "collection"
+        and proposal is None
+    )
+    task_source = str(Path(cfg["repo_root"]).resolve()) if collection_approval else source
+    task_source_display = _repo_display(cfg, task_source)
     body = [
         template, "\n\n---\n\n# This wake — the new feedback to act on\n",
         f"- app: **{key}**",
         f"- app root: `{root_display}`",
-        f"- source scope to edit: `{source_display}`" if source else "- source: (none registered — propose only)",
+        (f"- source scope to edit: `{task_source_display}` (admin-approved collection scope)"
+         if collection_approval else
+         (f"- source scope to edit: `{source_display}`" if source else "- source: (none registered — propose only)")),
         f"- autonomy mode: **{autonomy}**" + ("  ·  ELEVATED run (trusted group)" if elevated else ""),
         f"- stars: {entry.get('stars')}",
         f"- comment: {entry.get('comment')!r}",
         f"- screenshot (Read this PNG): `{shot_path}`" if shot_path else "- screenshot: (none)",
         f"- feedback id (reply_to this): `{eid}`",
     ]
+    if approved_execution:
+        scope_text = (
+            "The administrator authorized collection-level edits, including `gallery.yaml`, app-directory "
+            "moves, and the resulting app key/registration."
+            if collection_approval else
+            "The administrator authorized the app-scoped plan in the feedback thread."
+        )
+        amendment = (
+            " Apply the approval entry's comment as an amendment to the plan."
+            if entry.get("approval_resolution") == "amended" else ""
+        )
+        body.append(
+            "\n## ADMIN-APPROVED EXECUTION\n"
+            f"- approved feedback: `{entry.get('approval_of')}`\n"
+            f"- approved plan note: `{entry.get('approval_plan_id') or entry.get('approval_of')}`\n"
+            f"- authorized by: `{entry.get('approval_authorized_by') or 'shell admin'}`\n"
+            f"- {scope_text}\n"
+            "- This structured approval supersedes the protocol's substantive-work triage and its default "
+            "single-app source restriction. Execute the approved plan now; do not return the same plan or "
+            "ask for approval again merely because it is broad.\n"
+            "- Stay within the approved plan, preserve unrelated collection state, smoke-test the resulting "
+            f"app registration, and finish with `--status done`.{amendment}"
+        )
     annotations = _annotation_block(entry)
     if annotations:
         body.append(annotations)
@@ -701,7 +737,10 @@ def _app_bundle(
     if dependency_context:
         body.append("\n" + dependency_context)
     body.append("\n" + _feedback_tooling(cfg, key))
-    browser_contract = None if proposal else browser_smoke_contract(cfg, key, eid)
+    # A collection-level approval may rename the app key while this task is running. The ordinary
+    # browser contract is keyed to the pre-edit registration and would make `done` impossible after
+    # a valid rename. The approval block still requires the agent to smoke the resulting registration.
+    browser_contract = None if proposal or collection_approval else browser_smoke_contract(cfg, key, eid)
     if browser_contract:
         body.append("\n" + browser_contract)
     body.append("\n## Ready-to-run (fill in the message text)")
@@ -731,12 +770,14 @@ def _app_bundle(
             f"Off-limits: {deny}. Declared shared components remain read-only unless this task marks "
             "them **WRITABLE**. Still don't run git yourself — the runner commits.")
     else:
-        scope = "files under the source above" if source_is_dir else "the source above"
+        scope = "the approved collection scope above" if collection_approval else (
+            "files under the source above" if source_is_dir else "the source above"
+        )
         if writable_sources:
             scope += " plus the shared components explicitly marked WRITABLE"
         body.append(
             f"\nEdit ONLY {scope}, smoke-test before `done`; the runner handles git — don't run git yourself.")
-    return "\n".join(body), source, writable_sources
+    return "\n".join(body), task_source, writable_sources
 
 
 def build_task(cfg: dict, key: str, entry: dict) -> Task:

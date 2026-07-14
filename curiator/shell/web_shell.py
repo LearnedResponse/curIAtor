@@ -311,6 +311,140 @@ def _held_entry(key: str, feedback_id: str) -> dict:
     return entry
 
 
+def _awaiting_approval_entry(key: str, feedback_id: str) -> dict:
+    if not _valid_feedback_id(feedback_id):
+        raise ModerationError("feedback not found", 404)
+    entry = next(
+        (item for item in core.load_feedback().get(key, []) if item.get("id") == feedback_id),
+        None,
+    )
+    if entry is None:
+        raise ModerationError("feedback not found", 404)
+    if entry.get("kind") == "system" or entry.get("status") != "awaiting_approval":
+        raise ModerationError("only user feedback awaiting approval can be reviewed")
+    return entry
+
+
+def _approval_plan_entry(key: str, feedback_id: str) -> dict | None:
+    """Newest agent note in this approval subtree, independent of ledger row order."""
+    items = core.load_feedback().get(key, [])
+    related = {feedback_id}
+    changed = True
+    while changed:
+        changed = False
+        for item in items:
+            item_id = item.get("id")
+            if item_id and item_id not in related and related.intersection(item.get("reply_to") or []):
+                related.add(item_id)
+                changed = True
+    candidates = [
+        item for item in items
+        if item.get("id") in related
+        and item.get("id") != feedback_id
+        and (item.get("kind") == "system" or item.get("author") == "claude")
+        and not str(item.get("agent") or "").startswith("curiator ")
+    ]
+    if not candidates:
+        return None
+    return max(candidates, key=lambda item: str(item.get("ts") or ""))
+
+
+def _plan_uses_proposal_actions(plan: dict | None) -> bool:
+    return any(
+        str(row[1] if isinstance(row, (list, tuple)) and len(row) > 1 else "").startswith(
+            "curiator-proposal:"
+        )
+        for row in ((plan or {}).get("actions") or [])
+    )
+
+
+def _dispatch_approved_plan(
+    key: str,
+    entry: dict,
+    user: dict | None,
+    *,
+    amendment: str | None = None,
+) -> dict:
+    feedback_id = entry["id"]
+    _moderation_checkpoint_guard([feedback_id])
+    plan = _approval_plan_entry(key, feedback_id)
+    if _plan_uses_proposal_actions(plan):
+        raise ModerationError("use the proposal Approve/Reject actions for this branch proposal")
+
+    text = str(amendment or "").strip()
+    if amendment is not None and not text:
+        raise ModerationError("enter an amendment before replying", 400)
+    if len(text) > 10000:
+        raise ModerationError("amendment is too long", 400)
+
+    actor = _queue_actor(user)
+    approved_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    dispatch_id = uuid.uuid4().hex[:8]
+    plan_id = (plan or {}).get("id") or feedback_id
+    resolution = "amended" if amendment is not None else "approved"
+    dispatch_comment = text or f"Approved by {actor}."
+
+    # Keep the dispatch held until the approval decision, audit note, and reply link are durable.
+    ledger.save_entry(
+        core.LEDGER_CFG,
+        key,
+        entry_id=dispatch_id,
+        comment=dispatch_comment,
+        user=auth.stamp(user),
+        extra={
+            "status": "held",
+            "reply_to": [plan_id],
+            "approval_of": feedback_id,
+            "approval_plan_id": plan_id,
+            "approval_scope": "collection",
+            "approval_resolution": resolution,
+            "approval_authorized_at": approved_at,
+            "approval_authorized_by": actor,
+        },
+    )
+    ledger.add_system_note(
+        core.LEDGER_CFG,
+        key,
+        (
+            f"Approval review: approved with an amendment by {actor}; dispatching the authorized reply."
+            if amendment is not None else
+            f"Approval review: approved by {actor}; dispatching the authorized plan."
+        ),
+        reply_to=[feedback_id],
+        agent="curiator approvals",
+    )
+    ledger.update_entry(core.LEDGER_CFG, key, feedback_id, {
+        "status": "done",
+        "approval_resolution": resolution,
+        "approval_dispatch_id": dispatch_id,
+        "approval_authorized_at": approved_at,
+        "approval_authorized_by": actor,
+    })
+    ledger.update_entry(core.LEDGER_CFG, key, dispatch_id, {"status": "new"})
+    return next(item for item in core.load_feedback()[key] if item.get("id") == dispatch_id)
+
+
+def _reject_approved_plan(key: str, entry: dict, user: dict | None) -> dict:
+    feedback_id = entry["id"]
+    _moderation_checkpoint_guard([feedback_id])
+    actor = _queue_actor(user)
+    rejected_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    ledger.add_system_note(
+        core.LEDGER_CFG,
+        key,
+        f"Approval review: rejected by {actor}; closed without agent dispatch.",
+        reply_to=[feedback_id],
+        agent="curiator approvals",
+    )
+    ledger.update_entry(core.LEDGER_CFG, key, feedback_id, {
+        "status": "rejected",
+        "approval_resolution": "rejected",
+        "approval_authorized_at": rejected_at,
+        "approval_authorized_by": actor,
+    })
+    return next(item for item in core.load_feedback()[key] if item.get("id") == feedback_id)
+
+
 def _moderation_checkpoint_guard(feedback_ids: list[str]) -> None:
     from curiator import run_recovery
 
@@ -1321,6 +1455,33 @@ def build_flask_app() -> Flask:
         except ModerationError as exc:
             return jsonify({"error": str(exc)}), exc.status_code
         return jsonify({"moderation": result, **_feedback_payload(key)})
+
+    @app.route("/api/feedback/<key>/<feedback_id>/approval", methods=["POST"])
+    def _review_approval(key, feedback_id):
+        user = auth.current_user(core.REG.AUTH_CFG)
+        if not auth.is_admin(core.REG.AUTH_CFG, user):
+            return jsonify({"error": "admin account required"}), 403
+        body = request.get_json(silent=True) or {}
+        action = str(body.get("action") or "")
+        if action not in {"approve", "amend", "reject"}:
+            return jsonify({"error": "unknown approval action"}), 400
+        try:
+            entry = _awaiting_approval_entry(key, feedback_id)
+            if action == "approve":
+                result = {"action": "approved", "entry": _safe_entry(
+                    _dispatch_approved_plan(key, entry, user)
+                )}
+            elif action == "amend":
+                result = {"action": "amended", "entry": _safe_entry(
+                    _dispatch_approved_plan(key, entry, user, amendment=body.get("comment"))
+                )}
+            else:
+                result = {"action": "rejected", "entry": _safe_entry(
+                    _reject_approved_plan(key, entry, user)
+                )}
+        except ModerationError as exc:
+            return jsonify({"error": str(exc)}), exc.status_code
+        return jsonify({"approval": result, **_feedback_payload(key)})
 
     @app.route("/api/feedback/<key>", methods=["GET", "POST"])
     def _feedback(key):

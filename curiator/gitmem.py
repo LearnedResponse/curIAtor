@@ -552,6 +552,14 @@ def _extra_paths(cfg: dict, globs: list[str], exclude: set[str]) -> list[str]:
     return _extra_paths_in(Path(cfg["repo_root"]), globs, exclude)
 
 
+def _collection_change_paths(cfg: dict, exclude: set[str]) -> list[str]:
+    globs = list(_GENERAL_COLLECTION_GLOBS)
+    gallery = _gallery_relpath(cfg)
+    if gallery:
+        globs.append(gallery)
+    return _extra_paths(cfg, globs, exclude)
+
+
 def _general_collection_paths(cfg: dict, fb: dict | None, exclude: set[str]) -> list[str]:
     """Dirty collection files that should ride with a collection-level ◆ General app/gallery run."""
     if not fb:
@@ -559,11 +567,16 @@ def _general_collection_paths(cfg: dict, fb: dict | None, exclude: set[str]) -> 
     from .loop import adapters
     if not adapters.general_targets_collection(fb):
         return []
-    globs = list(_GENERAL_COLLECTION_GLOBS)
-    gallery = _gallery_relpath(cfg)
-    if gallery:
-        globs.append(gallery)
-    return _extra_paths(cfg, globs, exclude)
+    return _collection_change_paths(cfg, exclude)
+
+
+def _approved_collection_paths(cfg: dict, fb: dict | None, exclude: set[str]) -> list[str]:
+    """Dirty collection paths authorized by the shell's structured admin approval endpoint."""
+    if not fb or not fb.get("approval_of") or fb.get("approval_scope") != "collection":
+        return []
+    if fb.get("approval_resolution") not in {"approved", "amended"}:
+        return []
+    return _collection_change_paths(cfg, exclude)
 
 
 def _nested_app_repos_from_paths(cfg: dict, paths: list[str]) -> list[Path]:
@@ -901,11 +914,27 @@ def commit_run(cfg: dict, app: str, feedback_id: str, *, status: str, note_text:
         fb = next((e for e in led.get(app, [])
                    if e.get("id") == feedback_id and e.get("author") != "claude"), None)
         comment, stars = (fb or {}).get("comment", ""), (fb or {}).get("stars")
+        collection_approval = bool(
+            fb
+            and fb.get("approval_of")
+            and fb.get("approval_scope") == "collection"
+            and fb.get("approval_resolution") in {"approved", "amended"}
+        )
+        source_cfg = cfg
+        if collection_approval:
+            # The approved task may rename its app key/root in gallery.yaml. Re-read the manifest so
+            # nested-repo ownership and smoke commands use the resulting registration.
+            from .config import load_config_at
+
+            try:
+                source_cfg = load_config_at(cfg["gallery_path"])
+            except Exception as exc:
+                return {"committed": False, "reason": f"approved collection manifest is invalid: {exc}"}
 
         from . import dependencies
 
         try:
-            dependency_graph = dependencies.normalize(cfg)
+            dependency_graph = dependencies.normalize(source_cfg)
             writable_component_keys = dependencies.writable_components(dependency_graph, app, fb or {})
             changed_component_keys = dependencies.changed_components(
                 dependency_graph,
@@ -913,7 +942,7 @@ def commit_run(cfg: dict, app: str, feedback_id: str, *, status: str, note_text:
             )
         except dependencies.DependencyError as exc:
             return {"committed": False, "reason": f"invalid shared dependency scope: {exc}"}
-        collection_root = Path(cfg["repo_root"]).resolve()
+        collection_root = Path(source_cfg["repo_root"]).resolve()
         root_component_paths: list[str] = []
         nested_component_groups: dict[str, dict] = {}
         for key in changed_component_keys:
@@ -930,26 +959,26 @@ def commit_run(cfg: dict, app: str, feedback_id: str, *, status: str, note_text:
             group["keys"].append(key)
             group["paths"].append(component["source_rel"])
 
-        spec = _app_spec(cfg, app) or {}
+        spec = {} if collection_approval else (_app_spec(source_cfg, app) or {})
         src = spec.get("source_rel")
-        nested_repo = _nested_app_repo(cfg, spec) if app != _GENERAL_KEY and spec else None
+        nested_repo = _nested_app_repo(source_cfg, spec) if app != _GENERAL_KEY and spec else None
         nested_source = _rel_to(spec.get("source"), nested_repo) if nested_repo else None
         parent_stage_src = spec.get("root_rel") if nested_repo and nested_source else src
         nested_commit: dict | None = None
         changed = bool(src) and (
             _path_changed_in(nested_repo, nested_source)
             if nested_repo and nested_source
-            else _path_changed(cfg, src)
+            else _path_changed(source_cfg, src)
         )
         smoke = "n/a (no source change)"
         summary = (note_text or "").strip().splitlines()[0][:72] if note_text else f"feedback on {app}"
         if changed:
-            ok, msg = smoke_app(cfg, app, src)
+            ok, msg = smoke_app(source_cfg, app, src)
             if not ok:
                 if nested_repo and nested_source:
                     _git_in(nested_repo, "checkout", "--", nested_source)
                 else:
-                    _git(cfg, "checkout", "--", src)         # never commit a broken app
+                    _git(source_cfg, "checkout", "--", src)         # never commit a broken app
                 return {"committed": False, "reason": f"smoke-test failed, reverted edit: {msg}"}
             smoke = msg
         elif changed_component_keys:
@@ -961,7 +990,7 @@ def commit_run(cfg: dict, app: str, feedback_id: str, *, status: str, note_text:
         component_commits: list[dict] = []
         for group in nested_component_groups.values():
             component_commit = _commit_nested_component_repo(
-                cfg,
+                source_cfg,
                 app,
                 feedback_id,
                 repo=group["repo"],
@@ -981,7 +1010,7 @@ def commit_run(cfg: dict, app: str, feedback_id: str, *, status: str, note_text:
 
         if changed and nested_repo and nested_source:
             nested_commit = _commit_nested_app_repo(
-                cfg,
+                source_cfg,
                 app,
                 feedback_id,
                 repo=nested_repo,
@@ -1033,11 +1062,15 @@ def commit_run(cfg: dict, app: str, feedback_id: str, *, status: str, note_text:
             *component_parent_paths,
         ]))
         exclude = {*parent_paths, ledger_rel}
-        general_extra = _general_collection_paths(cfg, fb, exclude) if app == _GENERAL_KEY else []
+        general_extra = (
+            _general_collection_paths(source_cfg, fb, exclude)
+            if app == _GENERAL_KEY else
+            _approved_collection_paths(source_cfg, fb, exclude)
+        )
         general_nested_commits: list[dict] = []
-        if app == _GENERAL_KEY and general_extra:
+        if general_extra:
             general_nested = _commit_general_nested_app_repos(
-                cfg,
+                source_cfg,
                 feedback_id,
                 paths=general_extra,
                 summary=summary,
@@ -1052,6 +1085,8 @@ def commit_run(cfg: dict, app: str, feedback_id: str, *, status: str, note_text:
                 changed_desc += " (" + ", ".join(
                     f"nested app {Path(item['repo']).name}@{item['sha']}" for item in general_nested_commits
                 ) + ")"
+            elif collection_approval:
+                changed_desc += " (admin-approved collection scope)"
         exclude.update(general_extra)
         extra = general_extra + _extra_paths(cfg, git.get("also_commit", _DEFAULT_ALSO_COMMIT), exclude)
         if extra:

@@ -1451,13 +1451,63 @@
           onClick: () => run("delete")}, "Delete")));
   }
 
+  function ApprovalReview({entry, onReview}) {
+    const [amendment, setAmendment] = useState("");
+    const [busy, setBusy] = useState(false);
+    const [error, setError] = useState("");
+
+    function run(action) {
+      if (action === "amend" && !amendment.trim()) {
+        setError("Enter an amendment before replying.");
+        return;
+      }
+      setBusy(true);
+      setError("");
+      Promise.resolve(onReview(entry, action, amendment.trim()))
+        .catch((e) => {
+          setError(e.error || "Approval failed.");
+          setBusy(false);
+        });
+    }
+
+    return h("div", {className: "rshell-held-moderation", onClick: (e) => e.stopPropagation()},
+      h("div", {className: "rshell-held-moderation-title"}, "Admin approval"),
+      h("textarea", {className: "rshell-held-amendment", value: amendment, disabled: busy,
+        placeholder: "Amend the approved plan before dispatch…", onChange: (e) => setAmendment(e.target.value)}),
+      error ? h("div", {className: "rshell-held-error"}, error) : null,
+      h("div", {className: "rshell-held-actions"},
+        h("button", {className: "rshell-button primary", disabled: busy,
+          onClick: () => run("approve")}, "Approve"),
+        h("button", {className: "rshell-button secondary", disabled: busy || !amendment.trim(),
+          onClick: () => run("amend")}, "Reply & approve"),
+        h("button", {className: "rshell-button secondary danger", disabled: busy,
+          onClick: () => run("reject")}, "Reject")));
+  }
+
   function Entry({entry, depth, children, actions, onReply, onAction, onPreview, canReplay, onReplay,
-      isAdmin, selectedHeldId, onSelectHeld, onModerate}) {
+      isAdmin, selectedHeldId, onSelectHeld, onModerate, selectedApprovalId, onSelectApproval,
+      onReviewApproval}) {
     const isSystem = entry.kind === "system" || entry.author === "claude";
     const marginLeft = Math.min(depth * 14, 56);
     const st = entry.status || "new";
     const moderatable = Boolean(isAdmin && !isSystem && st === "held");
     const moderationOpen = moderatable && selectedHeldId === entry.id;
+    const proposalManaged = Boolean((children[entry.id] || []).some((child) =>
+      actions && actions.target === child.id && (actions.items || []).some((row) =>
+        String((row || [])[1] || "").startsWith("curiator-proposal:"))));
+    const approvable = Boolean(isAdmin && !isSystem && st === "awaiting_approval" && !proposalManaged);
+    const approvalOpen = approvable && selectedApprovalId === entry.id;
+    const reviewable = moderatable || approvable;
+    const reviewOpen = moderationOpen || approvalOpen;
+    function toggleReview() {
+      if (moderatable) {
+        onSelectApproval(null);
+        onSelectHeld(moderationOpen ? null : entry.id);
+      } else if (approvable) {
+        onSelectHeld(null);
+        onSelectApproval(approvalOpen ? null : entry.id);
+      }
+    }
     const status = isSystem ? null : (entry.trace_url
       ? h("a", {href: entry.trace_url, target: "_blank", className: "rshell-status",
           style: {background: STATUS[st] || "#777"}}, st)
@@ -1470,19 +1520,19 @@
           h("span", {style: {fontSize: 10, color: "#999"}}, "optional — or type a reply"))
       : null;
     const body = h("div", {className: "rshell-entry " + (isSystem ? "system" : "user")
-        + (moderatable ? " moderatable" : "") + (moderationOpen ? " selected" : ""),
+        + (reviewable ? " moderatable" : "") + (reviewOpen ? " selected" : ""),
         style: {marginLeft, borderLeft: isSystem ? undefined : "2px solid " + (STATUS[st] || "#777"),
           opacity: st === "done" ? .65 : 1},
-        tabIndex: moderatable ? 0 : undefined,
-        onClick: moderatable ? (event) => {
+        tabIndex: reviewable ? 0 : undefined,
+        onClick: reviewable ? (event) => {
           if (event.target.closest && event.target.closest("button,a,textarea,input,label")) return;
-          onSelectHeld(moderationOpen ? null : entry.id);
+          toggleReview();
         } : undefined,
-        onKeyDown: moderatable ? (event) => {
+        onKeyDown: reviewable ? (event) => {
           if (event.target.closest && event.target.closest("button,a,textarea,input,label")) return;
           if (event.key === "Enter" || event.key === " ") {
             event.preventDefault();
-            onSelectHeld(moderationOpen ? null : entry.id);
+            toggleReview();
           }
         } : undefined},
       h("div", {className: "rshell-entry-head"},
@@ -1491,11 +1541,11 @@
         status, " ", ts(entry.ts), entry.user && entry.user.name ? " · " + entry.user.name : "",
         canReplay && entry.replay_eligible ? h("button", {className: "rshell-replay-entry",
           title: "Replay this completed task in an isolated workspace", onClick: () => onReplay(entry.id)}, "Replay") : null,
-        moderatable
+        reviewable
           ? h("button", {className: "rshell-reply", onClick: (event) => {
               event.stopPropagation();
-              onSelectHeld(moderationOpen ? null : entry.id);
-            }}, moderationOpen ? "close" : "review")
+              toggleReview();
+            }}, reviewOpen ? "close" : "review")
           : h("button", {className: "rshell-reply", onClick: () => onReply(entry)}, "reply")),
       h("div", {className: "rshell-entry-body"}, entry.comment || ""),
       entry.shot_url ? h("img", {className: "rshell-shot", src: entry.shot_url}) : null,
@@ -1503,11 +1553,12 @@
       h(AnnotationSummary, {entry, onPreview}),
       h(VoiceSummary, {entry}),
       moderationOpen ? h(HeldModeration, {entry, onModerate}) : null,
+      approvalOpen ? h(ApprovalReview, {entry, onReview: onReviewApproval}) : null,
       actionBlock);
     return h("div", {className: "rshell-thread"}, body,
       (children[entry.id] || []).map((c) => h(Entry, {key: c.id, entry: c, depth: depth + 1, children,
         actions, onReply, onAction, onPreview, canReplay, onReplay, isAdmin, selectedHeldId,
-        onSelectHeld, onModerate})));
+        onSelectHeld, onModerate, selectedApprovalId, onSelectApproval, onReviewApproval})));
   }
 
   function AccountMenu({boot}) {
@@ -1560,6 +1611,7 @@
     const [designLabel, setDesignLabel] = useState("");
     const [previewEntry, setPreviewEntry] = useState(null);
     const [selectedHeldId, setSelectedHeldId] = useState(null);
+    const [selectedApprovalId, setSelectedApprovalId] = useState(null);
     const [msg, setMsg] = useState("");
     const [recording, setRecording] = useState(false);
     const [dictating, setDictating] = useState(false);
@@ -1608,6 +1660,7 @@
       if (designUrl) setDesignUrl("");
       if (designLabel) setDesignLabel("");
       setSelectedHeldId(null);
+      setSelectedApprovalId(null);
     }, [selected]);
 
     const items = feedback.items || [];
@@ -1995,6 +2048,26 @@
       });
     }
 
+    function reviewApproval(entry, approvalAction, amendment) {
+      const endpoint = "/api/feedback/" + encodeURIComponent(selected) + "/"
+        + encodeURIComponent(entry.id) + "/approval";
+      return api(endpoint, {method: "POST", body: JSON.stringify({
+        action: approvalAction,
+        comment: amendment || ""
+      })}).then((data) => {
+        setFeedback(data);
+        setSelectedApprovalId(null);
+        if (data.approval.action === "approved") setMsg("Plan approved; processing shortly.");
+        if (data.approval.action === "amended") setMsg("Amended plan approved; processing shortly.");
+        if (data.approval.action === "rejected") setMsg("Plan rejected; no agent was dispatched.");
+        reloadApps();
+        return data;
+      }).catch((e) => {
+        setMsg(e.error || "Approval failed.");
+        return Promise.reject(e);
+      });
+    }
+
     return h("aside", {className: "rshell-feedback" + (open ? " open" : "") + (collapsed ? " collapsed" : "")},
       h(AnnotationPreview, {entry: previewEntry, onClose: () => setPreviewEntry(null), onUseDraft: useAnnotationDraft}),
       shotEditorOpen ? h(DraftAnnotationModal, {image: shot, annotations, setAnnotations, annotate,
@@ -2065,7 +2138,8 @@
         actions: feedback.actions, onReply: (e) => setReplyTo({key: selected, id: e.id}), onAction: action,
         onPreview: (e) => setPreviewEntry(e), canReplay: boot.auth && boot.auth.is_admin && !boot.workspace,
         onReplay, isAdmin: Boolean(boot.auth && boot.auth.is_admin), selectedHeldId,
-        onSelectHeld: setSelectedHeldId, onModerate: moderate}))
+        onSelectHeld: setSelectedHeldId, onModerate: moderate, selectedApprovalId,
+        onSelectApproval: setSelectedApprovalId, onReviewApproval: reviewApproval}))
         : h("div", {style: {fontSize: 12, color: "#777"}}, "No feedback yet."));
   }
 
