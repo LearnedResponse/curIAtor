@@ -78,6 +78,7 @@ def test_admin_approval_dispatches_structured_collection_task(collection, cfg, m
     assert dispatch["approval_plan_id"] == plan_id
     assert dispatch["approval_scope"] == "collection"
     assert dispatch["approval_resolution"] == "approved"
+    assert not any(item.get("agent") == "curiator approvals" for item in items)
     assert [entry["id"] for _key, entry in loop._new_items(ledger.load(cfg))] == [dispatch_id]
 
     task = build_task(cfg, "sample", dispatch)
@@ -184,6 +185,29 @@ def test_react_shell_exposes_admin_approval_review(collection, monkeypatch):
     assert '"Reply & approve"' in js
     assert '"Reject"' in js
     assert ' + encodeURIComponent(entry.id) + "/approval"' in js
+
+
+def test_internal_approval_audit_note_does_not_infer_yes_no(collection, monkeypatch):
+    mod = _load_web_mod(monkeypatch)
+    items = [
+        {"id": "request", "kind": "feedback", "status": "awaiting_approval"},
+        {
+            "id": "plan",
+            "kind": "system",
+            "agent": "Codex",
+            "comment": "Plan: rename the app and update its registration.",
+        },
+        {
+            "id": "audit",
+            "kind": "system",
+            "agent": "curiator approvals",
+            "comment": "Approval review: approved by admin@example.com; dispatching the plan.",
+        },
+    ]
+
+    assert mod.core.thread_buttons(items) is None
+    items[-1]["actions"] = [["Retry", "retry"]]
+    assert mod.core.thread_buttons(items) == ("audit", [["Retry", "retry"]])
 
 
 def test_approved_collection_commit_tracks_app_key_and_directory_rename(collection, cfg):

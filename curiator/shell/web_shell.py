@@ -384,7 +384,7 @@ def _dispatch_approved_plan(
     resolution = "amended" if amendment is not None else "approved"
     dispatch_comment = text or f"Approved by {actor}."
 
-    # Keep the dispatch held until the approval decision, audit note, and reply link are durable.
+    # Keep the dispatch held until the approval decision and reply link are durable.
     ledger.save_entry(
         core.LEDGER_CFG,
         key,
@@ -401,17 +401,6 @@ def _dispatch_approved_plan(
             "approval_authorized_at": approved_at,
             "approval_authorized_by": actor,
         },
-    )
-    ledger.add_system_note(
-        core.LEDGER_CFG,
-        key,
-        (
-            f"Approval review: approved with an amendment by {actor}; dispatching the authorized reply."
-            if amendment is not None else
-            f"Approval review: approved by {actor}; dispatching the authorized plan."
-        ),
-        reply_to=[feedback_id],
-        agent="curiator approvals",
     )
     ledger.update_entry(core.LEDGER_CFG, key, feedback_id, {
         "status": "done",

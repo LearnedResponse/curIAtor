@@ -858,12 +858,22 @@ def _parse_actions(text):
 
 
 def thread_buttons(items):
-    """For a feedback thread, return (system_note_id, [[label, value], ...]) for quick-approval
-    buttons, or None. Buttons attach to the LATEST ⚙ note while the thread is awaiting approval."""
+    """Return quick-reply buttons for the latest actionable note while approval is pending.
+
+    Internal curIAtor audit notes never infer actions from their prose. They remain eligible when
+    they carry explicit actions, as proposal conflict notes do.
+    """
     awaiting = any(e.get("kind") != "system" and e.get("status") == "awaiting_approval" for e in items)
     if not awaiting:
         return None
-    sysnotes = [e for e in items if e.get("kind") == "system"]
+    sysnotes = [
+        e for e in items
+        if e.get("kind") == "system"
+        and (
+            e.get("actions")
+            or not str(e.get("agent") or "").lower().startswith("curiator ")
+        )
+    ]
     if not sysnotes:
         return None
     note = sysnotes[-1]
